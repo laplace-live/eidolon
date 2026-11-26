@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { AppMark } from "@/components/app-mark";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 

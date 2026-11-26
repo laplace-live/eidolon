@@ -1,7 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useSearchParams } from "wouter";
 import { AppMark } from "@/components/app-mark";
 import { PageHeader } from "@/components/page-header";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";

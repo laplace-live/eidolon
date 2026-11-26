@@ -4,7 +4,6 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useState } from "react";
-import { useBeforeUnload, useBlocker } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { holdUnsaved } from "@/lib/desktop";
 import { formatCount } from "@/lib/format";
+import { useBeforeUnload, useBlocker } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { draftAfterSave, textCounts } from "./files";

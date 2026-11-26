@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import {

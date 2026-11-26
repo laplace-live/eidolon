@@ -172,6 +172,7 @@ describe("the third-party notices", () => {
       ["Apache-2.0", "Version 2.0, January 2004"],
       ["BSD-2-Clause", "Redistribution and use in source and binary forms"],
       ["MIT", "Permission is hereby granted, free of charge"],
+      ["Unlicense", "This is free and unencumbered software"],
     ] as const) {
       const text = licenseText({ name: "bare", version: "1.0.0", identifier });
       expect(text).toStartWith(

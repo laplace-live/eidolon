@@ -3,7 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, HomeIcon, MessageCircleIcon, PhoneIcon } from "lucide-react";
 import { useMemo } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { callBlocker } from "@/features/call/blockers";

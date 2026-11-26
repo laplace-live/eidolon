@@ -1,7 +1,7 @@
 // A page's sections: a nav beside the content where the layout is wide enough, a scroller above it
 // where it isn't. It goes by its own width, not the window's, which the sidebar shares.
 import { type ReactNode, useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 export interface SectionNavItem {

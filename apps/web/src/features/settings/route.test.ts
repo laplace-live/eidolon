@@ -3,10 +3,10 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { afterEach, expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import type { EidolonDesktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
@@ -52,8 +52,8 @@ function render(path: string, app: EidolonDesktop | undefined): string {
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      { initialEntries: [path] },
+      Router as FunctionComponent<RouterOptions>,
+      { ssrPath: path },
       createElement(
         I18nProvider,
         { i18n },
@@ -80,7 +80,7 @@ test("the nav lists Desktop, before Advanced, only in a desktop app that offers 
 
 test("?tab=desktop opens the Desktop App card there, and leads elsewhere in a browser", () => {
   expect(render("/settings?tab=desktop", current)).toContain("Desktop App");
-  // Navigate renders nothing: the page goes to the section resolveSection names instead.
+  // Redirect renders nothing: the page goes to the section resolveSection names instead.
   expect(render("/settings?tab=desktop", undefined)).toBe("");
   expect(render("/settings?tab=desktop", older)).toBe("");
 });

@@ -16,7 +16,7 @@ import {
   WorkflowIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, matchPath, useLocation } from "react-router";
+import { Link, matchRoute, useLocation, useRouter } from "wouter";
 import { AppMark } from "@/components/app-mark";
 import { PersonaSwitcher } from "@/components/persona-switcher";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
@@ -54,9 +54,13 @@ interface Page {
   readonly waiting?: number;
 }
 
-function lit(page: Pick<Page, "to" | "end" | "section">, pathname: string): boolean {
+function lit(
+  page: Pick<Page, "to" | "end" | "section">,
+  pathname: string,
+  parser: ReturnType<typeof useRouter>["parser"],
+): boolean {
   if (page.section !== undefined) return pathname.startsWith(page.section);
-  return matchPath({ path: page.to, end: page.end ?? false }, pathname) !== null;
+  return matchRoute(parser, page.to, pathname, !page.end)[0];
 }
 
 /** The logo, home; collapsed, the logo opens the sidebar again. The desktop app's strip toggles it. */
@@ -118,7 +122,8 @@ function PageItem({ page, current }: { readonly page: Page; readonly current: bo
 
 export function AppSidebar() {
   const { t } = useLingui();
-  const { pathname } = useLocation();
+  const [pathname] = useLocation();
+  const { parser } = useRouter();
   const { isMobile, state } = useSidebar();
   const { data: status } = useQuery(statusQuery);
   const assistant = status?.assistant.enabled === true;
@@ -154,7 +159,7 @@ export function AppSidebar() {
     { to: "/jobs", label: t`Jobs`, icon: <WorkflowIcon /> },
     { to: "/usage", label: t`Usage`, icon: <ReceiptIcon /> },
   ];
-  const settings = lit({ to: "/settings" }, pathname);
+  const settings = lit({ to: "/settings" }, pathname, parser);
   // Collapsed to icons, its menus open beside the rail rather than over the page.
   const side = isMobile || state === "expanded" ? "bottom" : "right";
 
@@ -183,7 +188,7 @@ export function AppSidebar() {
                 </NewChatMenu>
               </SidebarMenuItem>
               {pages.map((page) => (
-                <PageItem key={page.to} page={page} current={lit(page, pathname)} />
+                <PageItem key={page.to} page={page} current={lit(page, pathname, parser)} />
               ))}
             </SidebarMenu>
           </SidebarGroup>

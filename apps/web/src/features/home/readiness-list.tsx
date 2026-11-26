@@ -1,8 +1,8 @@
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleExclamationPointIcon } from "lucide-react";
-import { Link } from "react-router";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { ListCard, ListRow } from "@/components/list";
 import { verdictMessage } from "@/components/settings-form/check-labels";
 import { checkTone } from "@/components/settings-form/credentials";

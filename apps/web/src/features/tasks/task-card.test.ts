@@ -4,10 +4,10 @@ import type { ChatDisplay } from "@eidolon/chat";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { describe, expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import type { TaskSnapshot, TaskStatus } from "@/lib/api";
 import { formatClock } from "@/lib/format";
 import { statusQuery } from "@/lib/query";
@@ -77,8 +77,8 @@ function card(
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      null,
+      Router as FunctionComponent<RouterOptions>,
+      { ssrPath: "/" },
       createElement(
         I18nProvider,
         { i18n },

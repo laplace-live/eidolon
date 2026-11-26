@@ -7,8 +7,8 @@ import {
   CircleXIcon,
   TriangleExclamationPointIcon,
 } from "lucide-react";
-import { Link } from "react-router";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { ListCard, ListRow } from "@/components/list";
 import { SectionCard } from "@/components/section-card";
 import { effectiveProviderType } from "@/components/settings-form/controls";

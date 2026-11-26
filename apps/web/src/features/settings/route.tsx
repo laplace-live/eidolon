@@ -16,7 +16,7 @@ import {
   WandSparklesIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, Navigate, useSearchParams } from "react-router";
+import { Link, Redirect, useSearchParams } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { SectionLayout } from "@/components/section-layout";
@@ -149,13 +149,14 @@ function Section({ section }: { readonly section: SectionId }) {
 export function Component() {
   const { t } = useLingui();
   const [params] = useSearchParams();
-  // The root loader primes it, so the active persona is known from the first render.
+  // The session gate primes it, so the active persona is known from the first render.
   const persona = useQuery(statusQuery).data?.persona;
   if (!persona) return null;
 
   const sections = shownSections(desktop());
   const resolved = resolveSection(params, persona.id, sections);
-  if ("redirect" in resolved) return <Navigate to={resolved.redirect} replace />;
+  if ("redirect" in resolved)
+    return <Redirect key={resolved.redirect} to={resolved.redirect} replace />;
   const { section } = resolved;
   const name = persona.name;
 

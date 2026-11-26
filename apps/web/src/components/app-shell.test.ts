@@ -5,17 +5,10 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type ReactNode } from "react";
+import { createElement, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  createStaticHandler,
-  createStaticRouter,
-  MemoryRouter,
-  Route,
-  Routes,
-  StaticRouterProvider,
-} from "react-router";
 import { expect, test, vi } from "vitest";
+import { Route, Router, type RouterOptions, Switch } from "wouter";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
@@ -47,7 +40,7 @@ function render(path: string, node: ReactNode): string {
       createElement(
         QueryClientProvider,
         { client: new QueryClient() },
-        createElement(MemoryRouter, { initialEntries: [path] }, node),
+        createElement(Router as FunctionComponent<RouterOptions>, { ssrPath: path }, node),
       ),
     ),
   );
@@ -69,12 +62,12 @@ test("a page has no row the window drags by, and sits in the box the skip link f
       SidebarProvider,
       null,
       createElement(
-        Routes,
+        Switch,
         null,
         createElement(
           Route,
-          { element: createElement(PageLayout) },
-          createElement(Route, { path: "settings", element: createElement("p", null, "Settings") }),
+          { path: "/settings" },
+          createElement(PageLayout, null, createElement("p", null, "Settings")),
         ),
       ),
     ),
@@ -96,46 +89,34 @@ test("setup scrolls below its header, in a window-high frame", () => {
   expect(markup.indexOf("<main")).toBeGreaterThan(box.at);
 });
 
-test("an error in the frame gets no drag strip below the title strip, and one outside it does", async () => {
-  const fail = () => {
-    throw new Error("boom");
-  };
-  const handler = createStaticHandler([
-    {
-      path: "/",
-      ErrorBoundary: RouteError,
-      children: [
-        { path: "outside", loader: fail, Component: () => null },
-        {
-          Component: AppShell,
-          children: [
-            { path: "inside", loader: fail, Component: () => null, ErrorBoundary: RouteError },
-          ],
-        },
-      ],
-    },
-  ]);
-  const at = async (path: string): Promise<string> => {
-    const context = await handler.query(new Request(`http://app${path}`));
-    if (context instanceof Response) throw new Error(`${path} redirected`);
-    const router = createStaticRouter(handler.dataRoutes, context);
+test("an error in the frame gets no drag strip below the title strip, and one outside it does", () => {
+  const at = (path: string, node: ReactNode): string => {
     const i18n = setupI18n({ locale: "en", messages: { en: {} } });
     return renderToStaticMarkup(
       createElement(
         I18nProvider,
         { i18n },
         createElement(
-          TooltipProvider,
-          null,
-          createElement(StaticRouterProvider, { router, context, hydrate: false }),
+          QueryClientProvider,
+          { client: new QueryClient() },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(Router as FunctionComponent<RouterOptions>, { ssrPath: path }, node),
+          ),
         ),
       ),
     );
   };
-  const inside = await at("/inside");
+  const inside = at(
+    "/inside",
+    createElement(AppShell, null, createElement(RouteError, { error: new Error("boom") })),
+  );
   expect(inside).toContain("Something went wrong");
   const rows = [...inside.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((row) => row[0]);
   expect(rows).toHaveLength(1);
   expect(rows[0]).toContain("data-title-strip");
-  expect(await at("/outside")).toContain("data-window-drag");
+  expect(at("/outside", createElement(RouteError, { error: new Error("boom") }))).toContain(
+    "data-window-drag",
+  );
 });

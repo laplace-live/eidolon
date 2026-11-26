@@ -3,10 +3,10 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 import { type CallPhase, IDLE, type PhaseEvent, reducePhase } from "./phase";
@@ -84,8 +84,8 @@ function render(phase: CallPhase, shown: boolean): string {
           TooltipProvider,
           null,
           createElement(
-            MemoryRouter,
-            null,
+            Router as FunctionComponent<RouterOptions>,
+            { ssrPath: "/" },
             createElement(ShellCallContext.Provider, { value: call }, createElement(CallBar)),
           ),
         ),

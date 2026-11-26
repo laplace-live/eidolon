@@ -6,7 +6,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { Link, useMatch, useNavigate } from "react-router";
+import { Link, useLocation, useRoute } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { personasQuery } from "@/components/settings-form/queries";
 import {
@@ -29,8 +29,8 @@ import { statusQuery } from "@/lib/query";
 
 export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" }) {
   const { t } = useLingui();
-  const navigate = useNavigate();
-  const studio = useMatch("/personas/:id/:tab?");
+  const [, navigate] = useLocation();
+  const [inStudio, studio] = useRoute("/personas/:id/:tab?");
   const status = useQuery(statusQuery);
   const personas = useQuery(personasQuery);
   const { up } = useCallPresence();
@@ -40,7 +40,7 @@ export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" })
   const openingDialog = useRef(false);
 
   const activate = useActivatePersona((id) => {
-    if (studio && studio.params.id !== id) navigate(studioPath(id, studio.params.tab));
+    if (inStudio && studio.id !== id) navigate(studioPath(id, studio.tab));
   });
 
   // Status first: Home polls it, so it learns of a switch another tab made; the list is not.

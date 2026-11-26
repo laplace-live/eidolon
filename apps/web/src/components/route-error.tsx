@@ -1,5 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
-import { isRouteErrorResponse, Link, useRouteError } from "react-router";
+import { Component, type ReactNode } from "react";
+import { Link } from "wouter";
 import { LockedScreen } from "@/components/locked-screen";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -7,20 +8,57 @@ import { WindowDragStrip } from "@/components/window-drag-strip";
 import { ApiError, errorDetail } from "@/lib/api";
 import { errorMessage } from "@/lib/labels";
 
-function statusOf(error: unknown): number | null {
-  if (isRouteErrorResponse(error)) return error.status;
-  if (error instanceof ApiError) return error.status;
-  return null;
+interface RouteBoundaryProps {
+  readonly resetKey?: string;
+  readonly fallback: (error: unknown) => ReactNode;
+  readonly children: ReactNode;
 }
 
-/** A route's ErrorBoundary: the locked screen without a session, else what went wrong. */
-export function RouteError() {
+interface RouteBoundaryState {
+  readonly hasError: boolean;
+  readonly error: unknown;
+  readonly resetKey: string | undefined;
+}
+
+/** Catches render and lazy-chunk failures inside a route subtree and resets on navigation. */
+export class RouteBoundary extends Component<RouteBoundaryProps, RouteBoundaryState> {
+  override state: RouteBoundaryState;
+
+  constructor(props: RouteBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null, resetKey: props.resetKey };
+  }
+
+  static getDerivedStateFromError(error: unknown): Partial<RouteBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  static getDerivedStateFromProps(
+    props: RouteBoundaryProps,
+    state: RouteBoundaryState,
+  ): Partial<RouteBoundaryState> | null {
+    return props.resetKey !== state.resetKey
+      ? { hasError: false, error: null, resetKey: props.resetKey }
+      : null;
+  }
+
+  override render(): ReactNode {
+    return this.state.hasError ? this.props.fallback(this.state.error) : this.props.children;
+  }
+}
+
+/** A route's error fallback: the locked screen without a session, else what went wrong. */
+export function RouteError({
+  error,
+  status,
+}: {
+  readonly error?: unknown;
+  readonly status?: number;
+}) {
   const { t } = useLingui();
-  const error = useRouteError();
-  const status = statusOf(error);
-  if (status === 401) {
-    const expired = isRouteErrorResponse(error) && error.data?.expired === true;
-    return <LockedScreen expired={expired} />;
+  const resolved = status ?? (error instanceof ApiError ? error.status : null);
+  if (resolved === 401) {
+    return <LockedScreen expired={false} />;
   }
   return (
     <>
@@ -28,9 +66,9 @@ export function RouteError() {
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
         <Alert variant="destructive">
           <AlertTitle>
-            {status === 404 ? t`This page doesn't exist.` : t`Something went wrong`}
+            {resolved === 404 ? t`This page doesn't exist.` : t`Something went wrong`}
           </AlertTitle>
-          {status !== 404 && (
+          {resolved !== 404 && (
             <AlertDescription>
               <p>{t(errorMessage(error))}</p>
               {error instanceof Error && <p className="font-mono text-xs">{errorDetail(error)}</p>}
@@ -41,7 +79,7 @@ export function RouteError() {
           <Button variant="outline" asChild>
             <Link to="/">{t`Back to Home`}</Link>
           </Button>
-          {status !== 404 && (
+          {resolved !== 404 && (
             // A reload, not a revalidation: a lazy route whose chunk failed to load stays failed.
             <Button onClick={() => window.location.reload()}>{t`Try Again`}</Button>
           )}

@@ -1,7 +1,7 @@
 import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { BookOpenIcon, MessageCircleIcon, PhoneIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";

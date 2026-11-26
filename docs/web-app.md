@@ -514,7 +514,7 @@ the overlay gives as `env(titlebar-area-*)`:
   once she is drawn, main hides the window and the call goes on in it, the screen mounted; her
   menu's Open LAPLACE Eidolon, the Dock or the tray brings the window back.
 - **The desktop companion's page,** `/companion` (`features/companion/route.tsx`): a route of the
-  same `index.html`, outside the app's shell and its root loader, which would send a fresh install
+  same `index.html`, outside the app's shell and its session gate, which would send a fresh install
   to `/setup`, lazy, with `Nothing` and `CompanionError` static on the route, so a chunk that fails
   to load still has a boundary, which tells main she isn't drawn. In a browser it renders nothing.
   In her window it paints nothing but her (`index.css`'s `html[data-companion]` rules: a transparent

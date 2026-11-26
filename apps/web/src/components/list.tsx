@@ -2,7 +2,7 @@
 // a menu. A row with `href` links its title, and the link covers the row; trailing controls sit above
 // it, so they stay their own buttons.
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 export interface ListCardProps {

@@ -14,8 +14,8 @@ import {
   ListPlusIcon,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { ListCard, ListRow } from "@/components/list";
 import { QuietBadge } from "@/components/quiet-badge";
 import { SectionCard } from "@/components/section-card";

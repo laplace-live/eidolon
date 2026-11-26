@@ -2,15 +2,17 @@
 // page. In the desktop app both sit below the strip that stands in for the title bar.
 
 import { useLingui } from "@lingui/react/macro";
-import { useEffect, useRef, useState } from "react";
-import { Outlet, useLocation } from "react-router";
+import { type ReactNode, Suspense, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBar } from "@/components/mobile-bar";
+import { RouteBoundary, RouteError } from "@/components/route-error";
 import { TitleStrip } from "@/components/title-strip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { BelowTitleStrip } from "@/components/window-drag-strip";
 import { CallBar } from "@/features/call/call-bar";
 import { CallProvider } from "@/features/call/call-provider";
+import { useOnNavigate } from "@/lib/navigation";
 
 /** Whether the sidebar was left collapsed, in this browser. */
 const COLLAPSED_KEY = "eidolon.sidebar.collapsed";
@@ -34,38 +36,31 @@ function storeOpen(open: boolean): void {
 
 /** A phone's sheet closes once a link in it is followed. */
 function CloseOnNavigate() {
-  const { key } = useLocation();
   const { setOpenMobile } = useSidebar();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a navigation only triggers it.
-  useEffect(() => setOpenMobile(false), [key, setOpenMobile]);
+  useOnNavigate(() => setOpenMobile(false));
   return null;
 }
 
 /** A page in a column, which scrolls in the frame. */
-export function PageLayout() {
+export function PageLayout({ children }: { readonly children?: ReactNode }) {
   return (
     <>
       <MobileBar />
       <div id="content" tabIndex={-1} className="outline-none">
-        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-          <Outlet />
-        </div>
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">{children}</div>
       </div>
     </>
   );
 }
 
 /** A page that fills the frame under its own header, as a chat and the call do. */
-export function FrameLayout() {
-  return (
-    <div className="flex min-h-80 flex-1 flex-col">
-      <Outlet />
-    </div>
-  );
+export function FrameLayout({ children }: { readonly children?: ReactNode }) {
+  return <div className="flex min-h-80 flex-1 flex-col">{children}</div>;
 }
 
-export function AppShell() {
+export function AppShell({ children }: { readonly children?: ReactNode }) {
   const { t } = useLingui();
+  const [pathname] = useLocation();
   const [open, setOpen] = useState(storedOpen);
   const main = useRef<HTMLElement>(null);
 
@@ -100,7 +95,9 @@ export function AppShell() {
           className="min-w-0 overflow-y-auto outline-none md:mt-2 md:rounded-tl-xl md:border-t md:border-l shell:mt-(--strip) shell:border-t"
         >
           <BelowTitleStrip>
-            <Outlet />
+            <RouteBoundary resetKey={pathname} fallback={(error) => <RouteError error={error} />}>
+              <Suspense fallback={null}>{children}</Suspense>
+            </RouteBoundary>
           </BelowTitleStrip>
           <CallBar />
         </SidebarInset>
