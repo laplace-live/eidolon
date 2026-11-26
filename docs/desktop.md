@@ -822,11 +822,11 @@ The backend runs on the environment main reads, plus four variables of its own, 
 
 ## The payload
 
-`scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon`, for
-`darwin-arm64` or `win32-x64`: `pnpm build:desktop` stages this machine's, and
-`node apps/desktop/scripts/stage-backend.ts --target <target>` names one. A failed stage leaves
-none, and `win32-x64` stages only on Windows, whose Visual Studio redistributable supplies its
-VC++ copies.
+`scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon` for the
+host target (`darwin-arm64` on macOS arm64 or `win32-x64` on Windows x64, whose Visual Studio
+redistributable supplies its VC++ copies and whose install holds its `@pnpm/exe.*` binary):
+`pnpm build:desktop` and `node apps/desktop/scripts/stage-backend.ts --target <target>` both stage
+cleanly or leave nothing on failure.
 
 - **What it holds:** what the npm package stages, through `apps/eidolon/scripts/build.ts`'s
   `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
@@ -901,11 +901,12 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
   command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
   `apps/desktop/node-shim`, a copy of the installed pnpm without its bundled packages' `.bin` links,
-  and the target's `@pnpm/exe.*` binary (`0755` on macOS; signed `pnpm.exe` on Windows). [The stage
-  test](#the-stage-test) holds them to their sources, the pin, the target's `@pnpm/exe.*` binary
-  with no other `.exe` under `node-shim`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
-  npx uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
-  folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the installed one.
+  and the target's `@pnpm/exe.*` binary (`0755` on macOS; `pnpm.exe` on Windows, which the release
+  signs when packaging). [The stage test](#the-stage-test) holds them to their sources, the pin,
+  the target's `@pnpm/exe.*` binary with no other `.exe` under `node-shim`, and pnpm's `dist/`
+  to the semver and `node-gyp-bin` that npx uses. In a checkout, under `dev:desktop` and in the
+  Electron lane, the launchers' folder is `apps/desktop/node-shim` itself, whose
+  `../node_modules/pnpm` is the installed one.
 - **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
   the server's `PATH`, added after `shellEnv()`'s filter, which drops every `node_modules/.bin`,

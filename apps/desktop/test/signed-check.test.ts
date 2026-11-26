@@ -13,6 +13,7 @@ import {
   gatekeeperCheck,
   nativeCheck,
   parseAuthenticode,
+  payloadNativesCheck,
   presenceCheck,
   requiredInInstall,
   requirementCheck,
@@ -134,6 +135,16 @@ describe("macOS", () => {
     expect(nativeCheck("zvec_node_binding.node", ok(NATIVE_SIGNATURE))).toMatchObject({
       pass: true,
     });
+  });
+
+  test("fails the payload natives check when empty or missing the bundled pnpm binary", () => {
+    const pnpm = "node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm";
+    expect(payloadNativesCheck(["zvec.node", pnpm], [pnpm])).toMatchObject({ pass: true });
+    expect(payloadNativesCheck(["zvec.node"], [pnpm])).toMatchObject({
+      pass: false,
+      detail: `missing: ${pnpm}`,
+    });
+    expect(payloadNativesCheck([], [])).toMatchObject({ pass: false });
   });
 
   test("fails a native signed ad hoc, without a secure timestamp, without the runtime or unsigned", () => {

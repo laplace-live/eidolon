@@ -870,11 +870,22 @@ function interpreterOf(file: string): string | undefined {
 const REPORT =
   'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
 
-function runPnpm(
-  dir: string,
-  args: readonly string[],
-  env: NodeJS.ProcessEnv,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+interface PnpmRun {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly error?: string;
+}
+
+function spawnErrorExit(error: NodeJS.ErrnoException): number {
+  return error.code === "ENOENT" ? 127 : error.code === "EACCES" ? 126 : 1;
+}
+
+function pkgName(spec: string): string {
+  const at = spec.indexOf("@", spec.startsWith("@") ? spec.indexOf("/") + 1 : 0);
+  return at > 0 ? spec.slice(0, at) : spec;
+}
+
+function runPnpm(dir: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<PnpmRun> {
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", SHIM_BIN));
   const child = spawn(
     process.execPath,
@@ -888,7 +899,10 @@ function runPnpm(
   );
   const undo = relay(child);
   return new Promise((resolve) => {
-    child.on("error", (error) => fail(`couldn't start pnpm: ${error.message}`));
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      undo();
+      resolve({ code: spawnErrorExit(error), signal: null, error: error.message });
+    });
     child.on("exit", (code, signal) => {
       undo();
       resolve({ code, signal });
@@ -922,7 +936,7 @@ async function install(packages: readonly string[]): Promise<string> {
     ...userconfig,
   }) as NodeJS.ProcessEnv;
   let bin: string | undefined;
-  let dlx: { code: number | null; signal: NodeJS.Signals | null };
+  let dlx: PnpmRun;
   try {
     if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
     dlx = await runPnpm(
@@ -943,22 +957,33 @@ async function install(packages: readonly string[]): Promise<string> {
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+  if (dlx.error !== undefined) fail(`couldn't start pnpm: ${dlx.error}`, dlx.code ?? 1);
   if (dlx.code !== 0 || !bin) return end(dlx.code || 1, dlx.signal);
   // pnpm dlx clears dangerously_allow_all_builds in .modules.yaml's cache policy, leaving subdep
-  // install scripts unrun under ignoredBuilds; rebuild once unless ignore-scripts is set.
+  // install scripts unrun under ignoredBuilds; rebuild those packages alone unless ignore-scripts
+  // is set, so already-built root scripts never run twice.
   if (settings.includes("--config.ignore-scripts=true")) return bin;
   const cachedDir = path.dirname(path.dirname(bin));
   const ignored = readJson(path.join(cachedDir, "node_modules", ".modules.yaml"))?.ignoredBuilds;
   if (!Array.isArray(ignored) || ignored.length === 0) return bin;
+  const pkgs = [
+    ...new Set(ignored.filter((entry): entry is string => typeof entry === "string").map(pkgName)),
+  ];
+  if (pkgs.length === 0) return bin;
   const cachedNpmrc = path.join(cachedDir, ".npmrc");
   const wroteNpmrc = npmrc !== "" && !isFile(cachedNpmrc);
-  if (wroteNpmrc) writeFileSync(cachedNpmrc, `${npmrc}\n`, { mode: 0o600 });
-  let rebuilt: Awaited<ReturnType<typeof runPnpm>>;
+  let rebuilt: PnpmRun;
   try {
-    rebuilt = await runPnpm(cachedDir, ["--loglevel=error", ...settings, "rebuild"], baseEnv);
+    if (wroteNpmrc) writeFileSync(cachedNpmrc, `${npmrc}\n`, { mode: 0o600 });
+    rebuilt = await runPnpm(
+      cachedDir,
+      ["--loglevel=error", ...settings, "rebuild", ...pkgs],
+      baseEnv,
+    );
   } finally {
     if (wroteNpmrc) rmSync(cachedNpmrc, { force: true });
   }
+  if (rebuilt.error !== undefined) fail(`couldn't start pnpm: ${rebuilt.error}`, rebuilt.code ?? 1);
   if (rebuilt.code !== 0) return end(rebuilt.code || 1, rebuilt.signal);
   return bin;
 }

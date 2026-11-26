@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, request as httpRequest } from "node:http";
+import { createServer } from "node:http";
 import { type AddressInfo, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -782,20 +782,17 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   }, 60_000);
 
   test("installs through the proxy the project's .npmrc names, which pnpm reads from none", async () => {
+    const base = new URL(registry);
     const proxied: string[] = [];
     const proxy = createServer((clientReq, clientRes) => {
       const target = new URL(clientReq.url ?? "");
-      proxied.push(target.host);
-      const upstream = httpRequest(
-        target,
-        { method: clientReq.method, headers: clientReq.headers },
-        (upRes) => {
-          clientRes.writeHead(upRes.statusCode ?? 502, upRes.headers);
-          upRes.pipe(clientRes);
-        },
-      );
-      upstream.on("error", () => clientRes.writeHead(502).end());
-      clientReq.pipe(upstream);
+      if (target.host !== base.host) {
+        clientRes.writeHead(403).end();
+        return;
+      }
+      proxied.push(base.host);
+      clientReq.url = `${target.pathname}${target.search}`;
+      server.emit("request", clientReq, clientRes);
     });
     proxy.on("connect", (request, socket, head) => {
       proxied.push(request.url ?? "");
@@ -1044,5 +1041,54 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     expect([ran.status, ran.marks]).toEqual([1, ["bad-build"]]);
     expect(files.some((file) => file.endsWith(".modules.yaml"))).toBe(true);
     expect(files.filter((file) => /(?:^|\/)\.npmrc$/.test(file))).toEqual([".npmrc"]);
+  }, 60_000);
+
+  test("rebuilds only deferred subdependencies without re-running already-built root scripts", async () => {
+    publish(
+      write(join(scratch, "once-dep"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/once-dep",
+          version: "1.0.0",
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "dep\\n");',
+          "",
+        ].join("\n"),
+      }),
+      old,
+      PRIVATE,
+    );
+    publish(
+      write(join(scratch, "once-app"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/once-app",
+          version: "1.0.0",
+          bin: { "eidolon-test-once": "cli.js" },
+          dependencies: { "@eidolon-corp/once-dep": "1.0.0" },
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "app\\n");',
+          "",
+        ].join("\n"),
+        "cli.js": "#!/usr/bin/env node\nconsole.log('once');\n",
+      }),
+      old,
+      PRIVATE,
+    );
+    const project = write(join(scratch, "rebuild-once"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN),
+    });
+    const marks = mkdtempSync(join(scratch, "once-marks-"));
+    const ran = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+      cwd: project,
+      env: { EIDOLON_TEST_MARKS: marks },
+    });
+    expect([ran.status, ran.stdout, ran.stderr]).toEqual([0, "once\n", ""]);
+    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual(["app", "dep"]);
   }, 60_000);
 });

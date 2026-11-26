@@ -274,6 +274,20 @@ function filesUnder(dir: string): string[] {
     .sort();
 }
 
+/** A macOS app bundle's payload Mach-O binaries: non-empty, with every required path present. */
+export function payloadNativesCheck(
+  natives: readonly string[],
+  required: readonly string[],
+): Check {
+  const missing = required.filter((file) => !natives.includes(file));
+  return {
+    name: "the payload holds natives to check",
+    pass: natives.length > 0 && missing.length === 0,
+    detail:
+      missing.length > 0 ? `missing: ${missing.join(", ")}` : `${natives.length} Mach-O files`,
+  };
+}
+
 function checkMac(record: (check: Check) => void): void {
   const app = join(DESKTOP, ".out", "mac-arm64", "LAPLACE Eidolon.app");
   if (!existsSync(app)) throw new Error(`No ${app}: package the release first`);
@@ -285,11 +299,12 @@ function checkMac(record: (check: Check) => void): void {
   const natives = existsSync(payload)
     ? filesUnder(payload).filter((file) => /\.(node|dylib)$/.test(file) || file === pnpmExe)
     : [];
-  record({
-    name: "the payload holds natives to check",
-    pass: natives.length > 0,
-    detail: `${natives.length} Mach-O files`,
-  });
+  record(
+    payloadNativesCheck(
+      natives.map((file) => relative(payload, file)),
+      [relative(payload, pnpmExe)],
+    ),
+  );
   for (const native of natives) {
     record(nativeCheck(relative(payload, native), run("codesign", ["-dvvv", native])));
   }

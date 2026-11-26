@@ -270,6 +270,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const { version } = manifestOf(pnpm);
       const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
       expect(version).toBe(devDependencies.pnpm);
+      expect(manifestOf(exe).version).toBe(version);
       const { importers } = readPnpmLock(join(ROOT, "pnpm-lock.yaml"));
       expect(importers["apps/desktop"]?.devDependencies?.pnpm?.version).toBe(version);
       // With its @pnpm/exe.* binary, and what npx takes from pnpm's dist: npm's semver, and
