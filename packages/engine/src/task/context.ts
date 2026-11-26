@@ -330,9 +330,10 @@ function serialized(blocks: readonly Block[]): string {
     if (text !== "") parts.push(`[Assistant]: ${text}`);
     if (calls.length > 0) {
       const listed = calls.map(({ name, arguments: args }) => {
-        const fields = Object.entries(args).map(
-          ([key, value]) => `${key}=${JSON.stringify(value)}`,
-        );
+        const fields = Object.entries(args).map(([key, value]) => {
+          const raw = JSON.stringify(value) ?? "undefined";
+          return `${key}=${truncated(raw, SUMMARY_RESULT_CHARS)}`;
+        });
         return `${name}(${fields.join(", ")})`;
       });
       parts.push(`[Assistant tool calls]: ${listed.join("; ")}`);
@@ -364,6 +365,35 @@ export function filesBefore(
   };
 }
 
+function summaryTail(
+  previous: string | null,
+  files: { readonly read: readonly string[]; readonly written: readonly string[] },
+  instructions: string,
+): string {
+  let tail = "";
+  if (previous !== null) tail += `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
+  const lists = fileLists(files);
+  if (lists !== "") tail += `${lists}\n\n`;
+  return tail + instructions;
+}
+
+function wrapSummaryPrompt(conversation: string, tail: string): string {
+  return `<conversation>\n${conversation}\n</conversation>\n\n${tail}`;
+}
+
+function fitTextToTokens(text: string, maxTokens: number): string {
+  if (text === "" || maxTokens <= 0) return "";
+  if (estimateTokens(text) <= maxTokens) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (estimateTokens(truncated(text, mid)) <= maxTokens) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? truncated(text, lo) : "";
+}
+
 /** The summary request's one message: what pi's generateSummary sends, file lists added. */
 export function summaryPrompt(
   older: readonly Block[],
@@ -371,9 +401,84 @@ export function summaryPrompt(
   files: { readonly read: readonly string[]; readonly written: readonly string[] },
   instructions: string,
 ): string {
-  let prompt = `<conversation>\n${serialized(older)}\n</conversation>\n\n`;
-  if (previous !== null) prompt += `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
-  const lists = fileLists(files);
-  if (lists !== "") prompt += `${lists}\n\n`;
-  return prompt + instructions;
+  return wrapSummaryPrompt(serialized(older), summaryTail(previous, files, instructions));
+}
+
+/**
+ * Builds the next contiguous slice prompt for one `block` starting at character `offset`,
+ * bounded to `maxTokens` (estimated), so oversized turns split across summary requests without
+ * dropping trailing calls or results.
+ */
+export function summarySlicePrompt(
+  block: Block,
+  offset: number,
+  previous: string | null,
+  files: { readonly read: readonly string[]; readonly written: readonly string[] },
+  instructions: string,
+  maxTokens: number,
+): { readonly prompt: string; readonly nextOffset: number; readonly total: number } | null {
+  const full = serialized([block]);
+  const total = full.length;
+  const tail = summaryTail(previous, files, instructions);
+  if (offset === 0 && offset < total) {
+    const whole = wrapSummaryPrompt(full, tail);
+    if (estimateTokens(whole) <= maxTokens) return { prompt: whole, nextOffset: total, total };
+  }
+
+  let activeFiles = files;
+  let noPrevTail = summaryTail(null, activeFiles, instructions);
+  const minConv = Math.min(256, Math.max(64, Math.floor(maxTokens / 3)));
+  if (estimateTokens(wrapSummaryPrompt("", noPrevTail)) + minConv > maxTokens) {
+    activeFiles = { read: [], written: [] };
+    noPrevTail = instructions;
+  }
+
+  let activePrev = previous;
+  let activeTail = summaryTail(activePrev, activeFiles, instructions);
+  if (
+    activePrev !== null &&
+    estimateTokens(wrapSummaryPrompt("", activeTail)) + minConv > maxTokens
+  ) {
+    const spare = maxTokens - estimateTokens(wrapSummaryPrompt("", noPrevTail)) - minConv;
+    const trimmed = spare > 32 ? fitTextToTokens(activePrev, spare) : "";
+    activePrev = trimmed !== "" ? trimmed : null;
+    activeTail = summaryTail(activePrev, activeFiles, instructions);
+  }
+
+  if (offset >= total) {
+    const emptyPrompt = wrapSummaryPrompt("", activeTail);
+    return estimateTokens(emptyPrompt) <= maxTokens
+      ? { prompt: emptyPrompt, nextOffset: total, total }
+      : null;
+  }
+
+  const rest = full.slice(offset);
+  let lo = 0;
+  let hi = rest.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (estimateTokens(wrapSummaryPrompt(rest.slice(0, mid), activeTail)) <= maxTokens) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (lo === 0) return null;
+  let take = lo;
+  if (take < rest.length) {
+    const boundary = rest.lastIndexOf("\n\n", Math.max(0, take - 2));
+    if (boundary >= Math.floor(take / 2)) take = boundary + 2;
+  }
+  if (take < rest.length) {
+    const code = rest.charCodeAt(take - 1);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (take <= 1) return null;
+      take -= 1;
+    }
+  }
+  return {
+    prompt: wrapSummaryPrompt(rest.slice(0, take), activeTail),
+    nextOffset: offset + take,
+    total,
+  };
 }

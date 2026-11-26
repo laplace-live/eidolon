@@ -571,13 +571,13 @@ describe("chat settings", () => {
 });
 
 describe("assistant settings", () => {
-  test("unset: on, no folders of its own, commands on, a $1 spend pause, a 128,000-token context, and asking", () => {
+  test("unset: on, no folders of its own, commands on, a $10 spend pause, unlimited context, and asking", () => {
     expect(assistantSettings()).toEqual({
       enabled: true,
       folders: [],
       bash: true,
-      spendPauseUsd: 1,
-      contextTokens: 128_000,
+      spendPauseUsd: 10,
+      contextTokens: 0,
       permissions: "ask",
     });
   });
@@ -633,21 +633,21 @@ describe("assistant settings", () => {
     expect(warnings).toEqual(["ASSISTANT_PERMISSIONS='yolo' is not ask, auto or full; using ask"]);
   });
 
-  test("only 0 turns the spend pauses off; a pause or context that is no amount is the default", () => {
+  test("only 0 turns the spend pauses off; 0 leaves context unlimited; invalid amounts fall back to defaults", () => {
     for (const [value, read] of [
       ["0", 0],
       ["0.25", 0.25],
-      ["-1", 1],
-      ["inf", 1],
-      ["nan", 1],
+      ["-1", 10],
+      ["inf", 10],
+      ["nan", 10],
     ] as const) {
       setEnv("ASSISTANT_SPEND_PAUSE_USD", value);
       expect([value, assistantSettings().spendPauseUsd]).toEqual([value, read]);
     }
     for (const [value, read] of [
       ["200000", 200_000],
-      ["0", 128_000],
-      ["-5", 128_000],
+      ["0", 0],
+      ["-5", 0],
     ] as const) {
       setEnv("ASSISTANT_CONTEXT_TOKENS", value);
       expect([value, assistantSettings().contextTokens]).toEqual([value, read]);

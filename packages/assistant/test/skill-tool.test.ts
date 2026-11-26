@@ -374,6 +374,15 @@ describe("taskSkills", () => {
       "release-notes",
       "long-rules",
     ]);
+    // With contextTokens at 0 (unlimited), requested skills use the 32,000-token inline budget.
+    const unlimited = await taskSkills(catalog, policy, 0);
+    expect(
+      unlimited.requested.map(({ skill, text }) => [skill.name, text.includes("- Rule 1995.")]),
+    ).toEqual([
+      ["long-rules", true],
+      ["house-style", false],
+    ]);
+    expect(unlimited.requested[1]?.text).toContain("font-family: Georgia");
   });
 
   test("a named skill whose SKILL.md is gone since the scan is unreadable, and nothing else changes", async () => {

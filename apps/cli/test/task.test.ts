@@ -195,7 +195,7 @@ describe("laplace-task", () => {
       },
       model: { account: "openrouter", model: "test/model" },
       grants: [],
-      spendPauseUsd: 1,
+      spendPauseUsd: 10,
       spentUsd: 0.5,
       files: { read: [], written: [realpathSync(file)] },
       outcome: { status: "succeeded", report: "Wrote hello.txt." },

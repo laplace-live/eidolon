@@ -409,9 +409,10 @@ it finds risky; `full` asks about none, so its commands run as you unasked. Any 
 as `ask`, with a warning. At every level a task's file tools stay out of the data home, your keys
 and `.git` folders; your Denies, spend pauses and No Web still hold.
 A task pauses to ask before going on each time its spend crosses a multiple of
-`assistant.spendPauseUsd` (default 1, in US dollars; 0 never pauses), or after its first request
+`assistant.spendPauseUsd` (default 10, in US dollars; 0 never pauses), or after its first request
 on a model with no known price, whose spend can't be counted, and keeps its requests within
-`assistant.contextTokens` tokens (default 128000).
+`assistant.contextTokens` tokens (default 0: 0 uses the model's full window, compacting when it
+fills).
 
 `assistant.quick`, `assistant.coding` and `assistant.research` name the account and model for the
 tasks she marks quick, coding or research. Unset, they follow `assistant.provider` and

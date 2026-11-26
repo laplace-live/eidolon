@@ -1827,8 +1827,30 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
       readonly firstKeptSeq: number;
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
+      /** In-progress character offset and token budget when paused mid-block across summary slices. */
+      readonly slice?: {
+        readonly offset: number;
+        readonly budget: number;
+        readonly shrunk?: boolean;
+        readonly model?: string;
+      };
+      /** Context ceiling learned from an overflow on `model`, so same-model resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
     }
-  | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
+  | {
+      readonly type: "pause";
+      readonly reason: TaskPauseReason;
+      readonly detail: string;
+      /** Context ceiling learned before this pause, so same-model resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
+      /** Overflowed request that paused before compacting, so same-model Continue compacts first. */
+      readonly compact?: {
+        readonly inputTokens: number;
+        readonly model: string;
+        readonly summaryBudget?: number;
+        readonly summaryOverflows?: number;
+      };
+    }
   | { readonly type: "resume" }
   | { readonly type: "end"; readonly outcome: TaskOutcome }
 );

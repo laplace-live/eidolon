@@ -22,6 +22,7 @@ import type {
 import type { Mind, MindRequest, MindToolCall } from "../types.ts";
 import {
   argumentsHead,
+  type Block,
   type ContextMessage,
   contextMessages,
   cutOff,
@@ -31,10 +32,11 @@ import {
   firstKept,
   messageTokens,
   summaryPrompt,
+  summarySlicePrompt,
   taskContext,
   unfinished,
 } from "./context.ts";
-import { isContextOverflow, isTransient } from "./errors.ts";
+import { isContextOverflow, isTransient, overflowTokens } from "./errors.ts";
 import { echoed, validateToolArguments } from "./validate.ts";
 
 /** The waits before each retry of a request that failed for a transient reason. */
@@ -217,6 +219,15 @@ class TaskRun {
   /** Each turn's calls this run, for stalls. */
   readonly #signatures: string[] = [];
   #spendLimit = Number.POSITIVE_INFINITY;
+  #ceiling: number;
+  /** Ceiling learned from an overflow on this run/model (never from static config). */
+  #learned: number | null = null;
+  /** An overflowed request that paused before compacting, so Continue compacts first. */
+  #pendingCompact: {
+    readonly inputTokens: number;
+    readonly summaryBudget?: number;
+    readonly summaryOverflows?: number;
+  } | null = null;
   /** The last request's input as its provider counted it, and as estimated. */
   #counted: { readonly reported: number; readonly estimated: number } | null = null;
 
@@ -225,6 +236,8 @@ class TaskRun {
     this.#emit = emit;
     this.#left = left;
     this.#signal = AbortSignal.any([request.signal, left]);
+    this.#ceiling =
+      request.limits.contextTokens > 0 ? request.limits.contextTokens : Number.POSITIVE_INFINITY;
     this.#fixedTokens =
       estimateTokens(request.system) +
       estimateTokens(JSON.stringify(request.tools.map((tool) => tool.schema)));
@@ -247,9 +260,31 @@ class TaskRun {
       if (this.#left.aborted) return { status: "cancelled" };
       outcome = { status: "cancelled" };
     }
+    const model = this.#modelId();
     await this.#append(
       outcome.status === "paused"
-        ? { type: "pause", reason: outcome.reason, detail: outcome.detail }
+        ? {
+            type: "pause",
+            reason: outcome.reason,
+            detail: outcome.detail,
+            ...(this.#learned !== null && model !== undefined
+              ? { learned: { tokens: this.#learned, model } }
+              : {}),
+            ...(this.#pendingCompact !== null && model !== undefined
+              ? {
+                  compact: {
+                    inputTokens: this.#pendingCompact.inputTokens,
+                    model,
+                    ...(this.#pendingCompact.summaryBudget === undefined
+                      ? {}
+                      : { summaryBudget: this.#pendingCompact.summaryBudget }),
+                    ...(this.#pendingCompact.summaryOverflows === undefined
+                      ? {}
+                      : { summaryOverflows: this.#pendingCompact.summaryOverflows }),
+                  },
+                }
+              : {}),
+          }
         : { type: "end", outcome },
       true,
     );
@@ -261,6 +296,34 @@ class TaskRun {
     const stored = await this.#request.store.entries();
     if (stored.length === 0) throw new Error(`Task ${this.#request.id} has no brief`);
     this.#entries.push(...stored);
+    const currentModel = this.#modelId();
+    for (const entry of this.#entries) {
+      if (
+        currentModel !== undefined &&
+        (entry.type === "compaction" || entry.type === "pause") &&
+        entry.learned?.model === currentModel
+      ) {
+        this.#recordCeiling(entry.learned.tokens);
+      }
+      if (entry.type === "compaction" || entry.type === "assistant") {
+        this.#pendingCompact = null;
+      } else if (
+        entry.type === "pause" &&
+        entry.compact !== undefined &&
+        currentModel !== undefined &&
+        entry.compact.model === currentModel
+      ) {
+        this.#pendingCompact = {
+          inputTokens: entry.compact.inputTokens,
+          ...(entry.compact.summaryBudget === undefined
+            ? {}
+            : { summaryBudget: entry.compact.summaryBudget }),
+          ...(entry.compact.summaryOverflows === undefined
+            ? {}
+            : { summaryOverflows: entry.compact.summaryOverflows }),
+        };
+      }
+    }
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
     const step = this.#request.limits.spendPauseUsd;
     // A resumed run goes on past the spend the owner continued from; a new one owes the first
@@ -495,11 +558,22 @@ class TaskRun {
   /** The turn's request, compacted first when the context calls for it; a summary may pause it. */
   async #ask(): Promise<Reply | TaskOutcome> {
     let view = this.#view();
-    if (view.sized > compactAbove(this.#request.limits.contextTokens)) {
-      if (await this.#compact(view.sized)) {
+    const pendingSlice = taskContext(this.#entries).compaction?.slice !== undefined;
+    const forcedCompact = this.#pendingCompact;
+    if (
+      pendingSlice ||
+      forcedCompact !== null ||
+      (Number.isFinite(this.#ceiling) && view.sized > compactAbove(this.#ceiling))
+    ) {
+      const targetTokens =
+        forcedCompact === null ? view.sized : Math.max(view.sized, forcedCompact.inputTokens);
+      if (await this.#compact(targetTokens)) {
         const held = this.#held();
         if (held !== null) return held;
         view = this.#view();
+      } else if (forcedCompact !== null && !pendingSlice) {
+        this.#pendingCompact = null;
+        return { status: "failed", error: "The model's context window was exceeded" };
       }
     }
     let compacted = false;
@@ -513,11 +587,34 @@ class TaskRun {
         );
         const reported = this.#request.meter.lastInputTokens();
         this.#counted = reported === null ? null : { reported, estimated: view.tokens };
+        if (reply.finishReason === "model_context_window_exceeded") {
+          const input = reported !== null && reported > 0 ? reported : view.sized;
+          const output = this.#request.meter.lastOutputTokens?.() ?? null;
+          const total = input + (output !== null && output > 0 ? output : 0);
+          this.#recordCeiling(total);
+          this.#pendingCompact = { inputTokens: input };
+          const heldBefore = this.#held();
+          if (heldBefore !== null) return heldBefore;
+          if (compacted || !(await this.#compact(input))) {
+            this.#pendingCompact = null;
+            return { status: "failed", error: "The model's context window was exceeded" };
+          }
+          compacted = true;
+          const heldAfter = this.#held();
+          if (heldAfter !== null) return heldAfter;
+          view = this.#view();
+          continue;
+        }
         return reply;
       } catch (error) {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
-        if (!(await this.#compact(view.sized))) throw error;
+        this.#recordCeiling(overflowTokens(error) ?? view.sized);
+        this.#pendingCompact = { inputTokens: view.sized };
+        if (!(await this.#compact(view.sized))) {
+          this.#pendingCompact = null;
+          throw error;
+        }
         const held = this.#held();
         if (held !== null) return held;
         view = this.#view();
@@ -537,6 +634,7 @@ class TaskRun {
     };
     for (let retries = 0; ; retries++) {
       report({ type: "request", state: "start" });
+      this.#request.meter.requestStarted?.();
       try {
         const reply = await this.#stream({ system, messages, tools, signal: this.#signal }, live);
         report({ type: "request", state: "end" });
@@ -569,33 +667,285 @@ class TaskRun {
     return reply;
   }
 
+  #modelId(): string | undefined {
+    const raw = this.#request.meter.modelId?.();
+    return raw !== undefined && raw !== "" ? raw : undefined;
+  }
+
+  #recordCeiling(tokens: number): void {
+    if (!(tokens > 0) || !Number.isFinite(tokens)) return;
+    this.#ceiling = Math.min(this.#ceiling, tokens);
+    this.#learned = this.#learned === null ? tokens : Math.min(this.#learned, tokens);
+  }
+
   /**
    * Summarizes what came before the newest blocks, through the task's mind with no tools, and
    * stores it. False when the newest blocks are all there is.
    */
+  #shrinkOrPauseCompaction(
+    tokensBefore: number,
+    learned: number | null,
+    overflows: number,
+    promptTokens: number,
+    budget: number,
+    systemTokens: number,
+    singleBlock: boolean,
+  ): number | "paused" | null {
+    if (learned !== null) this.#recordCeiling(learned);
+    const shrunk = this.#shrinkCompactionBudget(
+      overflows,
+      learned,
+      promptTokens,
+      budget,
+      systemTokens,
+      singleBlock,
+    );
+    if (shrunk === null) return null;
+    if (this.#held() !== null) {
+      this.#pendingCompact = {
+        inputTokens: this.#pendingCompact?.inputTokens ?? tokensBefore,
+        summaryBudget: shrunk,
+        summaryOverflows: overflows + 1,
+      };
+      return "paused";
+    }
+    return shrunk;
+  }
+
   async #compact(tokensBefore: number): Promise<boolean> {
     const context = taskContext(this.#entries);
-    const first = firstKept(context.blocks, keepTokens(this.#request.limits.contextTokens));
+    const priorSlice =
+      context.compaction?.slice !== undefined &&
+      context.blocks[0]?.seq === context.compaction.firstKeptSeq
+        ? context.compaction.slice
+        : undefined;
+    const nonEmptyModel = this.#modelId();
+    const window =
+      Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : tokensBefore;
+    const first = Math.max(
+      priorSlice !== undefined ? 1 : 0,
+      firstKept(context.blocks, keepTokens(window)),
+    );
     const kept = context.blocks[first];
     if (first === 0 || kept === undefined) return false;
-    const files = filesBefore(this.#entries, kept.seq);
     const { system, instructions } = this.#request.compaction;
+    const systemTokens = estimateTokens(system);
+    const windowBudget = Math.max(256, compactAbove(window) - systemTokens);
+    const priorShrunk =
+      priorSlice?.shrunk === true &&
+      nonEmptyModel !== undefined &&
+      priorSlice.model === nonEmptyModel;
+    const pendingBudget = this.#pendingCompact?.summaryBudget;
+    let shrunkByOverflow = priorShrunk || pendingBudget !== undefined;
+    let budget = windowBudget;
+    if (priorShrunk && priorSlice !== undefined) {
+      budget = Math.min(budget, priorSlice.budget);
+    }
+    if (pendingBudget !== undefined) {
+      budget = Math.min(budget, pendingBudget);
+    }
+    if (shrunkByOverflow) budget = Math.max(256, budget);
     const older = context.blocks.slice(0, first);
-    const prompt = summaryPrompt(older, context.compaction?.summary ?? null, files, instructions);
-    const reply = await this.#send(system, [{ role: "user", content: prompt }], [], false);
-    const why = unfinished(reply.finishReason);
-    if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
-    const summary = reply.text.trim();
-    if (summary === "") throw new Error("Compaction returned no summary");
-    await this.#append({
-      type: "compaction",
-      summary,
-      firstKeptSeq: kept.seq,
-      files,
-      tokensBefore,
-    });
-    this.#counted = null;
+    let summary = context.compaction?.summary ?? null;
+    let start = 0;
+    let offset = priorSlice?.offset ?? 0;
+    let made = 0;
+    let overflows = this.#pendingCompact?.summaryOverflows ?? 0;
+    while (start < older.length) {
+      if (made > 0 && this.#held() !== null) return true;
+      const chunk = this.#nextSummaryChunk(
+        older,
+        start,
+        offset,
+        kept.seq,
+        summary,
+        instructions,
+        budget,
+      );
+      if (chunk === null) {
+        throw new Error("Compaction failed. The model's context window was exceeded");
+      }
+      let reply: Reply;
+      try {
+        reply = await this.#send(system, [{ role: "user", content: chunk.prompt }], [], false);
+      } catch (error) {
+        if (this.#signal.aborted || !isContextOverflow(error)) throw error;
+        const shrunk = this.#shrinkOrPauseCompaction(
+          tokensBefore,
+          overflowTokens(error),
+          overflows,
+          estimateTokens(chunk.prompt),
+          budget,
+          systemTokens,
+          chunk.singleBlock,
+        );
+        if (shrunk === null) throw error;
+        if (shrunk === "paused") return true;
+        shrunkByOverflow = true;
+        overflows++;
+        budget = shrunk;
+        continue;
+      }
+      if (reply.finishReason === "model_context_window_exceeded") {
+        const input = this.#request.meter.lastInputTokens();
+        const output = this.#request.meter.lastOutputTokens?.() ?? null;
+        const learned =
+          input !== null && input > 0 ? input + (output !== null && output > 0 ? output : 0) : null;
+        const shrunk = this.#shrinkOrPauseCompaction(
+          tokensBefore,
+          learned,
+          overflows,
+          estimateTokens(chunk.prompt),
+          budget,
+          systemTokens,
+          chunk.singleBlock,
+        );
+        if (shrunk === null) {
+          throw new Error("Compaction failed. The model's context window was exceeded");
+        }
+        if (shrunk === "paused") return true;
+        shrunkByOverflow = true;
+        overflows++;
+        budget = shrunk;
+        continue;
+      }
+      const why = unfinished(reply.finishReason);
+      if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
+      const nextSummary = reply.text.trim();
+      if (nextSummary === "") throw new Error("Compaction returned no summary");
+      summary = nextSummary;
+      made++;
+      overflows = 0;
+      await this.#append({
+        type: "compaction",
+        summary,
+        firstKeptSeq: chunk.nextSeq,
+        files: chunk.files,
+        tokensBefore,
+        ...(chunk.nextOffset > 0
+          ? {
+              slice: {
+                offset: chunk.nextOffset,
+                budget,
+                ...(shrunkByOverflow ? { shrunk: true } : {}),
+                ...(nonEmptyModel === undefined ? {} : { model: nonEmptyModel }),
+              },
+            }
+          : {}),
+        ...(this.#learned !== null && nonEmptyModel !== undefined
+          ? { learned: { tokens: this.#learned, model: nonEmptyModel } }
+          : {}),
+      });
+      this.#counted = null;
+      this.#pendingCompact = null;
+      start = chunk.end;
+      offset = chunk.nextOffset;
+    }
     return true;
+  }
+
+  #shrinkCompactionBudget(
+    overflows: number,
+    learned: number | null,
+    promptTokens: number,
+    budget: number,
+    systemTokens: number,
+    singleBlock: boolean,
+  ): number | null {
+    if (overflows >= 2) return null;
+    const learnedBudget =
+      learned !== null && learned > 0 ? compactAbove(learned) - systemTokens : budget;
+    const shrunk = Math.max(256, Math.floor(Math.min(budget, learnedBudget, promptTokens) * 0.6));
+    if (shrunk >= budget && singleBlock) return null;
+    return shrunk;
+  }
+
+  #nextSummaryChunk(
+    older: readonly Block[],
+    start: number,
+    offset: number,
+    keptSeq: number,
+    summary: string | null,
+    instructions: string,
+    budget: number,
+  ): {
+    readonly end: number;
+    readonly nextOffset: number;
+    readonly nextSeq: number;
+    readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
+    readonly prompt: string;
+    readonly singleBlock: boolean;
+  } | null {
+    const seqAfter = (end: number): number =>
+      end < older.length ? (older[end] as Block).seq : keptSeq;
+    const chunkFiles = (nextSeq: number) => filesBefore(this.#entries, nextSeq);
+
+    if (offset === 0) {
+      const fullFiles = chunkFiles(keptSeq);
+      const fullPrompt = summaryPrompt(older.slice(start), summary, fullFiles, instructions);
+      if (estimateTokens(fullPrompt) <= budget) {
+        return {
+          end: older.length,
+          nextOffset: 0,
+          nextSeq: keptSeq,
+          files: fullFiles,
+          prompt: fullPrompt,
+          singleBlock: older.length - start === 1,
+        };
+      }
+      const singleSeq = seqAfter(start + 1);
+      const singleFiles = chunkFiles(singleSeq);
+      const singlePrompt = summaryPrompt(
+        older.slice(start, start + 1),
+        summary,
+        singleFiles,
+        instructions,
+      );
+      if (estimateTokens(singlePrompt) <= budget) {
+        let lo = start + 1;
+        let hi = older.length - 1;
+        let bestPrompt = singlePrompt;
+        let bestFiles = singleFiles;
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi) / 2);
+          const nextSeq = seqAfter(mid);
+          const files = chunkFiles(nextSeq);
+          const prompt = summaryPrompt(older.slice(start, mid), summary, files, instructions);
+          if (estimateTokens(prompt) <= budget) {
+            lo = mid;
+            bestPrompt = prompt;
+            bestFiles = files;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        return {
+          end: lo,
+          nextOffset: 0,
+          nextSeq: seqAfter(lo),
+          files: bestFiles,
+          prompt: bestPrompt,
+          singleBlock: lo === start + 1,
+        };
+      }
+    }
+
+    // One block alone exceeds budget (or continues an earlier slice): summarize it in sequential
+    // slices, holding firstKeptSeq before the block until every slice is in the summary.
+    const block = older[start] as Block;
+    const nextBlockSeq = seqAfter(start + 1);
+    const completedFiles = chunkFiles(nextBlockSeq);
+    const slice = summarySlicePrompt(block, offset, summary, completedFiles, instructions, budget);
+    if (slice === null) return null;
+    const finished = slice.nextOffset >= slice.total;
+    return {
+      end: finished ? start + 1 : start,
+      nextOffset: finished ? 0 : slice.nextOffset,
+      nextSeq: finished ? nextBlockSeq : block.seq,
+      files: finished ? completedFiles : chunkFiles(block.seq),
+      prompt: slice.prompt,
+      singleBlock: true,
+    };
   }
 
   #tool(name: string): TaskTool | undefined {

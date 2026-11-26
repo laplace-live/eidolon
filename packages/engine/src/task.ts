@@ -107,8 +107,30 @@ export type TaskEntryDraft =
       readonly firstKeptSeq: number;
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
+      /** In-progress character offset and token budget when paused mid-block across summary slices. */
+      readonly slice?: {
+        readonly offset: number;
+        readonly budget: number;
+        readonly shrunk?: boolean;
+        readonly model?: string;
+      };
+      /** Context ceiling learned from an overflow on `model`, so same-model resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
     }
-  | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
+  | {
+      readonly type: "pause";
+      readonly reason: TaskPauseReason;
+      readonly detail: string;
+      /** Context ceiling learned before this pause, so same-model resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
+      /** Overflowed request that paused before compacting, so same-model Continue compacts first. */
+      readonly compact?: {
+        readonly inputTokens: number;
+        readonly model: string;
+        readonly summaryBudget?: number;
+        readonly summaryOverflows?: number;
+      };
+    }
   | { readonly type: "resume" }
   | { readonly type: "end"; readonly outcome: TaskOutcome };
 
@@ -136,6 +158,12 @@ export interface TaskMeter {
   spentUsd(): number;
   /** The last request's input tokens, when its provider reported them. */
   lastInputTokens(): number | null;
+  /** The last request's output tokens (reasoning included), when its provider reported them. */
+  lastOutputTokens?(): number | null;
+  /** A request attempt is starting: clears per-attempt usage so a failed attempt cannot leak. */
+  requestStarted?(): void;
+  /** Active `<account>/<model>` identifier so learned context ceilings stay scoped to one model. */
+  modelId?(): string | undefined;
   /**
    * Why the first request it couldn't count went uncounted ("No price is known for <model> at
    * <provider>", "No usage was reported for <model> at <account>"), or null.
@@ -177,6 +205,7 @@ export interface TaskRequest {
   readonly steeringMode?: "one-at-a-time" | "all";
   readonly followUpMode?: "one-at-a-time" | "all";
   readonly limits: {
+    /** Token ceiling per request; 0 leaves the context window to the model's own. */
     readonly contextTokens: number;
     readonly spendPauseUsd: number;
     /**
