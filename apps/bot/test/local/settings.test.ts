@@ -488,6 +488,31 @@ describe("PUT settings", () => {
     const atBoot = await put({ scope: "app", values: { "network.stunUrl": "stun:example.com" } });
     expect(atBoot.body.restartRequired).toBe(true);
   });
+
+  test("toggling memory.enabled preserves legacy memory.qdrant until .qdrant-migrated is stamped", async () => {
+    const settingsYaml = join(dataHome(), "settings.yaml");
+    writeFileSync(
+      settingsYaml,
+      "memory:\n  qdrant:\n    host: 127.0.0.1\n    port: 6333\n    collection: custom_mem\n",
+    );
+    expect((await put({ scope: "app", values: { "memory.enabled": false } })).status).toBe(200);
+    const afterOff = parseYaml(readFileSync(settingsYaml, "utf8")) as Record<string, any>;
+    expect(afterOff.memory).toEqual({
+      enabled: false,
+      qdrant: { host: "127.0.0.1", port: 6333, collection: "custom_mem" },
+    });
+
+    expect((await put({ scope: "app", values: { "memory.enabled": true } })).status).toBe(200);
+    expect(envOptional("MEM0_QDRANT_HOST")).toBe("127.0.0.1");
+    expect(envOptional("MEM0_QDRANT_COLLECTION")).toBe("custom_mem");
+
+    const vectorsDir = join(dataHome(), "mem0", "vectors");
+    mkdirSync(vectorsDir, { recursive: true });
+    writeFileSync(join(vectorsDir, ".qdrant-migrated"), "1\n");
+    expect((await put({ scope: "app", values: { "memory.enabled": true } })).status).toBe(200);
+    const afterMigrated = parseYaml(readFileSync(settingsYaml, "utf8")) as Record<string, any>;
+    expect(afterMigrated.memory).toEqual({ enabled: true });
+  });
 });
 
 describe("voice styles", () => {

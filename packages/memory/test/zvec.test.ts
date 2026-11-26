@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { jsRuntime } from "@eidolon/config";
@@ -427,5 +427,16 @@ describe("ZvecVectorStore", () => {
     const listed = await reopened.list({ user_id: "u1" }, 10);
     expect(listed.map((p) => [p.id, p.payload.data])).toEqual([["keep-1", "kept"]]);
     expect(await reopened.get("drop-1")).toBeNull();
+  });
+
+  test("fails closed when deletion tombstones are corrupted on disk", async () => {
+    const dir = storeDir();
+    const store = new ZvecVectorStore({ dir, vectorSize: 4, embedModel: "test:tombstone" });
+    await store.ensureCollection();
+    writeFileSync(join(dir, ".deleted-tombstones.json"), "{corrupt-json", "utf8");
+    expect(() => store.isTombstoned("p-1", { user_id: "u1" })).toThrow(
+      "Memory deletion tombstones are unreadable",
+    );
+    await expect(store.delete("p-1")).rejects.toThrow("Memory deletion tombstones are unreadable");
   });
 });

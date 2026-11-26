@@ -1,7 +1,16 @@
 // Per-viewer memory vectors on Zvec: an in-process flat cosine index with inverted scalar indexes
 // on the four mem0 scope columns and the full mem0 payload preserved verbatim as JSON.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type ZVecCollection,
@@ -63,6 +72,24 @@ const WRITE_BATCH = 512;
 const FETCH_BATCH = 1_000;
 const QDRANT_MIGRATED_MARKER = ".qdrant-migrated";
 const TOMBSTONES_FILE = ".deleted-tombstones.json";
+let atomicSeq = 0;
+
+function writeAtomicPrivate(dir: string, filename: string, content: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const target = join(dir, filename);
+  const tmp = join(dir, `${filename}.${process.pid}.${++atomicSeq}.tmp`);
+  try {
+    writeFileSync(tmp, content, { mode: 0o600 });
+    renameSync(tmp, target);
+  } catch (error) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // Never written.
+    }
+    throw error;
+  }
+}
 const INIT_KEY = Symbol.for("eidolon.zvec.initialized");
 const STORES_KEY = Symbol.for("eidolon.zvec.memoryStores");
 
@@ -147,7 +174,7 @@ function parsePayload(raw: unknown): Readonly<Record<string, unknown>> {
 
 function hasZvecFiles(path: string): boolean {
   if (!existsSync(path)) return false;
-  return readdirSync(path).length > 0;
+  return readdirSync(path).some((name) => !name.endsWith(".tmp"));
 }
 
 function canonicalScope(filters: ScopeFilters): ScopeFilters {
@@ -274,25 +301,46 @@ export class ZvecVectorStore implements VectorStore {
 
   #readTombstones(): DeletionTombstones {
     const file = join(this.#dir, TOMBSTONES_FILE);
-    if (!existsSync(file)) return { ids: [], scopes: [] };
+    let raw: string;
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<DeletionTombstones>;
-      return {
-        ids: Array.isArray(parsed.ids)
-          ? parsed.ids.filter((id): id is string => typeof id === "string")
-          : [],
-        scopes: Array.isArray(parsed.scopes) ? parsed.scopes.map(canonicalScope) : [],
-      };
-    } catch {
-      return { ids: [], scopes: [] };
+      raw = readFileSync(file, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ids: [], scopes: [] };
+      throw new Error("Memory deletion tombstones are unreadable", { cause: error });
     }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new Error("Memory deletion tombstones are unreadable", { cause: error });
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("Memory deletion tombstones are unreadable");
+    }
+    const record = parsed as Partial<DeletionTombstones>;
+    if (
+      (record.ids !== undefined &&
+        (!Array.isArray(record.ids) || !record.ids.every((id) => typeof id === "string"))) ||
+      (record.scopes !== undefined &&
+        (!Array.isArray(record.scopes) ||
+          !record.scopes.every(
+            (scope) =>
+              typeof scope === "object" &&
+              scope !== null &&
+              !Array.isArray(scope) &&
+              Object.values(scope).every((v) => v === undefined || typeof v === "string"),
+          )))
+    ) {
+      throw new Error("Memory deletion tombstones are unreadable");
+    }
+    return {
+      ids: [...(record.ids ?? [])],
+      scopes: (record.scopes ?? []).map(canonicalScope),
+    };
   }
 
   #writeTombstones(tombstones: DeletionTombstones): void {
-    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
-    writeFileSync(join(this.#dir, TOMBSTONES_FILE), `${JSON.stringify(tombstones)}\n`, {
-      mode: 0o600,
-    });
+    writeAtomicPrivate(this.#dir, TOMBSTONES_FILE, `${JSON.stringify(tombstones)}\n`);
   }
 
   hasQdrantMigrationMarker(): boolean {
@@ -300,8 +348,7 @@ export class ZvecVectorStore implements VectorStore {
   }
 
   markQdrantMigrated(): void {
-    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
-    writeFileSync(join(this.#dir, QDRANT_MIGRATED_MARKER), "1\n", { mode: 0o600 });
+    writeAtomicPrivate(this.#dir, QDRANT_MIGRATED_MARKER, "1\n");
   }
 
   hasPoint(id: string): boolean {
@@ -393,13 +440,13 @@ export class ZvecVectorStore implements VectorStore {
 
   async delete(id: string): Promise<void> {
     const col = this.#open();
-    const status = col.deleteSync(id);
-    if (!status.ok && status.code !== "ZVEC_NOT_FOUND") {
-      throw new Error(`Zvec delete failed (${status.code}): ${status.message}`);
-    }
     const tombstones = this.#readTombstones();
     if (!tombstones.ids.includes(id)) {
       this.#writeTombstones({ ids: [...tombstones.ids, id], scopes: tombstones.scopes });
+    }
+    const status = col.deleteSync(id);
+    if (!status.ok && status.code !== "ZVEC_NOT_FOUND") {
+      throw new Error(`Zvec delete failed (${status.code}): ${status.message}`);
     }
   }
 

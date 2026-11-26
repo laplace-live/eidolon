@@ -22,7 +22,8 @@ export function memoriesRoutes(app: LocalApp): LocalRouteSpec[] {
         const retained = admin.retainedCount
           ? await admin.retainedCount(scope.userId, scope.agentId ?? undefined)
           : null;
-        const retainedCount = retained?.ok ? retained.value : 0;
+        if (retained && !retained.ok) return memoryFailure(retained, "count retained memories");
+        const retainedCount = retained?.value ?? 0;
         const body: MemoriesResponse = {
           persona,
           count: outcome.value.length,

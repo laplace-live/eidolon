@@ -133,6 +133,21 @@ describe("memories per persona", () => {
       memories: [],
       retainedCount: 3,
     });
+
+    booted.fakes.memoryAdmin = {
+      list: async () => ({ ok: true, value: [] }),
+      forget: async () => ({ ok: true, value: undefined }),
+      retainedCount: async () => ({
+        ok: false,
+        reason: "failed",
+        error: new Error("corrupt old store"),
+      }),
+    };
+    const failedRetained = await api("GET");
+    expect([failedRetained.status, (await failedRetained.json()).error.code]).toEqual([
+      502,
+      "upstream-failed",
+    ]);
   });
 
   test("memory off is 503; a store that fails is 503 or 502", async () => {
