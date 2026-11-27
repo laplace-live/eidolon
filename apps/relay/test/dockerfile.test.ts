@@ -37,6 +37,40 @@ function readWorkspaces(): Map<string, WorkspaceManifest> {
   return found;
 }
 
+function workflowPathList(
+  yml: string,
+  event: "push" | "pull_request",
+  key: "paths" | "paths-ignore",
+): string[] {
+  let inOn = false;
+  let inEvent = false;
+  let inKey = false;
+  const items: string[] = [];
+  for (const line of yml.replace(/\r\n/g, "\n").split("\n")) {
+    if (/^\S/.test(line) && !line.startsWith("#")) {
+      inOn = line === "on:";
+      inEvent = false;
+      inKey = false;
+      continue;
+    }
+    if (!inOn) continue;
+    if (/^  [a-z_]+:/.test(line)) {
+      inEvent = line.trim() === `${event}:`;
+      inKey = false;
+      continue;
+    }
+    if (!inEvent) continue;
+    if (/^    [a-z-]+:/.test(line)) {
+      inKey = line.trim() === `${key}:`;
+      continue;
+    }
+    if (!inKey) continue;
+    const item = /^      - ["']?([^"'\n#]+?)["']?(?:\s+#.*)?$/.exec(line);
+    if (item?.[1]) items.push(item[1]);
+  }
+  return items;
+}
+
 describe("apps/relay Docker image and CI workflow", () => {
   test("copies every workspace manifest needed by pnpm --frozen-lockfile and runtime dependencies", () => {
     const workspaces = readWorkspaces();
@@ -66,28 +100,34 @@ describe("apps/relay Docker image and CI workflow", () => {
       }
     }
 
+    const relayPushPaths = workflowPathList(relayYml, "push", "paths");
+    const relayPrPaths = workflowPathList(relayYml, "pull_request", "paths");
     for (const dep of reached) {
       const ws = workspaces.get(dep)!;
       expect(dockerfile).toContain(`COPY ${ws.dir} ./${ws.dir}`);
-      const matches = relayYml.match(new RegExp(`"${ws.dir}/\\*\\*"`, "g")) ?? [];
-      expect(matches).toHaveLength(2);
+      expect(relayPushPaths).toContain(`${ws.dir}/**`);
+      expect(relayPrPaths).toContain(`${ws.dir}/**`);
     }
 
     expect(relayYml).toContain("ghcr.io/laplace-live/eidolon-relay");
     expect(relayYml).toContain("*.dockerfile=apps/relay/Dockerfile");
+
+    const dockerPushIgnored = workflowPathList(dockerYml, "push", "paths-ignore");
+    const dockerPrIgnored = workflowPathList(dockerYml, "pull_request", "paths-ignore");
     for (const ignored of [
-      '"apps/relay/**"',
-      '"packages/subspace/**"',
-      '".github/workflows/relay.yml"',
+      "apps/relay/**",
+      "packages/subspace/**",
+      ".github/workflows/relay.yml",
     ]) {
-      expect(
-        dockerYml.match(new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")),
-      ).toHaveLength(2);
+      expect(dockerPushIgnored).toContain(ignored);
+      expect(dockerPrIgnored).toContain(ignored);
     }
-    for (const watchedByTs of ['".github/workflows/docker.yml"', '".github/workflows/relay.yml"']) {
-      expect(
-        tsYml.match(new RegExp(watchedByTs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")),
-      ).toHaveLength(2);
+
+    const tsPushPaths = workflowPathList(tsYml, "push", "paths");
+    const tsPrPaths = workflowPathList(tsYml, "pull_request", "paths");
+    for (const watchedByTs of [".github/workflows/docker.yml", ".github/workflows/relay.yml"]) {
+      expect(tsPushPaths).toContain(watchedByTs);
+      expect(tsPrPaths).toContain(watchedByTs);
     }
   });
 });
