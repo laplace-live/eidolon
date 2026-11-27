@@ -173,6 +173,7 @@ export const ERROR_CODES = [
   "invalid-model",
   "unknown-model",
   "subspace-unreachable",
+  "local-network-blocked",
   "invalid-pairing-code",
   "pairing-expired",
   "pairing-failed",

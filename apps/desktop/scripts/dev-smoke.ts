@@ -603,7 +603,7 @@ async function walkApp(walk: Walk): Promise<void> {
     "Choose Folder: no dialog in background mode, and main's pick in the draft",
     (step) => chooseFolder(walk, first, step),
   );
-  await steps.run("Settings' Desktop App: both options left as they are", (step) =>
+  await steps.run("Settings' Desktop App and Permissions: options left as they are", (step) =>
     desktopOptions(walk, first, step),
   );
   if (walk.background) {
@@ -1728,6 +1728,45 @@ async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
   }
   await step.shot(page, "desktop-options");
   step.check(`both say "${note}", their controls disabled`, pass, found.join("; "));
+
+  await settingsSection(page, "Permissions", "permissions");
+  const expectedIds = ["microphone", "notifications", "local-network", "screen", "accessibility"];
+  const notifSays = await page
+    .locator('[data-permission="notifications"]')
+    .getByText(note, { exact: true })
+    .waitFor({ timeout: 15_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  const permRows = page.locator("[data-permission]");
+  const permCount = await permRows.count();
+  const bgButtonsDisabled = !walk.background
+    ? true
+    : await permRows
+        .locator("button")
+        .evaluateAll(
+          (elements) =>
+            elements.length >= 5 &&
+            elements.every((element) => (element as HTMLButtonElement).disabled),
+        );
+  const bgAllSayNote = !walk.background
+    ? true
+    : await Promise.all(
+        expectedIds.map((id) =>
+          page
+            .locator(`[data-permission="${id}"]`)
+            .getByText(note, { exact: true })
+            .count()
+            .then((n) => n === 1),
+        ),
+      ).then((results) => results.every(Boolean));
+  await step.shot(page, "permissions");
+  step.check(
+    `Settings → Permissions shows ${expectedIds.length} rows, notifications say "${note}"${walk.background ? ", all controls disabled" : ""}`,
+    permCount === expectedIds.length && notifSays && bgButtonsDisabled && bgAllSayNote,
+    `rows=${permCount}/${expectedIds.length}, notifications=${notifSays}, disabled=${bgButtonsDisabled}`,
+  );
 }
 
 /** The test rig as her active model, imported through the API unless she has a model already. */

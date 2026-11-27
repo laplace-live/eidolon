@@ -13,6 +13,7 @@ export const SECTIONS = [
   "skills",
   "subspace",
   "desktop",
+  "permissions",
   "advanced",
 ] as const;
 export type SectionId = (typeof SECTIONS)[number];
@@ -41,14 +42,35 @@ export function offersCompanion(app: EidolonDesktop | null): app is CompanionOpt
   return app !== null && app.companion !== undefined && app.setCompanion !== undefined;
 }
 
+/** A desktop app's bridge that offers OS permissions status, requests, and Local Network testing. */
+export type PermissionsOptions = EidolonDesktop &
+  Required<
+    Pick<
+      EidolonDesktop,
+      "permissions" | "requestPermission" | "openPermissionSettings" | "testLocalNetwork"
+    >
+  >;
+
+export function offersPermissions(app: EidolonDesktop | null): app is PermissionsOptions {
+  return (
+    app !== null &&
+    app.permissions !== undefined &&
+    app.requestPermission !== undefined &&
+    app.openPermissionSettings !== undefined &&
+    app.testLocalNetwork !== undefined
+  );
+}
+
 /**
  * The sections this page shows: Desktop only in a desktop app that offers its options or the
- * desktop companion.
+ * desktop companion, and Permissions only when the desktop bridge supports it.
  */
 export function shownSections(app: EidolonDesktop | null): readonly SectionId[] {
-  return offersSystemOptions(app) || offersCompanion(app)
-    ? SECTIONS
-    : SECTIONS.filter((id) => id !== "desktop");
+  const showDesktop = offersSystemOptions(app) || offersCompanion(app);
+  const showPermissions = offersPermissions(app);
+  return SECTIONS.filter(
+    (id) => (id !== "desktop" || showDesktop) && (id !== "permissions" || showPermissions),
+  );
 }
 
 export type CardId =
@@ -120,6 +142,8 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
   subspace: [{ id: "subspaceRelay", paths: ["subspace.relayUrl", "subspace.authUrl"] }],
   // No rows: its card asks the desktop app, never the server.
   desktop: [],
+  // No rows: its cards ask the desktop app for OS permissions on this computer.
+  permissions: [],
 };
 
 /** Every row a card names, which Advanced leaves out. */

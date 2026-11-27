@@ -709,6 +709,10 @@ msgstr "A voice she switches to when you ask for it. Name it, say how you'd ask,
 msgid "About {duration} in all."
 msgstr "About {duration} in all."
 
+#: src/features/settings/permissions-notes.ts
+msgid "Accessibility"
+msgstr "Accessibility"
+
 #: src/features/tasks/parts.tsx
 msgid "Account"
 msgstr "Account"
@@ -871,6 +875,10 @@ msgstr "Addressed"
 #: src/features/studio/videos-section.tsx
 msgid "Advanced"
 msgstr "Advanced"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Alerts when she replies or an assistant task needs you while the window is in the background."
+msgstr "Alerts when she replies or an assistant task needs you while the window is in the background."
 
 #: src/features/jobs/detail.tsx
 msgid "All Jobs"
@@ -1214,6 +1222,10 @@ msgstr "Assistant Spend Pause"
 msgid "Assistant Tasks"
 msgstr "Assistant Tasks"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Assistant Tools"
+msgstr "Assistant Tools"
+
 #: src/features/chats/composer.tsx
 msgid "Attach Files"
 msgstr "Attach Files"
@@ -1264,6 +1276,10 @@ msgstr "Back"
 #: src/features/studio/route.tsx
 msgid "Back to Home"
 msgstr "Back to Home"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Background mode leaves network testing disabled."
+msgstr "Background mode leaves network testing disabled."
 
 #: src/features/settings/desktop-notes.ts
 msgid "Background mode leaves this computer as it is."
@@ -1441,6 +1457,10 @@ msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and o
 msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
 
 #: src/lib/labels.ts
+msgid "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
+msgstr "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
+
+#: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "Can't reach that Subspace server. Check that it's running and connected."
 
@@ -1571,6 +1591,10 @@ msgstr "Check"
 msgid "Check failed"
 msgstr "Check failed"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Check for a macOS prompt."
+msgstr "Check for a macOS prompt."
+
 #: src/components/voice-picker/mine.tsx
 msgid "Check it in <0>Settings → Providers</0>."
 msgstr "Check it in <0>Settings → Providers</0>."
@@ -1579,9 +1603,17 @@ msgstr "Check it in <0>Settings → Providers</0>."
 msgid "Check Links"
 msgstr "Check Links"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Check Manually"
+msgstr "Check Manually"
+
 #: src/components/settings-form/check-labels.ts
 msgid "Check passed"
 msgstr "Check passed"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Check Permissions"
+msgstr "Check Permissions"
 
 #: src/features/call/call-notices.tsx
 msgid "Check your microphone, then call again."
@@ -1684,6 +1716,10 @@ msgstr "Coding tasks run on Assistant Mode's model for now"
 msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 msgstr "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 
+#: src/features/settings/permissions-card.tsx
+msgid "Commands and MCP servers started by Assistant Mode inherit LAPLACE Eidolon's macOS privacy access. Only grant these when a skill or tool uses them."
+msgstr "Commands and MCP servers started by Assistant Mode inherit LAPLACE Eidolon's macOS privacy access. Only grant these when a skill or tool uses them."
+
 #: src/features/chats/composer.tsx
 msgid "Commands and Skills"
 msgstr "Commands and Skills"
@@ -1719,6 +1755,14 @@ msgstr "Connecting…"
 #: src/features/subspace/servers-card.tsx
 msgid "Connection Error"
 msgstr "Connection Error"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Connection succeeded over your local network."
+msgstr "Connection succeeded over your local network."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Connection timed out. Check the host, port, and macOS Local Network settings."
+msgstr "Connection timed out. Check the host, port, and macOS Local Network settings."
 
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
@@ -1930,6 +1974,10 @@ msgstr "Delete {name}?"
 msgid "demo"
 msgstr "demo"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Denied"
+msgstr "Denied"
+
 #: src/features/tasks/cards.tsx
 msgid "Deny"
 msgstr "Deny"
@@ -1967,6 +2015,10 @@ msgstr "Direct and Relay Subspace access is turned off for new pairings."
 #: src/features/subspace/share-card.tsx
 msgid "Direct Network"
 msgstr "Direct Network"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
+msgstr "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
 
 #: src/components/settings-form/settings-card.tsx
 msgid "Discard"
@@ -2300,6 +2352,14 @@ msgstr "Enter a model id"
 #: src/components/settings-form/labels.ts
 msgid "Enter a number, such as 0.5."
 msgstr "Enter a number, such as 0.5."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Enter a private LAN IP address or hostname and a port between 1 and 65535."
+msgstr "Enter a private LAN IP address or hostname and a port between 1 and 65535."
+
+#: src/features/settings/permissions-card.tsx
+msgid "Enter a remote Eidolon server on your local network. LAPLACE Eidolon tests the same TCP path used for Direct Subspace connections."
+msgstr "Enter a remote Eidolon server on your local network. LAPLACE Eidolon tests the same TCP path used for Direct Subspace connections."
 
 #: src/components/settings-form/labels.ts
 msgid "Enter a whole number."
@@ -2668,6 +2728,10 @@ msgstr "Go Forward"
 msgid "Go to Home"
 msgstr "Go to Home"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Granted"
+msgstr "Granted"
+
 #: src/features/chats/call-line.ts
 msgid "Group call"
 msgstr "Group call"
@@ -2850,6 +2914,7 @@ msgstr "Hold the microphone button while you talk, or click it to start and agai
 msgid "Home"
 msgstr "Home"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Host"
 msgstr "Host"
@@ -2958,6 +3023,10 @@ msgstr "If it happens again, Show Logs in the Help menu has the details."
 #: src/components/locked-screen.tsx
 msgid "If it happens again, Show Logs in the tray icon's menu has the details."
 msgstr "If it happens again, Show Logs in the tray icon's menu has the details."
+
+#: src/features/settings/permissions-notes.ts
+msgid "If prompted, choose Allow. Otherwise open System Settings and turn on LAPLACE Eidolon under Privacy & Security → Local Network."
+msgstr "If prompted, choose Allow. Otherwise open System Settings and turn on LAPLACE Eidolon under Privacy & Security → Local Network."
 
 #: src/lib/labels.ts
 msgid "Images"
@@ -3440,6 +3509,10 @@ msgstr "Last Call"
 msgid "Last connected {time}"
 msgstr "Last connected {time}"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Last verified {when} · {target}."
+msgstr "Last verified {when} · {target}."
+
 #: src/components/update-dialog.tsx
 msgid "Later"
 msgstr "Later"
@@ -3554,6 +3627,14 @@ msgstr "Local"
 msgid "Local LAPLACE Eidolon server on this computer."
 msgstr "Local LAPLACE Eidolon server on this computer."
 
+#: src/features/settings/permissions-notes.ts
+msgid "Local Network"
+msgstr "Local Network"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Local network connection tests run only in the macOS desktop app."
+msgstr "Local network connection tests run only in the macOS desktop app."
+
 #: src/components/subspace-switcher.tsx
 msgid "Local Server"
 msgstr "Local Server"
@@ -3582,6 +3663,18 @@ msgstr "Looking through the stream archive…"
 msgid "Lowercase letters, digits and hyphens. Saved as {path}."
 msgstr "Lowercase letters, digits and hyphens. Saved as {path}."
 
+#: src/features/settings/permissions-notes.ts
+msgid "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
+msgstr "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
+
+#: src/features/settings/permissions-notes.ts
+msgid "macOS does not report Local Network status to apps. Use Test Connection below to confirm LAN access works."
+msgstr "macOS does not report Local Network status to apps. Use Test Connection below to confirm LAN access works."
+
+#: src/features/settings/permissions-notes.ts
+msgid "macOS no longer prompts once turned off. Enable LAPLACE Eidolon in System Settings, then quit and reopen if the OS asks."
+msgstr "macOS no longer prompts once turned off. Enable LAPLACE Eidolon in System Settings, then quit and reopen if the OS asks."
+
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
 msgstr "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
@@ -3607,6 +3700,14 @@ msgstr "Make Active"
 msgctxt "persona card"
 msgid "Make Active"
 msgstr "Make Active"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Managed by macOS"
+msgstr "Managed by macOS"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Managed by Windows"
+msgstr "Managed by Windows"
 
 #: src/components/settings-form/labels.ts
 msgid "MCP Allowed Hosts"
@@ -3744,6 +3845,10 @@ msgstr "Message {name}"
 #: src/features/chats/chat-view.tsx
 msgid "Message everyone"
 msgstr "Message everyone"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Microphone"
+msgstr "Microphone"
 
 #: src/features/studio/model-controls.tsx
 msgid "Microphone and Pointer"
@@ -4082,6 +4187,10 @@ msgstr "No spending was recorded {during}. Calls, video jobs and MCP searches re
 msgid "No stream catalog yet."
 msgstr "No stream catalog yet."
 
+#: src/features/settings/permissions-card.tsx
+msgid "No successful test saved."
+msgstr "No successful test saved."
+
 #: src/features/chats/chat-view.tsx
 msgid "No task in this chat is running or waiting for you."
 msgstr "No task in this chat is running or waiting for you."
@@ -4194,6 +4303,10 @@ msgstr "Not installed. Only videos over 5 hours need it: brew install ffmpeg, ap
 msgid "Not Now"
 msgstr "Not Now"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Not Requested"
+msgstr "Not Requested"
+
 #: src/features/studio/glossary-section.tsx
 msgid "Not saved: this glossary doesn't parse"
 msgstr "Not saved: this glossary doesn't parse"
@@ -4238,6 +4351,10 @@ msgstr "Nothing was spent in this range."
 #: src/features/tasks/transcript-view.tsx
 msgid "Nothing yet."
 msgstr "Nothing yet."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Notifications"
+msgstr "Notifications"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4381,6 +4498,7 @@ msgstr "Open Her Studio"
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "Open one's studio to build her up, or make another the one your calls reach."
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/tasks/cards.tsx
 #: src/features/tasks/list.tsx
 msgid "Open Settings"
@@ -4393,6 +4511,10 @@ msgstr "Open Sign-In Page"
 #: src/components/route-error.tsx
 msgid "Open Subspace Settings"
 msgstr "Open Subspace Settings"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Open System Settings"
+msgstr "Open System Settings"
 
 #: src/features/settings/assistant.tsx
 msgid "Open Tasks"
@@ -4412,6 +4534,14 @@ msgstr "Open the Video's Page"
 #: src/components/settings-form/labels.ts
 msgid "OpenAI API Base"
 msgstr "OpenAI API Base"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Opened macOS System Settings."
+msgstr "Opened macOS System Settings."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Opened Windows Settings."
+msgstr "Opened Windows Settings."
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Opening the microphone…"
@@ -4523,6 +4653,10 @@ msgstr "Paired {time}"
 msgid "Paired Devices"
 msgstr "Paired Devices"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Paired LAN servers:"
+msgstr "Paired LAN servers:"
+
 #: src/features/subspace/subspace-section.tsx
 msgid "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
 msgstr "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
@@ -4612,6 +4746,19 @@ msgstr "People she can take a selfie with: one picture each, named after them."
 #: src/components/update-dialog.tsx
 msgid "Perf"
 msgstr "Perf"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Permission granted."
+msgstr "Permission granted."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Permission request sent."
+msgstr "Permission request sent."
+
+#: src/features/settings/permissions-card.tsx
+#: src/features/settings/route.tsx
+msgid "Permissions"
+msgstr "Permissions"
 
 #: src/components/settings-form/labels.ts
 #: src/features/chats/why-answered.tsx
@@ -4730,6 +4877,7 @@ msgstr "Playback Position"
 msgid "Pop Out"
 msgstr "Pop Out"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Port"
 msgstr "Port"
@@ -4957,6 +5105,7 @@ msgstr "Refined {done}/{total}"
 
 #: src/features/home/memory-panel.tsx
 #: src/features/jobs/detail.tsx
+#: src/features/settings/permissions-card.tsx
 #: src/features/settings/skills-card.tsx
 msgid "Refresh"
 msgstr "Refresh"
@@ -5101,6 +5250,14 @@ msgstr "Replies come as voice messages when a line suits one, more often after o
 msgid "Reply Mode"
 msgstr "Reply Mode"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Request"
+msgstr "Request"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Request Access"
+msgstr "Request Access"
+
 #: src/features/usage/tables.tsx
 msgid "Requests"
 msgstr "Requests"
@@ -5201,6 +5358,10 @@ msgstr "Restarting interrupts these jobs. What they finished is kept, and you ca
 #: src/features/settings/restart-button.tsx
 msgid "Restarting…"
 msgstr "Restarting…"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Restricted"
+msgstr "Restricted"
 
 #: src/features/jobs/parts.tsx
 msgid "Resume"
@@ -5390,6 +5551,14 @@ msgstr "Scene Types Left Out of the Index"
 #: src/features/studio/model-controls.tsx
 msgid "Screen"
 msgstr "Screen"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Screen Recording"
+msgstr "Screen Recording"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Screenshots or screen inspection requested by an Assistant Mode skill or MCP server."
+msgstr "Screenshots or screen inspection requested by an Assistant Mode skill or MCP server."
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Search"
@@ -6259,6 +6428,10 @@ msgstr "Switched Off"
 msgid "System"
 msgstr "System"
 
+#: src/features/settings/permissions-card.tsx
+msgid "System permissions for LAPLACE Eidolon on this computer. LAPLACE Eidolon asks only when a feature needs them."
+msgstr "System permissions for LAPLACE Eidolon on this computer. LAPLACE Eidolon asks only when a feature needs them."
+
 #: src/features/studio/prompt-section.tsx
 msgid "System Prompt"
 msgstr "System Prompt"
@@ -6365,6 +6538,14 @@ msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 msgctxt "model"
 msgid "Test"
 msgstr "Test"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Test Connection"
+msgstr "Test Connection"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Testing…"
+msgstr "Testing…"
 
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
@@ -6559,6 +6740,10 @@ msgstr "The clip each plays: idle all the time, talking while she speaks, and a 
 msgid "The connection dropped."
 msgstr "The connection dropped."
 
+#: src/features/settings/permissions-notes.ts
+msgid "The connection test could not be completed."
+msgstr "The connection test could not be completed."
+
 #: src/features/studio/model-controls.tsx
 msgid "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
 msgstr "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
@@ -6614,6 +6799,14 @@ msgstr "The free space on the data home's disk is unknown."
 #: src/lib/labels.ts
 msgid "The glossary isn't valid TOML."
 msgstr "The glossary isn't valid TOML."
+
+#: src/features/settings/permissions-notes.ts
+msgid "The host responded on your local network, though nothing is listening on that port."
+msgstr "The host responded on your local network, though nothing is listening on that port."
+
+#: src/features/settings/permissions-notes.ts
+msgid "The hostname could not be resolved on this network."
+msgstr "The hostname could not be resolved on this network."
 
 #: src/features/studio/references-section.tsx
 msgid "The image model and how selfies are drawn."
@@ -7239,6 +7432,7 @@ msgstr "Type a Message"
 msgid "Type a message to {name}"
 msgstr "Type a message to {name}"
 
+#: src/features/settings/permissions-notes.ts
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Unavailable"
 msgstr "Unavailable"
@@ -7493,6 +7687,10 @@ msgstr "Voice calls are turned off for everyone in this chat."
 #: src/features/chats/chat-view.tsx
 msgid "Voice calls are turned off in her settings."
 msgstr "Voice calls are turned off in her settings."
+
+#: src/features/settings/permissions-notes.ts
+msgid "Voice calls, voice messages, and trying her lip sync in the studio."
+msgstr "Voice calls, voice messages, and trying her lip sync in the studio."
 
 #: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -7807,6 +8005,10 @@ msgstr "Why {name} Answered"
 msgid "Wide"
 msgstr "Wide"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Window control or input automation requested by an Assistant Mode skill or MCP server."
+msgstr "Window control or input automation requested by an Assistant Mode skill or MCP server."
+
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
 msgstr "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
@@ -7823,6 +8025,7 @@ msgstr "Without it, these stay off: {off}."
 msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
 msgstr "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/tasks/transcript-view.tsx
 msgid "Working…"
 msgstr "Working…"

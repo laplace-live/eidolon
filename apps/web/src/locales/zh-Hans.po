@@ -709,6 +709,10 @@ msgstr "你要求时她会切换到的声音。给它起个名字，写下你会
 msgid "About {duration} in all."
 msgstr "总时长约 {duration}。"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Accessibility"
+msgstr "辅助功能"
+
 #: src/features/tasks/parts.tsx
 msgid "Account"
 msgstr "账号"
@@ -871,6 +875,10 @@ msgstr "被点名"
 #: src/features/studio/videos-section.tsx
 msgid "Advanced"
 msgstr "高级"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Alerts when she replies or an assistant task needs you while the window is in the background."
+msgstr "窗口在后台时，会在她回复或助手任务需要你处理时发出通知。"
 
 #: src/features/jobs/detail.tsx
 msgid "All Jobs"
@@ -1214,6 +1222,10 @@ msgstr "助手花费暂停"
 msgid "Assistant Tasks"
 msgstr "助手任务"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Assistant Tools"
+msgstr "助手工具"
+
 #: src/features/chats/composer.tsx
 msgid "Attach Files"
 msgstr "添加附件"
@@ -1264,6 +1276,10 @@ msgstr "上一步"
 #: src/features/studio/route.tsx
 msgid "Back to Home"
 msgstr "返回首页"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Background mode leaves network testing disabled."
+msgstr "后台模式下不会进行网络连接测试。"
 
 #: src/features/settings/desktop-notes.ts
 msgid "Background mode leaves this computer as it is."
@@ -1441,6 +1457,10 @@ msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and o
 msgstr "无法连接 Eidolon 的服务器。如果它一直没有恢复，请退出 Eidolon 再重新打开。"
 
 #: src/lib/labels.ts
+msgid "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
+msgstr "连不上局域网里的这台服务器。请在“系统设置 > 隐私与安全性 > 本地网络”里允许 LAPLACE Eidolon，再试一次。"
+
+#: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "无法连接该亚空间服务器。请检查它是否正在运行并保持连接。"
 
@@ -1571,6 +1591,10 @@ msgstr "检查"
 msgid "Check failed"
 msgstr "检查未通过"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Check for a macOS prompt."
+msgstr "请留意 macOS 弹出的权限提示。"
+
 #: src/components/voice-picker/mine.tsx
 msgid "Check it in <0>Settings → Providers</0>."
 msgstr "请到<0>「设置 → 服务商」</0>检查。"
@@ -1579,9 +1603,17 @@ msgstr "请到<0>「设置 → 服务商」</0>检查。"
 msgid "Check Links"
 msgstr "检查链接"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Check Manually"
+msgstr "请手动确认"
+
 #: src/components/settings-form/check-labels.ts
 msgid "Check passed"
 msgstr "检查通过"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Check Permissions"
+msgstr "检查权限"
 
 #: src/features/call/call-notices.tsx
 msgid "Check your microphone, then call again."
@@ -1684,6 +1716,10 @@ msgstr "编程任务暂时使用助手模式的模型"
 msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 msgstr "任务无需询问就能运行的命令，每条只在它的文件夹里、只按原样生效；任务抓取过网页、搜索过网络或调用过 MCP 服务器后仍会询问，它自己运行的命令下载的内容不算在内。在任务卡片上选择「在这个文件夹里始终允许」就会加到这里。"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Commands and MCP servers started by Assistant Mode inherit LAPLACE Eidolon's macOS privacy access. Only grant these when a skill or tool uses them."
+msgstr "助手模式启动的命令和 MCP 服务器会沿用 LAPLACE Eidolon 的 macOS 隐私权限。只在技能或工具需要时才开启这些权限。"
+
 #: src/features/chats/composer.tsx
 msgid "Commands and Skills"
 msgstr "命令和技能"
@@ -1719,6 +1755,14 @@ msgstr "正在连接…"
 #: src/features/subspace/servers-card.tsx
 msgid "Connection Error"
 msgstr "连接出错"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Connection succeeded over your local network."
+msgstr "局域网连接测试成功。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Connection timed out. Check the host, port, and macOS Local Network settings."
+msgstr "连接超时，请检查主机、端口以及 macOS 的「本地网络」设置。"
 
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
@@ -1930,6 +1974,10 @@ msgstr "删除 {name}？"
 msgid "demo"
 msgstr "演示"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Denied"
+msgstr "已拒绝"
+
 #: src/features/tasks/cards.tsx
 msgid "Deny"
 msgstr "拒绝"
@@ -1967,6 +2015,10 @@ msgstr "直连与中继亚空间新配对已关闭。"
 #: src/features/subspace/share-card.tsx
 msgid "Direct Network"
 msgstr "直接网络"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
+msgstr "用于在局域网内直连远程亚空间服务器，以及使用本地网络工具和 MCP 服务器。"
 
 #: src/components/settings-form/settings-card.tsx
 msgid "Discard"
@@ -2300,6 +2352,14 @@ msgstr "请填写模型 ID"
 #: src/components/settings-form/labels.ts
 msgid "Enter a number, such as 0.5."
 msgstr "请输入数字，例如 0.5。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Enter a private LAN IP address or hostname and a port between 1 and 65535."
+msgstr "请输入局域网私有 IP 地址或主机名，以及 1 到 65535 之间的端口。"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Enter a remote Eidolon server on your local network. LAPLACE Eidolon tests the same TCP path used for Direct Subspace connections."
+msgstr "输入局域网里一台远程 Eidolon 服务器的地址，LAPLACE Eidolon 会按直连亚空间所用的 TCP 路径测试连通性。"
 
 #: src/components/settings-form/labels.ts
 msgid "Enter a whole number."
@@ -2668,6 +2728,10 @@ msgstr "前进"
 msgid "Go to Home"
 msgstr "前往首页"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Granted"
+msgstr "已允许"
+
 #: src/features/chats/call-line.ts
 msgid "Group call"
 msgstr "群通话"
@@ -2850,6 +2914,7 @@ msgstr "说话时按住麦克风按钮，或者点一下开始、再点一下发
 msgid "Home"
 msgstr "首页"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Host"
 msgstr "主机"
@@ -2958,6 +3023,10 @@ msgstr "如果再次出现，详情请在「帮助」菜单的「显示日志」
 #: src/components/locked-screen.tsx
 msgid "If it happens again, Show Logs in the tray icon's menu has the details."
 msgstr "如果再次出现，详情请在托盘图标菜单的「显示日志」中查看。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "If prompted, choose Allow. Otherwise open System Settings and turn on LAPLACE Eidolon under Privacy & Security → Local Network."
+msgstr "如果出现提示，请点击「允许」。如果没有弹出提示，请打开「系统设置」→「隐私与安全性」→「本地网络」，并打开 LAPLACE Eidolon。"
 
 #: src/lib/labels.ts
 msgid "Images"
@@ -3440,6 +3509,10 @@ msgstr "上一次通话"
 msgid "Last connected {time}"
 msgstr "上次连接：{time}"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Last verified {when} · {target}."
+msgstr "上次验证：{when} · {target}。"
+
 #: src/components/update-dialog.tsx
 msgid "Later"
 msgstr "稍后"
@@ -3554,6 +3627,14 @@ msgstr "本地"
 msgid "Local LAPLACE Eidolon server on this computer."
 msgstr "此电脑上的本地 LAPLACE Eidolon 服务器。"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Local Network"
+msgstr "本地网络"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Local network connection tests run only in the macOS desktop app."
+msgstr "局域网连接测试只能在 macOS 桌面应用中使用。"
+
 #: src/components/subspace-switcher.tsx
 msgid "Local Server"
 msgstr "本地服务器"
@@ -3582,6 +3663,18 @@ msgstr "正在翻看直播回放…"
 msgid "Lowercase letters, digits and hyphens. Saved as {path}."
 msgstr "用小写字母、数字和连字符。会保存为 {path}。"
 
+#: src/features/settings/permissions-notes.ts
+msgid "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
+msgstr "macOS 阻止了此次局域网连接。请在「系统设置」→「隐私与安全性」→「本地网络」中允许 LAPLACE Eidolon。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "macOS does not report Local Network status to apps. Use Test Connection below to confirm LAN access works."
+msgstr "macOS 不会向应用提供「本地网络」权限状态。可以用下方的「测试连接」确认局域网是否畅通。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "macOS no longer prompts once turned off. Enable LAPLACE Eidolon in System Settings, then quit and reopen if the OS asks."
+msgstr "拒绝后 macOS 不会再次弹出提示。请在「系统设置」中开启 LAPLACE Eidolon，如系统提示需要，请退出并重新打开。"
+
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
 msgstr "macOS：brew install ffmpeg · Windows：winget install ffmpeg · Linux：用包管理器安装 ffmpeg。"
@@ -3607,6 +3700,14 @@ msgstr "设为当前形象"
 msgctxt "persona card"
 msgid "Make Active"
 msgstr "设为当前"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Managed by macOS"
+msgstr "由 macOS 管理"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Managed by Windows"
+msgstr "由 Windows 管理"
 
 #: src/components/settings-form/labels.ts
 msgid "MCP Allowed Hosts"
@@ -3744,6 +3845,10 @@ msgstr "给{name}发消息"
 #: src/features/chats/chat-view.tsx
 msgid "Message everyone"
 msgstr "给大家发消息"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Microphone"
+msgstr "麦克风"
 
 #: src/features/studio/model-controls.tsx
 msgid "Microphone and Pointer"
@@ -4082,6 +4187,10 @@ msgstr "{during}没有花费记录。通话、视频作业和 MCP 检索运行�
 msgid "No stream catalog yet."
 msgstr "还没有直播目录。"
 
+#: src/features/settings/permissions-card.tsx
+msgid "No successful test saved."
+msgstr "暂无成功测试记录。"
+
 #: src/features/chats/chat-view.tsx
 msgid "No task in this chat is running or waiting for you."
 msgstr "这个聊天里没有正在做或在等你处理的任务。"
@@ -4194,6 +4303,10 @@ msgstr "未安装。只有超过 5 小时的视频需要它：brew install ffmpe
 msgid "Not Now"
 msgstr "暂不运行"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Not Requested"
+msgstr "尚未请求"
+
 #: src/features/studio/glossary-section.tsx
 msgid "Not saved: this glossary doesn't parse"
 msgstr "未保存：词汇表无法解析"
@@ -4238,6 +4351,10 @@ msgstr "这段时间没有花费。"
 #: src/features/tasks/transcript-view.tsx
 msgid "Nothing yet."
 msgstr "暂无内容。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Notifications"
+msgstr "通知"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4381,6 +4498,7 @@ msgstr "打开她的工作室"
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "打开人设的工作室来完善她，或把另一个人设设为通话对象。"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/tasks/cards.tsx
 #: src/features/tasks/list.tsx
 msgid "Open Settings"
@@ -4393,6 +4511,10 @@ msgstr "打开登录页面"
 #: src/components/route-error.tsx
 msgid "Open Subspace Settings"
 msgstr "打开亚空间设置"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Open System Settings"
+msgstr "打开系统设置"
 
 #: src/features/settings/assistant.tsx
 msgid "Open Tasks"
@@ -4412,6 +4534,14 @@ msgstr "打开视频页面"
 #: src/components/settings-form/labels.ts
 msgid "OpenAI API Base"
 msgstr "OpenAI API 地址"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Opened macOS System Settings."
+msgstr "已打开 macOS 系统设置。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Opened Windows Settings."
+msgstr "已打开 Windows 设置。"
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Opening the microphone…"
@@ -4523,6 +4653,10 @@ msgstr "配对于 {time}"
 msgid "Paired Devices"
 msgstr "已配对设备"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Paired LAN servers:"
+msgstr "已配对的局域网服务器："
+
 #: src/features/subspace/subspace-section.tsx
 msgid "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
 msgstr "此处列出的已配对服务器、共享设置与中继账号保存在此电脑上。其他设置分区以及下方的亚空间中继地址卡片用于配置 {name}。"
@@ -4612,6 +4746,19 @@ msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。
 #: src/components/update-dialog.tsx
 msgid "Perf"
 msgstr "性能"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Permission granted."
+msgstr "已授予权限。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Permission request sent."
+msgstr "已发送权限请求。"
+
+#: src/features/settings/permissions-card.tsx
+#: src/features/settings/route.tsx
+msgid "Permissions"
+msgstr "权限"
 
 #: src/components/settings-form/labels.ts
 #: src/features/chats/why-answered.tsx
@@ -4730,6 +4877,7 @@ msgstr "播放进度"
 msgid "Pop Out"
 msgstr "弹出到桌面"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Port"
 msgstr "端口"
@@ -4957,6 +5105,7 @@ msgstr "已整理 {done}/{total}"
 
 #: src/features/home/memory-panel.tsx
 #: src/features/jobs/detail.tsx
+#: src/features/settings/permissions-card.tsx
 #: src/features/settings/skills-card.tsx
 msgid "Refresh"
 msgstr "刷新"
@@ -5101,6 +5250,14 @@ msgstr "适合的时候用语音消息回复，你发过语音后更常这样；
 msgid "Reply Mode"
 msgstr "回复方式"
 
+#: src/features/settings/permissions-card.tsx
+msgid "Request"
+msgstr "请求权限"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Request Access"
+msgstr "请求访问权限"
+
 #: src/features/usage/tables.tsx
 msgid "Requests"
 msgstr "请求数"
@@ -5201,6 +5358,10 @@ msgstr "重启会中断这些作业。已经完成的部分会保留，Eidolon �
 #: src/features/settings/restart-button.tsx
 msgid "Restarting…"
 msgstr "正在重启…"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Restricted"
+msgstr "受限制"
 
 #: src/features/jobs/parts.tsx
 msgid "Resume"
@@ -5390,6 +5551,14 @@ msgstr "不纳入索引的场景类型"
 #: src/features/studio/model-controls.tsx
 msgid "Screen"
 msgstr "屏幕"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Screen Recording"
+msgstr "屏幕录制"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Screenshots or screen inspection requested by an Assistant Mode skill or MCP server."
+msgstr "助手模式的技能或 MCP 服务器请求截屏或查看屏幕内容时使用。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Search"
@@ -6259,6 +6428,10 @@ msgstr "已关闭"
 msgid "System"
 msgstr "跟随系统"
 
+#: src/features/settings/permissions-card.tsx
+msgid "System permissions for LAPLACE Eidolon on this computer. LAPLACE Eidolon asks only when a feature needs them."
+msgstr "LAPLACE Eidolon 在这台电脑上的系统权限。只在相应功能真正需要时才会请求授权。"
+
 #: src/features/studio/prompt-section.tsx
 msgid "System Prompt"
 msgstr "系统提示词"
@@ -6365,6 +6538,14 @@ msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 msgctxt "model"
 msgid "Test"
 msgstr "测试"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Test Connection"
+msgstr "测试连接"
+
+#: src/features/settings/permissions-card.tsx
+msgid "Testing…"
+msgstr "正在测试…"
 
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
@@ -6559,6 +6740,10 @@ msgstr "每种动作对应的动画：待机动画一直播放，说话时播放
 msgid "The connection dropped."
 msgstr "连接已断开。"
 
+#: src/features/settings/permissions-notes.ts
+msgid "The connection test could not be completed."
+msgstr "无法完成此次连接测试。"
+
 #: src/features/studio/model-controls.tsx
 msgid "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
 msgstr "虚线框里是任何通话都会显示的部分；更宽或更高的屏幕会显示框外更多的部分。"
@@ -6614,6 +6799,14 @@ msgstr "无法得知数据目录所在磁盘的可用空间。"
 #: src/lib/labels.ts
 msgid "The glossary isn't valid TOML."
 msgstr "词汇表不是有效的 TOML。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "The host responded on your local network, though nothing is listening on that port."
+msgstr "局域网中的目标主机已响应，但该端口目前没有服务在监听。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "The hostname could not be resolved on this network."
+msgstr "无法在当前网络上解析该主机名。"
 
 #: src/features/studio/references-section.tsx
 msgid "The image model and how selfies are drawn."
@@ -7239,6 +7432,7 @@ msgstr "发消息"
 msgid "Type a message to {name}"
 msgstr "给{name}发消息"
 
+#: src/features/settings/permissions-notes.ts
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Unavailable"
 msgstr "不可用"
@@ -7493,6 +7687,10 @@ msgstr "这个聊天里的所有人都已关闭语音通话。"
 #: src/features/chats/chat-view.tsx
 msgid "Voice calls are turned off in her settings."
 msgstr "她的设置中关闭了语音通话。"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Voice calls, voice messages, and trying her lip sync in the studio."
+msgstr "用于语音通话、语音消息以及在工作室试口型。"
 
 #: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -7807,6 +8005,10 @@ msgstr "{name}为什么回答"
 msgid "Wide"
 msgstr "横屏"
 
+#: src/features/settings/permissions-notes.ts
+msgid "Window control or input automation requested by an Assistant Mode skill or MCP server."
+msgstr "助手模式的技能或 MCP 服务器请求控制窗口或自动化输入时使用。"
+
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
 msgstr "开启记忆后，她会在一次次通话与聊天之间记住你。记忆保存在这台电脑的数据目录中，无需额外的服务器或 Docker 容器。默认开启，你可以随时关闭。"
@@ -7823,6 +8025,7 @@ msgstr "没有它，以下功能不会启用：{off}。"
 msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."
 msgstr "你在聊天里请她在这台电脑上做的工作，比如写网页或整理文件。点开一行会打开它所在的聊天并定位到这个任务，你在那里答复它的请求。"
 
+#: src/features/settings/permissions-card.tsx
 #: src/features/tasks/transcript-view.tsx
 msgid "Working…"
 msgstr "工作中…"

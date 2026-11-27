@@ -433,7 +433,8 @@ has none of them, and without them nothing below happens.
   shows a character model's file in Finder or Explorer (Studio's Model Options offers it as Show in
   Finder or Show in Explorer); the [desktop updater](desktop.md#updates)'s `onUpdateState(callback)`
   (reads the initial `UpdateState` synchronously and subscribes to pushes), `updateCheck()`,
-  `updateDownload()`, `updateInstall()`, and `updateSkip()`; and
+  `updateDownload()`, `updateInstall()`, and `updateSkip()`; the OS permissions panel's
+  `permissions()`, `requestPermission(id)`, `openPermissionSettings(id)`, and `testLocalNetwork(target)`; and
   the [desktop companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)`,
   `popOut()` and `resetCompanionPlace()`, each a promise of her state (`on`, `showAtLogin`, and
   `background`, true while background mode keeps her off screen); `linkCompanion()`, which asks main
@@ -522,6 +523,13 @@ the overlay gives as `env(titlebar-area-*)`:
   tray, the Window menu and Pop Out switch her too. A failed change toasts where Show Logs is, and a
   cancelled password prompt says nothing ([desktop.md](desktop.md#open-at-login), [the terminal
   command](desktop.md#the-terminal-command)).
+- **Settings → Permissions** (`features/settings/permissions-card.tsx`), after Desktop before
+  Advanced, shows when the bridge offers `permissions`, `requestPermission`, `openPermissionSettings`,
+  and `testLocalNetwork` (`offersPermissions`). It reads Microphone, Notifications (via
+  `mac_notify.node` `UNUserNotificationCenter`), and macOS Local Network, plus Assistant Tools
+  (Screen Recording and Accessibility on macOS), refreshes automatically on window focus, lets the
+  owner trigger OS prompts or jump to System Settings, and includes a collapsible LAN **Test
+  Connection** probe (with one-click fill from paired Direct Subspace servers).
 - **Pop Out,** on the video screen of a call the active persona is on, while the bridge has
   `popOut` (`features/call/video-call.tsx`), before Hang Up: it turns the desktop companion on and,
   once she is drawn, main hides the window and the call goes on in it, the screen mounted; her

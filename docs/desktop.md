@@ -40,7 +40,8 @@ apps/desktop/
   launchers/             the eidolon command's, shipped to the app's resources/bin
   node-shim/             the node shim's launchers, which the stage copies into the payload
   dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
-  scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
+  scripts/               build.ts, dev.ts, package.ts; after-pack.ts with macho.ts;
+                         stage-backend.ts with lockfile.ts, pe.ts,
                          zip.ts, natives.ts and node-shim.ts; signed-check.ts, the signed
                          build's checks; vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
@@ -53,7 +54,7 @@ apps/desktop/
                          menus, window-options, quit-check, quit-flow, update-flow,
                          update-signature, strings, shell-pages, log-filter, log-files,
                          background, app-invokes, folder-dialog, system-options, terminal-command,
-                         task-notices, companion, companion-flow), and thin Electron layers over
+                         desktop-permissions, task-notices, companion, companion-flow), and thin Electron layers over
                          them (index, instance, protocol, window, companion-window, senders,
                          chrome, menu, tray, permissions, navigation, native, quit, updater, log)
   src/preload/           the sandboxed CommonJS preload, in both windows: each page's marks and
@@ -362,8 +363,12 @@ app's second, with rules of its own.
   which the preload reads from main over a synchronous message as the page asks and main sends again
   at each change (`window-shows`); and the [updater](#updates)'s `onUpdateState`, which reads the
   current `UpdateState` synchronously (`update-state`) and subscribes to pushes, plus
-  `updateCheck()`, `updateDownload()`, `updateInstall()`, and `updateSkip()`. The preload sends
-  only what main takes (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin`
+  `updateCheck()`, `updateDownload()`, `updateInstall()`, and `updateSkip()`; and OS
+  permissions (`desktop-permissions.ts`): `permissions()`, `requestPermission(id)`,
+  `openPermissionSettings(id)`, and `testLocalNetwork(target)` (using `mac_notify.node`'s
+  `getStatus`/`requestPermission` over `UNUserNotificationCenter` on macOS, Electron's media and
+  accessibility APIs, mDNS probe packet for Local Network, and Electron's Node for LAN TCP checks).
+  The preload sends only what main takes (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin`
   alone) and hands the page main's answers only in the shapes `src/shared/bridge.ts` declares. A
   shell page gets `window.eidolonShell`:
   `retry`, `showLogs` and `quit`; her page gets `window.eidolonCompanion` alone. Main takes each
@@ -1048,7 +1053,10 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc
   signing with the hardened runtime needs, and `audio-input`; no camera), `NSUserActivityTypes`
   (`INSendMessageIntent`), `dist/native/mac_notify.node` shipped in `Contents/Resources/native`,
-  and the microphone's usage string. The DMG writes no update info: updates will take the zip.
+  the microphone and local-network usage strings, and `afterPack` (`scripts/after-pack.ts`)
+  rewriting each `MH_EXECUTE` (`LAPLACE Eidolon` and helpers) `LC_UUID` before signing so macOS
+  Local Network Privacy does not collide with other apps on the same Electron build. The DMG writes
+  no update info: updates will take the zip.
 - **Windows:** a per-user, one-click NSIS setup for x64, whose shortcut's AppUserModelID is the
   `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
   removes the install folder alone. Installing, updating and uninstalling never touch the data home.
@@ -1211,7 +1219,9 @@ one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own out
   `EIDOLON_EXPECT_PROVISIONING_PROFILE=1`), anti-doxxing checks confirm no `ProvisionedDevices`
   hardware UDIDs, no email addresses, allowed org `TeamName`/`TeamIdentifier` and Developer ID
   certificate subjects only, and the `com.apple.developer.usernotifications.communication`
-  entitlement for `live.laplace.eidolon`.
+  entitlement for `live.laplace.eidolon`; and `Contents/Info.plist` carries
+  `NSLocalNetworkUsageDescription` while main and helper `MH_EXECUTE` binaries carry unique
+  non-stock `LC_UUID`s.
 - **Windows:** it installs the setup silently for the user, refusing where LAPLACE Eidolon is installed
   already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
   found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
@@ -1408,9 +1418,10 @@ that could show something through it.
   `Notification.isSupported()` called, since its presenter alone asks macOS for permission, and on
   Windows rewrites the Start menu shortcut and a COM key under HKCU; no toast activator is set
   either.
-- **Nothing changes the owner's system:** Open at Login and the terminal command answer
-  `unavailable` (`background`), which Settings says, and read and write nothing: no login item, no
-  `/usr/local/bin` and no user `Path`, so no `osascript`, PowerShell or password prompt. A launch
+- **Nothing changes the owner's system:** Open at Login, the terminal command, and OS permissions
+  answer `unavailable` (`background`), which Settings says, and read and write nothing: no login
+  item, no `/usr/local/bin`, no user `Path`, and no OS permission check/prompt, `UNUserNotificationCenter`,
+  Settings pane open, or LAN TCP test, so no `osascript`, PowerShell or password/privacy prompt. A launch
   reads no login item, so it is never one at login.
 - **Nothing is heard:** Chromium's `--mute-audio` is set before `ready`, so no page plays through
   the speakers, a call's reply included. WebRTC still receives that reply, so a test can check it
@@ -1635,8 +1646,9 @@ Each step prints one line, made of the checks inside it:
    typed; then the smoke replaces the handler through Playwright's `app.evaluate`
    (`ipcMain.removeHandler`, then `ipcMain.handle` answering a folder of the run's), and the folder
    it answers joins the draft as a line of its own, which nothing saves.
-8. **Settings → Desktop:** Open at Login and the terminal command each say "Background mode leaves
-   this computer as it is.", their switch and button disabled.
+8. **Settings → Desktop & Permissions:** Open at Login, the terminal command, and every
+   permission row each say "Background mode leaves this computer as it is.", their controls
+   disabled.
 9. **The desktop companion,** drawn and never shown in background mode: the test rig, imported
    through the API, is made her active model, and Settings → Desktop's switch, which says background
    mode never shows her, turns her on. Her page draws her off screen with `eidolonCompanion` alone

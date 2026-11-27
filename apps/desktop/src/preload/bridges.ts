@@ -19,10 +19,15 @@ import {
   isCompanionChange,
   isCompanionDrawn,
   isLanguage,
+  isLocalNetworkTestRequest,
   isModelRef,
+  isPermissionId,
   isThemeSetting,
+  localNetworkTestResultOf,
   loginItemStateOf,
   pageAt,
+  permissionRequestResultOf,
+  permissionsStateOf,
   updateCheckOutcomeOf,
   updateStateOf,
   type WindowKind,
@@ -125,6 +130,23 @@ export function desktopBridge(
     updateDownload: () => ipc.invoke(BRIDGE.updateDownload).then(() => undefined),
     updateInstall: () => ipc.invoke(BRIDGE.updateInstall).then(() => undefined),
     updateSkip: () => ipc.invoke(BRIDGE.updateSkip).then(() => undefined),
+    permissions: () => ipc.invoke(BRIDGE.permissions).then(permissionsStateOf),
+    requestPermission: (id) =>
+      isPermissionId(id)
+        ? ipc
+            .invoke(BRIDGE.requestPermission, id)
+            .then((answer) => permissionRequestResultOf(answer, id))
+        : Promise.reject(new Error("a permission must be a known permission id")),
+    openPermissionSettings: (id) =>
+      isPermissionId(id)
+        ? ipc.invoke(BRIDGE.openPermissionSettings, id).then((opened) => opened === true)
+        : Promise.reject(new Error("a permission must be a known permission id")),
+    testLocalNetwork: (target) =>
+      isLocalNetworkTestRequest(target)
+        ? ipc
+            .invoke(BRIDGE.testLocalNetwork, { host: target.host, port: target.port })
+            .then(localNetworkTestResultOf)
+        : Promise.reject(new Error("a local network test takes a host and port")),
   };
 }
 

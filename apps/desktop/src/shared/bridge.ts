@@ -160,6 +160,14 @@ export const BRIDGE = {
   updateInstall: "eidolon:update-install",
   /** App page → main, invoked with nothing: skips the offered version and returns to idle. */
   updateSkip: "eidolon:update-skip",
+  /** App page → main, invoked with nothing: OS permission states for this computer. */
+  permissions: "eidolon:permissions",
+  /** App page → main, invoked with a PermissionId: prompts macOS or opens settings. */
+  requestPermission: "eidolon:request-permission",
+  /** App page → main, invoked with a PermissionId: opens the OS settings pane for that permission. */
+  openPermissionSettings: "eidolon:open-permission-settings",
+  /** App page → main, invoked with LocalNetworkTestRequest: tests a LAN TCP connection via Electron's Node. */
+  testLocalNetwork: "eidolon:test-local-network",
   /** Companion page → main, with nothing: it listens for a port to the app page. */
   linkApp: "eidolon:link-app",
   /** Companion page → main: a boolean, whether she is under the pointer. */
@@ -209,6 +217,10 @@ const SENDERS = {
   [BRIDGE.updateDownload]: ["main", "app"],
   [BRIDGE.updateInstall]: ["main", "app"],
   [BRIDGE.updateSkip]: ["main", "app"],
+  [BRIDGE.permissions]: ["main", "app"],
+  [BRIDGE.requestPermission]: ["main", "app"],
+  [BRIDGE.openPermissionSettings]: ["main", "app"],
+  [BRIDGE.testLocalNetwork]: ["main", "app"],
   [BRIDGE.linkApp]: ["companion", "app"],
   [BRIDGE.companionHit]: ["companion", "app"],
   [BRIDGE.companionDrag]: ["companion", "app"],
@@ -668,6 +680,147 @@ export function updateCheckOutcomeOf(answer: unknown): UpdateCheckOutcome {
   return { outcome: "none" };
 }
 
+export const PERMISSION_IDS = [
+  "microphone",
+  "notifications",
+  "local-network",
+  "screen",
+  "accessibility",
+] as const;
+export type PermissionId = (typeof PERMISSION_IDS)[number];
+
+export function isPermissionId(value: unknown): value is PermissionId {
+  return (PERMISSION_IDS as readonly unknown[]).includes(value);
+}
+
+export const PERMISSION_STATUSES = [
+  "granted",
+  "denied",
+  "restricted",
+  "not-determined",
+  "unknown",
+  "unavailable",
+] as const;
+export type PermissionStatus = (typeof PERMISSION_STATUSES)[number];
+
+export function isPermissionStatus(value: unknown): value is PermissionStatus {
+  return (PERMISSION_STATUSES as readonly unknown[]).includes(value);
+}
+
+export interface PermissionItem {
+  readonly id: PermissionId;
+  readonly status: PermissionStatus;
+  readonly unavailable?: Unavailable;
+}
+
+export interface PermissionsState {
+  readonly background: boolean;
+  readonly items: readonly PermissionItem[];
+}
+
+export interface PermissionRequestResult {
+  readonly id: PermissionId;
+  readonly status: PermissionStatus;
+  readonly openedSettings: boolean;
+  readonly unavailable?: Unavailable;
+}
+
+export interface LocalNetworkTestRequest {
+  readonly host: string;
+  readonly port: number;
+}
+
+export const LOCAL_NETWORK_TEST_FAILURES = [
+  "invalid-target",
+  "blocked",
+  "refused",
+  "timeout",
+  "unresolved",
+  "unsupported",
+  "background",
+  "failed",
+] as const;
+export type LocalNetworkTestFailure = (typeof LOCAL_NETWORK_TEST_FAILURES)[number];
+
+export type LocalNetworkTestResult =
+  | { readonly ok: true; readonly host: string; readonly port: number; readonly testedAt: number }
+  | {
+      readonly ok: false;
+      readonly host: string;
+      readonly port: number;
+      readonly testedAt: number;
+      readonly failure: LocalNetworkTestFailure;
+    };
+
+function isLocalNetworkTestFailure(value: unknown): value is LocalNetworkTestFailure {
+  return (LOCAL_NETWORK_TEST_FAILURES as readonly unknown[]).includes(value);
+}
+
+export function isLocalNetworkTestRequest(value: unknown): value is LocalNetworkTestRequest {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const { host, port } = value as Record<string, unknown>;
+  return (
+    typeof host === "string" &&
+    host.length <= 256 &&
+    typeof port === "number" &&
+    Number.isFinite(port)
+  );
+}
+
+function validUnavailable(value: unknown): Unavailable | undefined {
+  return UNAVAILABLE.includes(value) ? (value as Unavailable) : undefined;
+}
+
+/** Main's answer on BRIDGE.permissions, or an empty list when malformed. */
+export function permissionsStateOf(answer: unknown): PermissionsState {
+  const { background, items } = fields(answer);
+  const parsed: PermissionItem[] = [];
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const { id, status, unavailable } = fields(item);
+      if (!isPermissionId(id) || !isPermissionStatus(status)) continue;
+      const reason = validUnavailable(unavailable);
+      parsed.push({ id, status, ...(reason !== undefined ? { unavailable: reason } : {}) });
+    }
+  }
+  return { background: background === true, items: parsed };
+}
+
+/** Main's answer on BRIDGE.requestPermission, or unknown when malformed. */
+export function permissionRequestResultOf(
+  answer: unknown,
+  fallbackId: PermissionId,
+): PermissionRequestResult {
+  const { id, status, openedSettings, unavailable } = fields(answer);
+  const reason = validUnavailable(unavailable);
+  return {
+    id: isPermissionId(id) ? id : fallbackId,
+    status: isPermissionStatus(status) ? status : "unknown",
+    openedSettings: openedSettings === true,
+    ...(reason !== undefined ? { unavailable: reason } : {}),
+  };
+}
+
+/** Main's answer on BRIDGE.testLocalNetwork, or failed when malformed. */
+export function localNetworkTestResultOf(answer: unknown): LocalNetworkTestResult {
+  const { ok, host: rawHost, port: rawPort, testedAt: rawTestedAt, failure } = fields(answer);
+  const host = typeof rawHost === "string" ? rawHost : "";
+  const port =
+    typeof rawPort === "number" && Number.isInteger(rawPort) && rawPort >= 0 && rawPort <= 65_535
+      ? rawPort
+      : 0;
+  const testedAt =
+    typeof rawTestedAt === "number" && Number.isFinite(rawTestedAt) ? rawTestedAt : 0;
+  if (ok === true) return { ok: true, host, port, testedAt };
+  return {
+    ok: false,
+    host,
+    port,
+    testedAt,
+    failure: isLocalNetworkTestFailure(failure) ? failure : "failed",
+  };
+}
+
 /** `window.eidolonDesktop`, on the app's page alone (docs/web-app.md, "In the desktop app"). */
 export interface EidolonDesktop {
   /** Node's name for the OS: "darwin" or "win32". */
@@ -720,6 +873,14 @@ export interface EidolonDesktop {
   readonly updateInstall: () => Promise<void>;
   /** Skips the offered version so quiet launch checks stay silent about it. */
   readonly updateSkip: () => Promise<void>;
+  /** OS permissions relevant to LAPLACE Eidolon on this computer. */
+  readonly permissions: () => Promise<PermissionsState>;
+  /** Prompts macOS for access or opens the OS settings pane when already decided. */
+  readonly requestPermission: (id: PermissionId) => Promise<PermissionRequestResult>;
+  /** Opens the OS settings pane for `id`. */
+  readonly openPermissionSettings: (id: PermissionId) => Promise<boolean>;
+  /** Tests a LAN TCP connection via Electron's Node runtime. */
+  readonly testLocalNetwork: (target: LocalNetworkTestRequest) => Promise<LocalNetworkTestResult>;
 }
 
 /** `window.eidolonShell`, on the shell pages alone: the failure page's buttons. */

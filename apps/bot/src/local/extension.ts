@@ -13,6 +13,7 @@ import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
 import { type Fallback, routeRequest } from "../routing.ts";
 import type { LocalContext, LocalExtension } from "../server.ts";
 import {
+  type ErrorCode,
   EXPECTED_HOST_HEADER,
   SUBSPACE_HOST_HEADER,
   SUBSPACE_REMOTE_HEADER,
@@ -138,6 +139,18 @@ function hasInvalidRequestTarget(request: Request, pathname: string): boolean {
   return false;
 }
 
+function proxyFailure(error: unknown, mapPairingFailed: boolean): readonly [ErrorCode, string] {
+  if (error instanceof SubspaceConnectError) {
+    if (error.code === "local-network-blocked") {
+      return ["local-network-blocked", "Local network access is blocked in macOS System Settings"];
+    }
+    if (mapPairingFailed && error.code === "pairing-failed") {
+      return ["pairing-failed", "Remote server rejected this device's pairing token"];
+    }
+  }
+  return ["subspace-unreachable", "Could not reach the active Subspace server"];
+}
+
 async function forwardToSubspace(
   subspace: SubspaceManager,
   request: Request,
@@ -148,17 +161,9 @@ async function forwardToSubspace(
   try {
     return await subspace.proxyToActive(request, targetPathWithSearch, expectedHostId);
   } catch (error) {
-    const code =
-      mapPairingFailed && error instanceof SubspaceConnectError && error.code === "pairing-failed"
-        ? "pairing-failed"
-        : "subspace-unreachable";
-    return localFailure(
-      502,
-      code,
-      code === "pairing-failed"
-        ? "Remote server rejected this device's pairing token"
-        : "Could not reach the active Subspace server",
-      (id) => logger.warning(`[subspace] Proxy request failed (error ${id}): ${errorText(error)}`),
+    const [code, message] = proxyFailure(error, mapPairingFailed);
+    return localFailure(502, code, message, (id) =>
+      logger.warning(`[subspace] Proxy request failed (error ${id}): ${errorText(error)}`),
     );
   }
 }

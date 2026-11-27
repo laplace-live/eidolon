@@ -35,6 +35,16 @@ const current: EidolonDesktop = {
   terminalCommand: async () => absent,
   setTerminalCommand: async () => ({ command: absent }),
 };
+const withPermissions: EidolonDesktop = {
+  ...current,
+  permissions: async () => ({
+    background: false,
+    items: [{ id: "microphone", status: "granted" }],
+  }),
+  requestPermission: async (id) => ({ id, status: "granted", openedSettings: false }),
+  openPermissionSettings: async () => true,
+  testLocalNetwork: async ({ host, port }) => ({ ok: true, host, port, testedAt: 1 }),
+};
 
 afterEach(() => {
   globalThis.eidolonDesktop = undefined;
@@ -87,6 +97,12 @@ test("the nav lists Desktop, before Advanced, only in a desktop app that offers 
     "desktop",
     "advanced",
   ]);
+  expect(tabs(render("/settings?tab=general", withPermissions).html)).toEqual([
+    ...others.slice(0, -1),
+    "desktop",
+    "permissions",
+    "advanced",
+  ]);
 });
 
 test("?tab=desktop opens the Desktop App card there, and leads elsewhere in a browser", () => {
@@ -99,6 +115,20 @@ test("?tab=desktop opens the Desktop App card there, and leads elsewhere in a br
   expect(browser.redirectTo).toBe("?tab=providers");
 
   const stale = render("/settings?tab=desktop", older);
+  expect(stale.html).toBe("");
+  expect(stale.redirectTo).toBe("?tab=providers");
+});
+
+test("?tab=permissions opens the Permissions card when supported, and leads elsewhere otherwise", () => {
+  const perms = render("/settings?tab=permissions", withPermissions);
+  expect(perms.redirectTo).toBeUndefined();
+  expect(perms.html).toContain("Permissions");
+
+  const browser = render("/settings?tab=permissions", undefined);
+  expect(browser.html).toBe("");
+  expect(browser.redirectTo).toBe("?tab=providers");
+
+  const stale = render("/settings?tab=permissions", current);
   expect(stale.html).toBe("");
   expect(stale.redirectTo).toBe("?tab=providers");
 });

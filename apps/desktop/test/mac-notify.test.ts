@@ -24,10 +24,14 @@ describe("mac-notify", () => {
         ) => void;
         show: (options: { id: string; title: string; body: string }) => void;
         close: (id: string) => void;
+        getStatus: (callback: (status: string) => void) => void;
+        requestPermission: (callback: (status: string) => void) => void;
       };
       expect(typeof addon.init).toBe("function");
       expect(typeof addon.show).toBe("function");
       expect(typeof addon.close).toBe("function");
+      expect(typeof addon.getStatus).toBe("function");
+      expect(typeof addon.requestPermission).toBe("function");
     });
 
     test("runs safely in plain Node without a bundle identifier and lets Node exit", () => {
@@ -36,11 +40,16 @@ describe("mac-notify", () => {
         const { createRequire } = require("node:module");
         const addon = createRequire(process.env.ADDON_PATH)(process.env.ADDON_PATH);
         const failures = [];
+        const statuses = {};
         addon.init(() => {}, (id, error) => failures.push({ id, error }));
         addon.show({ id: "test-1", title: "Milky", body: "Hello" });
         addon.close("test-1");
-        setImmediate(() => {
-          console.log(JSON.stringify(failures));
+        addon.getStatus((status) => {
+          statuses.current = status;
+          addon.requestPermission((next) => {
+            statuses.requested = next;
+            console.log(JSON.stringify({ failures, statuses }));
+          });
         });
       `;
       const run = spawnSync(process.execPath, ["-e", script], {
@@ -50,11 +59,18 @@ describe("mac-notify", () => {
       });
       expect(run.status).toBe(0);
       expect(run.stderr).toBe("");
-      const failures = JSON.parse(run.stdout.trim()) as { id: string; error: string }[];
-      expect(failures).toHaveLength(1);
-      expect(failures[0]).toEqual({
+      const parsed = JSON.parse(run.stdout.trim()) as {
+        failures: { id: string; error: string }[];
+        statuses: { current: string; requested: string };
+      };
+      expect(parsed.failures).toHaveLength(1);
+      expect(parsed.failures[0]).toEqual({
         id: "test-1",
         error: "application bundle has no CFBundleIdentifier",
+      });
+      expect(parsed.statuses).toEqual({
+        current: "unavailable",
+        requested: "unavailable",
       });
     });
   });

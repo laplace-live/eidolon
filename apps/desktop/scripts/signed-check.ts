@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { dirname, join, relative, win32 } from "node:path";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { PUBLISHER_NAMES } from "../electron-builder.release.ts";
+import { readMachoExecuteUuid, STOCK_LLD_UUID_PREFIX } from "./macho.ts";
 import { shimPnpmExe } from "./node-shim.ts";
 import { readPe } from "./pe.ts";
 import { DESKTOP, installedBinary, installer, runsFolder, sleep } from "./smoke/kit.ts";
@@ -475,6 +476,92 @@ export function provisioningProfileChecks(
   ];
 }
 
+function asPlistRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readPlistRecord(plistPath: string): Record<string, unknown> | null {
+  try {
+    return asPlistRecord(parseAppleXmlPlist(readFileSync(plistPath, "utf8")));
+  } catch {
+    return null;
+  }
+}
+
+function collectBundleExecutableUuids(
+  app: string,
+  helpers: readonly string[],
+): {
+  readonly mainPlist: Record<string, unknown> | null;
+  readonly uuids: ReadonlyMap<string, string | null>;
+} {
+  const mainPlist = readPlistRecord(join(app, "Contents", "Info.plist"));
+  const uuids = new Map<string, string | null>();
+  const addBundle = (relBundle: string, plistObj: Record<string, unknown> | null): void => {
+    const exe =
+      typeof plistObj?.CFBundleExecutable === "string" ? plistObj.CFBundleExecutable : null;
+    const relExe = exe
+      ? join(relBundle, "Contents", "MacOS", exe)
+      : join(relBundle, "Contents", "MacOS");
+    const absExe = join(app, relExe);
+    uuids.set(relExe, exe && existsSync(absExe) ? readMachoExecuteUuid(absExe) : null);
+  };
+  addBundle("", mainPlist);
+  for (const helper of helpers) {
+    if (!helper.endsWith(".app")) continue;
+    const relBundle = join("Contents", "Frameworks", helper);
+    addBundle(relBundle, readPlistRecord(join(app, relBundle, "Contents", "Info.plist")));
+  }
+  return { mainPlist, uuids };
+}
+
+/** Verifies macOS Local Network privacy metadata and unique non-stock Mach-O executable LC_UUIDs. */
+export function macBundleLocalNetworkChecks(
+  infoPlist: unknown,
+  uuids: ReadonlyMap<string, string | null>,
+): Check[] {
+  const record = asPlistRecord(infoPlist) ?? {};
+  const desc = record.NSLocalNetworkUsageDescription;
+  const hasDesc = typeof desc === "string" && desc.trim() !== "";
+
+  const problems: string[] = [];
+  if (uuids.size < 2) {
+    problems.push(`expected app and helper executables, got ${uuids.size}`);
+  }
+  const seen = new Map<string, string>();
+  for (const [exePath, uuid] of uuids) {
+    if (uuid === null) {
+      problems.push(`${exePath}: missing LC_UUID`);
+      continue;
+    }
+    const lower = uuid.toLowerCase();
+    if (lower.startsWith(STOCK_LLD_UUID_PREFIX)) {
+      problems.push(`${exePath}: stock lld UUID (${uuid})`);
+    }
+    const prev = seen.get(lower);
+    if (prev !== undefined) {
+      problems.push(`${exePath}: duplicates ${prev} (${uuid})`);
+    } else {
+      seen.set(lower, exePath);
+    }
+  }
+
+  return [
+    {
+      name: "Info.plist carries NSLocalNetworkUsageDescription",
+      pass: hasDesc,
+      detail: hasDesc ? desc : "missing NSLocalNetworkUsageDescription in Contents/Info.plist",
+    },
+    {
+      name: "app and helper executables carry unique non-stock Mach-O LC_UUIDs",
+      pass: problems.length === 0,
+      detail: problems.length === 0 ? `${uuids.size} unique UUIDs` : problems.join("; "),
+    },
+  ];
+}
+
 /** What the script's PowerShell pipeline emits for each file, through ConvertTo-Json. */
 export interface Authenticode {
   readonly Path: string;
@@ -729,6 +816,8 @@ function checkMac(record: (check: Check) => void): void {
       requirementCheck(helper, run("codesign", ["-d", "-r-", join(frameworks, helper)]), expected),
     );
   }
+  const { mainPlist, uuids } = collectBundleExecutableUuids(app, helpers);
+  for (const check of macBundleLocalNetworkChecks(mainPlist, uuids)) record(check);
 }
 
 /** Every file's Authenticode signature, read in one PowerShell run. */
