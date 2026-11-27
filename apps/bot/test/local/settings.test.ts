@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join } from "node:path";
 import {
   activePersona,
+  assistantSettings,
   dataHome,
   envOptional,
   personaHomeDir,
@@ -211,6 +212,58 @@ describe("GET settings", () => {
   test("names a persona by id, and refuses one that isn't", async () => {
     expect((await api("GET", "/settings?persona=..%2Fx")).status).toBe(400);
     expect((await api("GET", "/settings?persona=nobody")).status).toBe(404);
+  });
+
+  test("whitespace-only env flags yield to settings.yaml without claiming envOverride", async () => {
+    await put({
+      scope: "app",
+      values: { "assistant.enabled": false, "assistant.bash": false, "memory.enabled": false },
+    });
+    for (const [name, value] of [
+      ["ASSISTANT_ENABLED", " \t\u3000"],
+      ["ASSISTANT_BASH", ""],
+      ["RETRIEVAL_GATE_ENABLED", " \n"],
+      ["MEM0_ENABLED", " \t"],
+    ] as const) {
+      process.env[name] = value;
+      touched.push(name);
+    }
+
+    const answer = await settings();
+    expect(assistantSettings().enabled).toBe(false);
+    expect(assistantSettings().bash).toBe(false);
+    expect(row(answer, "assistant.enabled")).toMatchObject({
+      value: false,
+      source: "app",
+      envValue: null,
+      envOverride: false,
+    });
+    expect(row(answer, "assistant.bash")).toMatchObject({
+      value: false,
+      source: "app",
+      envValue: null,
+      envOverride: false,
+    });
+    expect(row(answer, "knowledge.gate.enabled")).toMatchObject({
+      envValue: null,
+      envOverride: false,
+    });
+    expect(row(answer, "memory.enabled")).toMatchObject({
+      value: false,
+      source: "app",
+      envValue: null,
+      envOverride: false,
+    });
+
+    process.env.MEM0_QDRANT_HOST = "localhost";
+    touched.push("MEM0_QDRANT_HOST");
+    const legacy = await settings();
+    expect(row(legacy, "memory.enabled")).toMatchObject({
+      value: false,
+      envValue: "true",
+      envName: "MEM0_QDRANT_HOST",
+      envOverride: true,
+    });
   });
 });
 
