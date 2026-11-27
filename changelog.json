@@ -2,6 +2,25 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-27T09:13:46.748Z",
+      "versions": {
+        "laplace-eidolon": "0.22.0",
+        "@laplace.live/eidolon": "0.22.0",
+        "laplace-eidolon-desktop": "0.10.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Make voice optional and add custom speech and self-hosted Fish Speech providers"
+        }
+      ]
+    },
+    {
       "date": "2026-11-27T06:25:36.621Z",
       "versions": {
         "laplace-eidolon": "0.21.0",
