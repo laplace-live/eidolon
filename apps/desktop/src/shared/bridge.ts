@@ -1,5 +1,8 @@
 // The bridges between the windows' pages and main: the IPC channels, what each carries, and which
-// window's page may use it. The sandboxed preload bundles it too, so it imports nothing.
+// window's page may use it. The sandboxed preload bundles it too, so it imports nothing at runtime.
+import type { ChangeKind, ReleaseNoteEntry, ReleaseNoteItem } from "./release-notes.ts";
+
+export type { ChangeKind, ReleaseNoteEntry, ReleaseNoteItem };
 
 export const SCHEME = "eidolon-app";
 
@@ -55,12 +58,13 @@ export const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 /**
  * What the menus and the notifications ask of the app's page; apps/web ignores one it doesn't
  * know. `open-chat:<chat>` opens a chat, `open-task:<chat>:<task>` opens a task in its chat,
- * and `call` opens /call.
+ * `check-updates` checks for updates (or opens the update dialog), and `call` opens /call.
  */
 export type DesktopCommand =
   | "settings"
   | "tasks"
   | "call"
+  | "check-updates"
   | `open-chat:${string}`
   | `open-task:${string}:${string}`;
 
@@ -143,6 +147,19 @@ export const BRIDGE = {
   windowShows: "eidolon:window-shows",
   /** Main → both pages, through postMessage: a MessagePort to the other page, in the event's ports. */
   companionPort: "eidolon:companion-port",
+  /**
+   * Main → app page: the updater's UpdateState, at each change. App page → main, synchronous: the
+   * same, read as the page asks for it, since an update or check can land before the page loads.
+   */
+  updateState: "eidolon:update-state",
+  /** App page → main, invoked with nothing: checks the update feed and returns UpdateCheckOutcome. */
+  updateCheck: "eidolon:update-check",
+  /** App page → main, invoked with nothing: starts or retries downloading the offered update. */
+  updateDownload: "eidolon:update-download",
+  /** App page → main, invoked with nothing: restarts to install the downloaded update. */
+  updateInstall: "eidolon:update-install",
+  /** App page → main, invoked with nothing: skips the offered version and returns to idle. */
+  updateSkip: "eidolon:update-skip",
   /** Companion page → main, with nothing: it listens for a port to the app page. */
   linkApp: "eidolon:link-app",
   /** Companion page → main: a boolean, whether she is under the pointer. */
@@ -187,6 +204,11 @@ const SENDERS = {
   [BRIDGE.linkCompanion]: ["main", "app"],
   [BRIDGE.feedingCompanion]: ["main", "app"],
   [BRIDGE.windowShows]: ["main", "app"],
+  [BRIDGE.updateState]: ["main", "app"],
+  [BRIDGE.updateCheck]: ["main", "app"],
+  [BRIDGE.updateDownload]: ["main", "app"],
+  [BRIDGE.updateInstall]: ["main", "app"],
+  [BRIDGE.updateSkip]: ["main", "app"],
   [BRIDGE.linkApp]: ["companion", "app"],
   [BRIDGE.companionHit]: ["companion", "app"],
   [BRIDGE.companionDrag]: ["companion", "app"],
@@ -573,6 +595,79 @@ export function companionPickOf(answer: unknown): CompanionPick | null {
   return null;
 }
 
+/** Cross-process update flow state, owned by main and pushed on BRIDGE.updateState. */
+export type UpdateState =
+  | { readonly phase: "unsupported" }
+  /** macOS, on a read-only volume: nothing is checked, and Check for Updates… says to move it. */
+  | { readonly phase: "read-only" }
+  | { readonly phase: "idle" }
+  | { readonly phase: "checking" }
+  | {
+      readonly phase: "available";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  | { readonly phase: "downloading"; readonly version: string; readonly percent: number }
+  | {
+      readonly phase: "downloaded";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  /**
+   * Restart chosen: the hop that makes a second Restart a no-op, since quitAndInstall twice asks
+   * Squirrel to relaunch twice, which leaves two copies running. A Cancel in the quit check hands
+   * it back to downloaded.
+   */
+  | {
+      readonly phase: "installing";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  /** The download failed, or the update it gave can't install. */
+  | { readonly phase: "error"; readonly version: string; readonly message: string };
+
+/** One check's result; check failures surface as a toast here, never in UpdateState. */
+export type UpdateCheckOutcome =
+  | { readonly outcome: "available"; readonly version: string }
+  | { readonly outcome: "none" }
+  | { readonly outcome: "error"; readonly message: string };
+
+/** Main's push/answer on BRIDGE.updateState, or unsupported when it sent something else. */
+export function updateStateOf(
+  answer: unknown,
+  parseNotes: (raw: unknown) => readonly ReleaseNoteEntry[] = () => [],
+): UpdateState {
+  const { phase, version, percent, notes, message } = fields(answer);
+  if (
+    phase === "unsupported" ||
+    phase === "read-only" ||
+    phase === "idle" ||
+    phase === "checking"
+  ) {
+    return { phase };
+  }
+  if (typeof version !== "string" || version.length === 0) return { phase: "unsupported" };
+  if (phase === "available" || phase === "downloaded" || phase === "installing") {
+    return { phase, version, notes: parseNotes(notes) };
+  }
+  if (phase === "downloading") {
+    if (typeof percent !== "number" || !Number.isFinite(percent)) return { phase: "unsupported" };
+    return { phase, version, percent: Math.min(100, Math.max(0, Math.round(percent))) };
+  }
+  if (phase === "error" && typeof message === "string") return { phase, version, message };
+  return { phase: "unsupported" };
+}
+
+/** Main's answer on BRIDGE.updateCheck, or none when it sent something else. */
+export function updateCheckOutcomeOf(answer: unknown): UpdateCheckOutcome {
+  const { outcome, version, message } = fields(answer);
+  if (outcome === "available" && typeof version === "string" && version.length > 0) {
+    return { outcome, version };
+  }
+  if (outcome === "error" && typeof message === "string") return { outcome, message };
+  return { outcome: "none" };
+}
+
 /** `window.eidolonDesktop`, on the app's page alone (docs/web-app.md, "In the desktop app"). */
 export interface EidolonDesktop {
   /** Node's name for the OS: "darwin" or "win32". */
@@ -615,6 +710,16 @@ export interface EidolonDesktop {
    * page still runs, as throttling's off.
    */
   readonly onWindowShows: (callback: (shows: boolean) => void) => void;
+  /** Hands `callback` the updater's state, now and at each change. */
+  readonly onUpdateState: (callback: (state: UpdateState) => void) => void;
+  /** Checks the update feed, surfacing skipped versions and reporting the outcome. */
+  readonly updateCheck: () => Promise<UpdateCheckOutcome>;
+  /** Starts or retries downloading the offered update. */
+  readonly updateDownload: () => Promise<void>;
+  /** Restarts to install the downloaded update. */
+  readonly updateInstall: () => Promise<void>;
+  /** Skips the offered version so quiet launch checks stay silent about it. */
+  readonly updateSkip: () => Promise<void>;
 }
 
 /** `window.eidolonShell`, on the shell pages alone: the failure page's buttons. */

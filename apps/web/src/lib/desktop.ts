@@ -105,6 +105,50 @@ export type CompanionPick =
 /** The picks main hands the app page's call; never the port's. */
 export type CompanionCallPick = "call" | "hang-up" | "mute" | "unmute";
 
+export type ChangeKind = "feature" | "performance" | "improvement" | "fix" | "other";
+
+export const DESKTOP_PACKAGE = "laplace-eidolon-desktop";
+
+export interface ReleaseNoteItem {
+  readonly kind: ChangeKind;
+  readonly packages: readonly string[];
+  readonly text: string;
+}
+
+export interface ReleaseNoteEntry {
+  readonly date: string;
+  readonly versions: Readonly<Record<string, string>>;
+  readonly items: readonly ReleaseNoteItem[];
+}
+
+export type UpdateState =
+  | { readonly phase: "unsupported" }
+  | { readonly phase: "read-only" }
+  | { readonly phase: "idle" }
+  | { readonly phase: "checking" }
+  | {
+      readonly phase: "available";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  | { readonly phase: "downloading"; readonly version: string; readonly percent: number }
+  | {
+      readonly phase: "downloaded";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  | {
+      readonly phase: "installing";
+      readonly version: string;
+      readonly notes: readonly ReleaseNoteEntry[];
+    }
+  | { readonly phase: "error"; readonly version: string; readonly message: string };
+
+export type UpdateCheckOutcome =
+  | { readonly outcome: "available"; readonly version: string }
+  | { readonly outcome: "none" }
+  | { readonly outcome: "error"; readonly message: string };
+
 export interface EidolonDesktop {
   /** Node's name for the OS the app runs on: "darwin" or "win32". */
   readonly platform: string;
@@ -151,6 +195,16 @@ export interface EidolonDesktop {
    * page still runs, as throttling's off.
    */
   readonly onWindowShows?: (callback: (shows: boolean) => void) => void;
+  /** Hands `callback` the updater's state, now and at each change. */
+  readonly onUpdateState?: (callback: (state: UpdateState) => void) => void;
+  /** Checks the update feed, surfacing skipped versions and reporting the outcome. */
+  readonly updateCheck?: () => Promise<UpdateCheckOutcome>;
+  /** Starts or retries downloading the offered update. */
+  readonly updateDownload?: () => Promise<void>;
+  /** Restarts to install the downloaded update. */
+  readonly updateInstall?: () => Promise<void>;
+  /** Skips the offered version so quiet launch checks stay silent about it. */
+  readonly updateSkip?: () => Promise<void>;
 }
 
 /** `window.eidolonCompanion`, on the desktop companion's page alone. */
@@ -209,7 +263,8 @@ const COMMANDS = {
   settings: (navigate) => navigate("/settings"),
   tasks: (navigate) => navigate("/tasks"),
   call: (navigate) => navigate("/call"),
-} satisfies Record<string, (navigate: (to: string) => void) => void>;
+  "check-updates": (_navigate, onCheckUpdates) => onCheckUpdates?.(),
+} satisfies Record<string, (navigate: (to: string) => void, onCheckUpdates?: () => void) => void>;
 
 /** A chat's or a task's id, as the server makes them. */
 const ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -222,9 +277,13 @@ export type DesktopCommand =
   | `open-chat:${string}`
   | `open-task:${string}:${string}`;
 
-export function runCommand(command: string, navigate: (to: string) => void): void {
+export function runCommand(
+  command: string,
+  navigate: (to: string) => void,
+  onCheckUpdates?: () => void,
+): void {
   if (Object.hasOwn(COMMANDS, command)) {
-    COMMANDS[command as keyof typeof COMMANDS](navigate);
+    COMMANDS[command as keyof typeof COMMANDS](navigate, onCheckUpdates);
     return;
   }
   const [, openChat] = OPEN_CHAT.exec(command) ?? [];
@@ -262,12 +321,66 @@ export function subscribeWindowShows(listener: () => void): () => void {
   };
 }
 
+let update: UpdateState = { phase: "unsupported" };
+const updateListeners = new Set<() => void>();
+
+/** The updater's state, as main last reported it; `unsupported` in a browser. */
+export function updateState(): UpdateState {
+  return update;
+}
+
+/** Calls `listener` when the updater's state changes; the returned function stops it. */
+export function subscribeUpdateState(listener: () => void): () => void {
+  updateListeners.add(listener);
+  return () => {
+    updateListeners.delete(listener);
+  };
+}
+
+function sameUpdateState(a: UpdateState, b: UpdateState): boolean {
+  if (a === b) return true;
+  if (a.phase !== b.phase) return false;
+  if (
+    a.phase === "unsupported" ||
+    a.phase === "read-only" ||
+    a.phase === "idle" ||
+    a.phase === "checking"
+  ) {
+    return true;
+  }
+  if (a.phase === "downloading" && b.phase === "downloading") {
+    return a.version === b.version && a.percent === b.percent;
+  }
+  if (a.phase === "error" && b.phase === "error") {
+    return a.version === b.version && a.message === b.message;
+  }
+  if (
+    (a.phase === "available" || a.phase === "downloaded" || a.phase === "installing") &&
+    (b.phase === "available" || b.phase === "downloaded" || b.phase === "installing")
+  ) {
+    return (
+      a.version === b.version &&
+      (a.notes === b.notes ||
+        (a.notes.length === 0 && b.notes.length === 0) ||
+        JSON.stringify(a.notes) === JSON.stringify(b.notes))
+    );
+  }
+  return false;
+}
+
+/** Updates the mirrored updater state (exported for tests; runtime drives this via onUpdateState). */
+export function setUpdateState(next: UpdateState): void {
+  if (sameUpdateState(update, next)) return;
+  update = next;
+  for (const listener of [...updateListeners]) listener();
+}
+
 /**
  * Tells the desktop app the theme setting and the language, now and on every change, runs its
  * commands through `navigate`, hands her menu's call picks to their subscribers, a pick with none
- * being dropped, and keeps whether its window shows. Nothing in a browser.
+ * being dropped, and keeps whether its window shows and the updater's state. Nothing in a browser.
  */
-export function connectDesktop(navigate: (to: string) => void): void {
+export function connectDesktop(navigate: (to: string) => void, onCheckUpdates?: () => void): void {
   const app = desktop();
   if (app === null) return;
   let theme: Theme | null = null;
@@ -288,7 +401,9 @@ export function connectDesktop(navigate: (to: string) => void): void {
   };
   reportLanguage();
   i18n.on("change", reportLanguage);
-  app.onCommand((command) => runCommand(command, navigate));
+  // Seed update state before registering commands so a queued check-updates sees current state.
+  app.onUpdateState?.((next) => setUpdateState(next));
+  app.onCommand((command) => runCommand(command, navigate, onCheckUpdates));
   app.onCompanionPick?.((pick) => {
     for (const listener of [...pickListeners]) listener(pick);
   });

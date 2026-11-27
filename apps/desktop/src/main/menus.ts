@@ -9,10 +9,10 @@ import {
   type CompanionPick,
   type CompanionSize,
   type DesktopVersions,
+  type UpdateState,
 } from "../shared/bridge.ts";
 import { menuLabel } from "./companion.ts";
 import type { Strings } from "./strings.ts";
-import type { UpdateState } from "./update-flow.ts";
 
 /** What the menus' own items do; the rest are Electron's roles. */
 export interface MenuActions {
@@ -28,17 +28,14 @@ export interface MenuActions {
 }
 
 /** Check for Updates… as the updater stands. */
-export type UpdatesItem = "enabled" | "disabled" | "hidden";
+export type UpdatesItem = "enabled" | "hidden";
 
 /**
- * Absent while this run doesn't update itself, unless it runs from a read-only volume, whose box
- * says to move it; disabled while a check, a download or the restart runs.
+ * Absent while this run doesn't update itself; clicking it checks for updates or opens the in-app
+ * update dialog when a release, download, error, or read-only notice is active.
  */
 export function updatesItem(phase: UpdateState["phase"]): UpdatesItem {
-  if (phase === "unsupported") return "hidden";
-  return phase === "checking" || phase === "downloading" || phase === "installing"
-    ? "disabled"
-    : "enabled";
+  return phase === "unsupported" ? "hidden" : "enabled";
 }
 
 function checkForUpdates(
@@ -50,7 +47,6 @@ function checkForUpdates(
   return [
     {
       label: label.checkForUpdates,
-      enabled: updates === "enabled",
       click: () => actions.checkForUpdates(),
     },
   ];

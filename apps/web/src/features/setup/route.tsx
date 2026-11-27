@@ -6,6 +6,7 @@ import { AppMark } from "@/components/app-mark";
 import { PageHeader } from "@/components/page-header";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
 import { Button } from "@/components/ui/button";
+import { UpdateVersion } from "@/components/update-version";
 import { statusQuery } from "@/lib/query";
 import { DoneStep } from "./done-step";
 import { requiredKeyMissing } from "./first-run";
@@ -56,6 +57,7 @@ export function Component() {
             {t`Setup`}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            <UpdateVersion />
             {keysReady && (
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/">{t`Leave Setup`}</Link>

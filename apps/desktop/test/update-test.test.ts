@@ -550,14 +550,11 @@ describe("main.log's steps", () => {
         download: async (progress) => progress(100),
         install: () => installs++,
       },
+      autoProceed: true,
       restart: (install, installable) => quit.restart(install, installable),
       relaunch: () => {},
-      show: (box) => native.messageBox(box),
-      open: () => {},
       progress: () => {},
-      strings: () => STRINGS.en,
       version: "0.0.1",
-      platform: "darwin",
       log,
     });
     flow.backendReady();
@@ -637,10 +634,6 @@ describe("main.log's steps", () => {
       ],
       [[on, "Eidolon: checking for updates"], "Eidolon: up to date: 0.0.1 is the latest"],
       [[on, "Eidolon: checking for updates"], "Eidolon: the update check failed: net::ERR_FAILED"],
-      [
-        [on, "Eidolon: checking for updates", "Eidolon: update available: 0.0.2"],
-        "Eidolon: an update box didn't show: no window",
-      ],
       [
         [
           on,

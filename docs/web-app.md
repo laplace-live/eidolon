@@ -420,28 +420,32 @@ has none of them, and without them nothing below happens.
   the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
   never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and on
   every change. `onCommand` hands it the menus' and the notifications' commands: `settings` opens
-  `/settings`, `tasks` `/tasks`, `call` `/call`, `open-chat:<chat>` `/chats/<chat>`, and
-  `open-task:<chat>:<task>` `/chats/<chat>?task=<task>` when the ids are valid; one it doesn't know
-  is ignored (`runCommand` in `lib/desktop.ts`). The members added since the first desktop release are optional, since a
-  terminal's server can serve this page to an older app, and the page looks for each before it uses
-  it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
-  `setTerminalCommand(action)`, each a promise of main's answer
+  `/settings`, `tasks` `/tasks`, `call` `/call`, `check-updates` triggers `checkForUpdates()`,
+  `open-chat:<chat>` `/chats/<chat>`, and `open-task:<chat>:<task>` `/chats/<chat>?task=<task>` when
+  the ids are valid; one it doesn't know is ignored (`runCommand` in `lib/desktop.ts`). The members
+  added since the first desktop release are optional, since a terminal's server can serve this page
+  to an older app, and the page looks for each before it uses it: `chooseFolder()`, `loginItem()`,
+  `setLoginItem(on)`, `terminalCommand()` and `setTerminalCommand(action)`, each a promise of main's
+  answer
   ([desktop.md](desktop.md#the-window)); `unsaved(held)`; `revealModel({persona, model})`, which
   shows a character model's file in Finder or Explorer (Studio's Model Options offers it as Show in
-  Finder or Show in Explorer); and the [desktop companion](desktop.md#the-desktop-companion)'s:
-  `companion()`, `setCompanion(change)`, `popOut()` and `resetCompanionPlace()`, each a promise of
-  her state (`on`, `showAtLogin`, and `background`, true while background mode keeps her off
-  screen); `linkCompanion()`, which asks main for a port to her page, and
-  `feedingCompanion(feeding)`, whether a call she is on is up here; `onCompanionPick(callback)`,
-  which hands the page her menu's picks for the call, `call`, `hang-up`, `mute` or `unmute`; and
-  `onWindowShows(callback)`, whether the window shows, at once and at each change. `connectDesktop`
-  passes each pick to whoever listens through `subscribeCompanionPick` at that moment, and drops one
-  nobody does, and keeps the window's showing as a store (`windowShows()`, `subscribeWindowShows`),
-  true in a browser, by which the call's provider and Studio's preview hold their stages while the
-  window doesn't show, and `main.tsx` marks `<html>` with `data-window-hidden`, under which
-  `index.css` pauses every animation. A studio text editor or Appearance's model draft with unsaved
-  edits holds them through `holdUnsaved()`, counted, so the app hears `true` as the first hold
-  starts and `false` as the last ends, for its quit and restart boxes.
+  Finder or Show in Explorer); the [desktop updater](desktop.md#updates)'s `onUpdateState(callback)`
+  (reads the initial `UpdateState` synchronously and subscribes to pushes), `updateCheck()`,
+  `updateDownload()`, `updateInstall()`, and `updateSkip()`; and
+  the [desktop companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)`,
+  `popOut()` and `resetCompanionPlace()`, each a promise of her state (`on`, `showAtLogin`, and
+  `background`, true while background mode keeps her off screen); `linkCompanion()`, which asks main
+  for a port to her page, and `feedingCompanion(feeding)`, whether a call she is on is up here;
+  `onCompanionPick(callback)`, which hands the page her menu's picks for the call, `call`, `hang-up`,
+  `mute` or `unmute`; and `onWindowShows(callback)`, whether the window shows, at once and at each
+  change. `connectDesktop` passes each pick to whoever
+  listens through `subscribeCompanionPick` at that moment, and drops one nobody does, and keeps
+  the window's showing as a store (`windowShows()`, `subscribeWindowShows`), true in a browser, by
+  which the call's provider and Studio's preview hold their stages while the window doesn't show, and
+  `main.tsx` marks `<html>` with `data-window-hidden`, under which `index.css` pauses every
+  animation. A studio text editor or Appearance's model draft with unsaved edits holds them through
+  `holdUnsaved()`, counted, so the app hears `true` as the first hold starts and `false` as the
+  last ends, for its quit and restart boxes.
 - **The port** to her page, which isn't a bridge member, since the preload posts it: a window
   message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
   `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again
@@ -460,7 +464,11 @@ has none of them, and without them nothing below happens.
 
 **The chrome.** The window has no title bar. A strip across its top stands in for it
 (`components/title-strip.tsx`), with the window's own buttons, then **Go Back**, **Go Forward** and
-the sidebar's toggle, and the sidebar and the page's card sit below it, on its ground. Go Back and
+the sidebar's toggle, plus a trailing `<UpdateVersion />` badge when an update is available,
+downloading, downloaded, installing, or in error (clicking it opens `<UpdateDialogHost />` mounted
+in `router.tsx`; `<UpdateVersion />` also appears in Setup's header, and `lib/update-check.ts`
+handles manual checks with Sonner toasts when idle). The sidebar and the
+page's card sit below it, on its ground. Go Back and
 Go Forward step through the Navigation API's entries, which hold the app's own pages alone, never
 the loading page main showed before the first, and are disabled where there is none. The strip is
 2.75rem tall, the row main centres the traffic lights on and Windows' caption buttons' height, or as

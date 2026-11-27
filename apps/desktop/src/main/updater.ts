@@ -1,24 +1,26 @@
-// Updates on Electron: update-flow.ts's flow on electron-updater's autoUpdater, or on the mock, with
-// native.ts's boxes, Release Notes through the link policy, and the download's progress on the Dock
-// or the taskbar.
+// Updates on Electron: update-flow.ts's flow on electron-updater's autoUpdater, or on the mock,
+// with skipped versions persisted in userData and the download's progress on the Dock or taskbar.
 import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
-import { app, type NativeImage } from "electron";
+import { app } from "electron";
 import { autoUpdater, type NsisUpdater, type ProgressInfo } from "electron-updater";
+import type { UpdateState } from "../shared/bridge.ts";
 import { manifestNotes } from "../shared/release-notes.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
-import { native } from "./native.ts";
-import { loggedText, openAction } from "./policy.ts";
+import { loggedText } from "./policy.ts";
 import type { QuitFlow } from "./quit-flow.ts";
-import type { Strings } from "./strings.ts";
 import {
   mockUpdates,
+  readUpdateSettings,
+  UPDATES_FILE,
   type UpdateDriver,
   UpdateFlow,
-  type UpdateState,
+  type UpdateFlowOptions,
   updaterMode,
+  writeUpdateSettings,
 } from "./update-flow.ts";
 import {
   powershellArgs,
@@ -34,11 +36,8 @@ const execFileAsync = promisify(execFile);
 export interface UpdaterOptions {
   /** The quit flow, whose restart installs. */
   readonly quit: QuitFlow;
-  readonly strings: () => Strings;
   /** The version that runs. */
   readonly version: string;
-  /** Windows' boxes take the app's icon. */
-  readonly icon?: NativeImage;
   readonly changed: (state: UpdateState) => void;
 }
 
@@ -115,6 +114,25 @@ function releaseFeed(dev: boolean): UpdateDriver {
   };
 }
 
+function skippedStore(
+  driver: UpdateDriver | null,
+): Pick<UpdateFlowOptions, "skippedVersion" | "saveSkippedVersion"> {
+  if (driver === null) return {};
+  const settingsPath = join(app.getPath("userData"), UPDATES_FILE);
+  let settings = readUpdateSettings(settingsPath);
+  return {
+    skippedVersion: () => settings.skippedVersion,
+    saveSkippedVersion: (skippedVersion) => {
+      settings = { skippedVersion };
+      try {
+        writeUpdateSettings(settingsPath, settings);
+      } catch (error) {
+        mainLog.warn(`Eidolon: couldn't save skipped update: ${String(error)}`);
+      }
+    },
+  };
+}
+
 /** This run's updater: inert, the release feed or the mock, as updaterMode decides. */
 export function installUpdater(options: UpdaterOptions): UpdateFlow {
   const { mode, line } = updaterMode({
@@ -129,31 +147,23 @@ export function installUpdater(options: UpdaterOptions): UpdateFlow {
   mainLog.info(line);
   const mock = mode === "mock" ? mockUpdates(mainLog) : null;
   const feed = mode === "feed" || mode === "dev" ? releaseFeed(mode === "dev") : null;
+  const driver = mock?.driver ?? feed;
   const flow = new UpdateFlow({
-    driver: mock?.driver ?? feed,
+    driver,
     readOnly: mode === "read-only",
+    autoProceed: background && mode === "feed",
+    ...skippedStore(driver),
     restart:
       mock?.restart ?? ((install, installable) => options.quit.restart(install, installable)),
     relaunch: () => {
       app.relaunch();
       app.quit();
     },
-    show: (box) => native.messageBox(options.icon ? { ...box, icon: options.icon } : box),
-    quitting: () => options.quit.quitting,
-    open: (url) => {
-      if (openAction(url) !== "browser") return;
-      native.openExternal(url).catch((error: unknown) => {
-        mainLog.warn(
-          `Eidolon: the default browser didn't open the release notes: ${String(error)}`,
-        );
-      });
-    },
     progress: (fraction) => mainWindow()?.setProgressBar(fraction ?? -1),
-    strings: options.strings,
     version: options.version,
     log: mainLog,
     changed: options.changed,
-    notes: (info, current) => manifestNotes(info, current, options.strings().text.notes),
+    notes: manifestNotes,
   });
   // A check's and a download's errors reach their promises too; the flow takes only the others.
   if (feed !== null) autoUpdater.on("error", (error) => flow.failed(error));

@@ -1,14 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
-  type ChangeKind,
   compareVersions,
   DESKTOP_PACKAGE,
-  MAX_NOTE_ITEMS,
-  MAX_NOTE_LINE,
   manifestNotes,
-  type NotesLabels,
   notesBetween,
-  notesText,
   parseReleaseNotes,
   type ReleaseNoteEntry,
   type ReleaseNoteItem,
@@ -28,17 +23,6 @@ const entry = (version: string, over: Partial<ReleaseNoteEntry> = {}): ReleaseNo
   items: [item(`In ${version}`)],
   ...over,
 });
-
-const LABELS: NotesLabels = {
-  kinds: {
-    feature: "New",
-    performance: "Faster",
-    improvement: "Improved",
-    fix: "Fixed",
-    other: "Other",
-  } satisfies Record<ChangeKind, string>,
-  more: (count) => `${count} more not listed here.`,
-};
 
 describe("compareVersions", () => {
   test("orders by each number, not as text", () => {
@@ -168,94 +152,17 @@ describe("notesBetween", () => {
   });
 });
 
-describe("notesText", () => {
-  test("writes one line per item, its kind's label first", () => {
-    const text = notesText(
-      [
-        entry("0.2.0", {
-          items: [item("Check for updates"), item("Keep the window's size", { kind: "fix" })],
-        }),
-      ],
-      LABELS,
-    );
-    expect(text).toBe("New: Check for updates\nFixed: Keep the window's size");
-  });
-
-  test("heads each release with its version when there are several", () => {
-    const text = notesText(
-      [entry("0.3.0"), entry("0.2.0", { items: [item("Two", { kind: "performance" })] })],
-      LABELS,
-    );
-    expect(text).toBe("0.3.0\nNew: In 0.3.0\n\n0.2.0\nFaster: Two");
-  });
-
-  test("shows an item's first line only", () => {
-    const text = notesText([entry("0.2.0", { items: [item("Headline\n\nA paragraph")] })], LABELS);
-    expect(text).toBe("New: Headline");
-  });
-
-  test(`lists at most ${MAX_NOTE_ITEMS} items, and counts the rest under them`, () => {
-    const many = (version: string, count: number) =>
-      entry(version, {
-        items: Array.from({ length: count }, (_, i) => item(`${version} #${i + 1}`)),
-      });
-    const lines = notesText([many("0.3.0", MAX_NOTE_ITEMS - 1), many("0.2.0", 3)], LABELS).split(
-      "\n",
-    );
-    expect(lines.filter((line) => line.startsWith("New: "))).toHaveLength(MAX_NOTE_ITEMS);
-    expect(lines.at(-3)).toBe("New: 0.2.0 #1");
-    expect(lines.at(-2)).toBe("");
-    expect(lines.at(-1)).toBe("2 more not listed here.");
-  });
-
-  test("counts a release the list has no room for, and gives it no heading", () => {
-    const full = entry("0.3.0", {
-      items: Array.from({ length: MAX_NOTE_ITEMS }, (_, i) => item(`#${i + 1}`)),
-    });
-    const text = notesText([full, entry("0.2.0")], LABELS);
-    expect(text).not.toContain("0.2.0");
-    expect(text.endsWith("\n\n1 more not listed here.")).toBe(true);
-  });
-
-  test("writes nothing for no notes", () => {
-    expect(notesText([], LABELS)).toBe("");
-  });
-
-  test(`cuts a line or a version heading past ${MAX_NOTE_LINE} characters, a 200 KB one too, to end in "…"`, () => {
-    const huge = "x".repeat(200_000);
-    const text = notesText([entry(huge, { items: [item(huge)] }), entry("0.2.0")], LABELS);
-    expect(text.split("\n")).toEqual([
-      `${"x".repeat(MAX_NOTE_LINE - 1)}…`,
-      `New: ${"x".repeat(MAX_NOTE_LINE - 6)}…`,
-      "",
-      "0.2.0",
-      "New: In 0.2.0",
-    ]);
-    const fits = "y".repeat(MAX_NOTE_LINE - "New: ".length);
-    expect(notesText([entry("0.2.0", { items: [item(fits)] })], LABELS)).toBe(`New: ${fits}`);
-  });
-
-  test("never cuts a character in two", () => {
-    // The emoji's two UTF-16 units straddle the cut.
-    const before = "a".repeat(MAX_NOTE_LINE - "New: ".length - 2);
-    const text = notesText([entry("0.2.0", { items: [item(`${before}😀 and more`)] })], LABELS);
-    expect(text).toBe(`New: ${before}…`);
-  });
-});
-
 describe("manifestNotes", () => {
-  test("renders the manifest's eidolonNotes between the version that runs and the one offered", () => {
+  test("returns the manifest's eidolonNotes entries between the version that runs and the one offered", () => {
     const info = {
       version: "0.3.0",
       eidolonNotes: [entry("0.3.0"), entry("0.2.0"), entry("0.1.0")],
     };
-    expect(manifestNotes(info, "0.1.0", LABELS)).toBe(
-      notesText([entry("0.3.0"), entry("0.2.0")], LABELS),
-    );
+    expect(manifestNotes(info, "0.1.0")).toEqual([entry("0.3.0"), entry("0.2.0")]);
   });
 
-  test("gives no notes for a manifest without them, or with ones it can't read", () => {
-    expect(manifestNotes({ version: "0.2.0" }, "0.1.0", LABELS)).toBe("");
-    expect(manifestNotes({ version: "0.2.0", eidolonNotes: "a page" }, "0.1.0", LABELS)).toBe("");
+  test("returns empty for a manifest without notes, or with ones it can't read", () => {
+    expect(manifestNotes({ version: "0.2.0" }, "0.1.0")).toEqual([]);
+    expect(manifestNotes({ version: "0.2.0", eidolonNotes: "a page" }, "0.1.0")).toEqual([]);
   });
 });

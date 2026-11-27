@@ -12,6 +12,7 @@ import {
   isLanguage,
   isThemeSetting,
   type Language,
+  type UpdateState,
 } from "../shared/bridge.ts";
 import { type AppInvokes, appInvokes } from "./app-invokes.ts";
 import { ipcSender } from "./senders.ts";
@@ -54,6 +55,8 @@ export interface AppBridge extends AppInvokes {
   readonly feedingCompanion: (on: boolean) => void;
   /** window.ts's windowShows. */
   readonly windowShows: () => boolean;
+  /** The updater's current state. */
+  readonly updateState: () => UpdateState;
 }
 
 /**
@@ -95,6 +98,9 @@ export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.windowShows, (event) => {
     event.returnValue = accepts(BRIDGE.windowShows, ipcSender(event)) ? bridge.windowShows() : null;
   });
+  ipcMain.on(BRIDGE.updateState, (event) => {
+    event.returnValue = accepts(BRIDGE.updateState, ipcSender(event)) ? bridge.updateState() : null;
+  });
   for (const [channel, answer] of appInvokes(bridge)) {
     // The sender is read before anything awaits: senderFrame turns null once the page navigates.
     ipcMain.handle(channel, (event, argument: unknown) => answer(ipcSender(event), argument));
@@ -120,4 +126,9 @@ export function sendCompanionPick(pick: CompanionCallPick): void {
 /** Tells the app page whether its window shows: hidden or minimized, its call draws for no one. */
 export function sendWindowShows(shows: boolean): void {
   mainWindow()?.webContents.send(BRIDGE.windowShows, shows);
+}
+
+/** Pushes the updater's current state to the app page's title-bar badge and update dialog. */
+export function sendUpdateState(state: UpdateState): void {
+  mainWindow()?.webContents.send(BRIDGE.updateState, state);
 }

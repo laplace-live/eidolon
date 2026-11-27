@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,7 @@ import { connectDesktop, subscribeWindowShows, windowShows } from "@/lib/desktop
 import { createQueryClient } from "@/lib/query";
 import { exchangeLinkCode, takeLinkCode } from "@/lib/session";
 import { initTheme } from "@/lib/theme";
+import { checkForUpdates } from "@/lib/update-check";
 import { dynamicActivate, initialLang } from "@/locales/i18n";
 import { createRouter } from "@/router";
 import "@/index.css";
@@ -23,7 +24,23 @@ let router: ReturnType<typeof createRouter> | undefined;
 const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
 
-connectDesktop((to) => void router?.navigate(to));
+let resolveMounted!: () => void;
+const mounted = new Promise<void>((resolve) => {
+  resolveMounted = resolve;
+});
+
+function MarkMounted() {
+  useEffect(() => {
+    resolveMounted();
+  }, []);
+  return null;
+}
+
+// Wait for locale activation and <Toaster /> mount before firing check-updates so toasts are localized and visible.
+connectDesktop(
+  (to) => void router?.navigate(to),
+  () => void mounted.then(checkForUpdates),
+);
 // Hidden while it feeds the desktop companion, the desktop app's window still runs this page, and
 // an animation running would keep it drawing: index.css pauses them under the mark.
 const markWindowShows = () => {
@@ -42,6 +59,7 @@ void dynamicActivate(initialLang()).then(() => {
           <TooltipProvider>
             {router.element}
             <Toaster />
+            <MarkMounted />
           </TooltipProvider>
         </QueryClientProvider>
       </I18nProvider>

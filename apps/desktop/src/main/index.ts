@@ -33,6 +33,7 @@ import {
   handleAppBridge,
   sendCommand,
   sendCompanionPick,
+  sendUpdateState,
   sendWindowShows,
 } from "./chrome.ts";
 import { COMPANION_FILE, readCompanion } from "./companion.ts";
@@ -85,7 +86,7 @@ import {
 } from "./task-notices.ts";
 import { type CommandHost, changeCommand, commandState } from "./terminal-command.ts";
 import { AppTray, trayIconPath } from "./tray.ts";
-import { isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
+import { FallbackUpdateBoxes, isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
 import { installUpdater } from "./updater.ts";
 import {
   createWindow,
@@ -144,11 +145,10 @@ function run(): void {
   let tray: AppTray | null = null;
   let hideNotice: HideNotice | null = null;
   let updates: UpdateFlow | null = null;
-  /** Check for Updates… as the menus have it. */
-  let menuUpdates: UpdatesItem = "hidden";
+  let fallbackUpdates: FallbackUpdateBoxes | null = null;
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
-  /** A login launch holds the updater's launch check, and the box it may open, until the window shows. */
+  /** A login launch holds the updater's launch check until the window shows. */
   let updatesHeld = false;
 
   const pages = new WindowPages({
@@ -164,7 +164,15 @@ function run(): void {
     },
     serverVersion: () => backend.serverVersion,
   });
-  const commands = new PageCommands((command) => sendCommand(command));
+  const commands = new PageCommands(
+    (command) => sendCommand(command),
+    () => void fallbackUpdates?.checkByHand(),
+  );
+  const useFallbackUpdater = (): boolean =>
+    !background &&
+    !flow.quitting &&
+    !commands.hasUpdater &&
+    (commands.isListening || pages.failure !== null);
   const backend = new Backend({
     app: paths,
     env: process.env,
@@ -384,7 +392,11 @@ function run(): void {
       openWindow();
       commands.send("settings");
     },
-    checkForUpdates: () => updates?.checkByHand(),
+    checkForUpdates: () => {
+      openWindow();
+      if (useFallbackUpdater()) void fallbackUpdates?.checkByHand();
+      else commands.send("check-updates");
+    },
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
     licenses: () => open(licensesFile(paths)),
@@ -444,15 +456,18 @@ function run(): void {
     app.setAboutPanelOptions(aboutOptions());
   }
 
+  const menuUpdates = (): UpdatesItem =>
+    updates === null ? "hidden" : updatesItem(updates.state.phase);
+
   /**
    * The application menu and the tray's, in the shell's language, as the updater stands and with
    * the desktop companion's checkbox as she is.
    */
   function setMenus(): void {
-    menuUpdates = updates === null ? "hidden" : updatesItem(updates.state.phase);
+    const updatesMenu = menuUpdates();
     const on = companion?.on ?? false;
-    setApplicationMenu(strings(), actions, menuUpdates, on);
-    tray?.relabel(strings(), menuUpdates, on);
+    setApplicationMenu(strings(), actions, updatesMenu, on);
+    tray?.relabel(strings(), updatesMenu, on);
   }
 
   function languageChanged(next: Language): void {
@@ -478,6 +493,7 @@ function run(): void {
             companion?.feeding(false);
             link.appGone();
           });
+          win.webContents.on("render-process-gone", () => commands.replaced());
           win.on("closed", () => link.appGone());
           unloads.follow(win.webContents);
           // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
@@ -552,13 +568,19 @@ function run(): void {
       if (watch === null) mainLog.info("Eidolon: notifications are off in this copy of the app");
       updates = installUpdater({
         quit: flow,
-        strings,
         version,
-        icon,
-        // A download's progress leaves the item as it is.
         changed: (state) => {
-          if (updatesItem(state.phase) !== menuUpdates) setMenus();
+          sendUpdateState(state);
+          if (useFallbackUpdater()) void fallbackUpdates?.stateChanged(state);
         },
+      });
+      fallbackUpdates = new FallbackUpdateBoxes({
+        flow: updates,
+        version,
+        strings,
+        icon,
+        quitting: () => flow.quitting,
+        showBox: (opts) => native.messageBox(opts).then((result) => result.response),
       });
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
@@ -615,7 +637,12 @@ function run(): void {
       handleAppBridge({
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
-        takesCommands: () => commands.listening(),
+        takesCommands: () => {
+          commands.listening();
+          if (useFallbackUpdater() && updates !== null) {
+            void fallbackUpdates?.stateChanged(updates.state);
+          }
+        },
         unsaved: (held) => unloads.held(held),
         chooseFolder,
         loginItem: () => loginItemState(process.platform, unavailable, readLoginItem),
@@ -642,6 +669,14 @@ function run(): void {
         linkCompanion: () => link.appAsks(),
         feedingCompanion: (on) => companionFlow.feeding(on),
         windowShows,
+        updateState: () => {
+          commands.updaterListening();
+          return updates?.state ?? { phase: "unsupported" };
+        },
+        updateCheck: () => updates?.check(true) ?? Promise.resolve({ outcome: "none" }),
+        updateDownload: () => updates?.download(),
+        updateInstall: () => updates?.install(),
+        updateSkip: () => updates?.skip(),
       });
       handleCompanionBridge({
         linkApp: () => link.companionAsks(),
@@ -662,7 +697,7 @@ function run(): void {
       setMenus();
       setAbout();
       if (hasTray(process.platform, background)) {
-        tray = new AppTray(strings(), actions, menuUpdates, companionFlow.on, process.platform);
+        tray = new AppTray(strings(), actions, menuUpdates(), companionFlow.on, process.platform);
       }
       if (hasHideNotice(process.platform, background)) {
         hideNotice = new HideNotice({
