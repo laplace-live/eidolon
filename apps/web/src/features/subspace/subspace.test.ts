@@ -15,10 +15,14 @@ vi.doMock("@lingui/react/macro", linguiReactMacro);
 vi.doMock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 
 const mockCall = vi.fn();
+let actualSend!: typeof import("@/lib/api").send;
 let actualCall!: typeof import("@/lib/api").call;
+let actualBytes!: typeof import("@/lib/api").bytes;
 vi.doMock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  actualSend = actual.send;
   actualCall = actual.call;
+  actualBytes = actual.bytes;
   return { ...actual, call: mockCall };
 });
 
@@ -987,5 +991,87 @@ describe("Subspace web UI regressions", () => {
     expect(client.getQueryData(promptKey)).toBeUndefined();
     expect(toastErrorSpy).not.toHaveBeenCalled();
     client.clear();
+  });
+
+  test("stale host-scoped errors in send(), call(), and bytes() surface StaleHostMutationError after host switch", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const switchHost = () =>
+      resetHostCacheAndRoute(new QueryClient(), "/", vi.fn(), async () => {});
+
+    // 1. send(): rejected fetch after host switch
+    let rejectFetch: ((reason: unknown) => void) | null = null;
+    fetchSpy.mockImplementationOnce(
+      () =>
+        new Promise<Response>((_, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+    const sendRejectPromise = actualSend("PUT /api/local/settings", { body: {} });
+    await vi.waitFor(() => {
+      expect(rejectFetch).not.toBeNull();
+    });
+    await switchHost();
+    rejectFetch!(new TypeError("network down"));
+    await expect(sendRejectPromise).rejects.toBeInstanceOf(StaleHostMutationError);
+
+    // 2. send(): !response.ok body-read settles after host switch
+    let resolveErrBody: ((value: unknown) => void) | null = null;
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: () =>
+        new Promise((resolve) => {
+          resolveErrBody = resolve;
+        }),
+    } as unknown as Response);
+    const sendErrPromise = actualSend("PUT /api/local/settings", { body: {} });
+    await vi.waitFor(() => {
+      expect(resolveErrBody).not.toBeNull();
+    });
+    await switchHost();
+    resolveErrBody!({ error: { code: "internal", message: "boom" } });
+    await expect(sendErrPromise).rejects.toBeInstanceOf(StaleHostMutationError);
+
+    // 3. call(): response.json() failure after host switch
+    let rejectJson: ((reason: unknown) => void) | null = null;
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        new Promise((_, reject) => {
+          rejectJson = reject;
+        }),
+    } as unknown as Response);
+    const callPromise = actualCall("PUT /api/local/personas/:id/prompt", {
+      params: { id: "milky-green" },
+      body: { text: "old-host" },
+    });
+    await vi.waitFor(() => {
+      expect(rejectJson).not.toBeNull();
+    });
+    await switchHost();
+    rejectJson!(new SyntaxError("unexpected EOF"));
+    await expect(callPromise).rejects.toBeInstanceOf(StaleHostMutationError);
+
+    // 4. bytes(): response.arrayBuffer() failure after host switch
+    let rejectBytes: ((reason: unknown) => void) | null = null;
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      arrayBuffer: () =>
+        new Promise<ArrayBuffer>((_, reject) => {
+          rejectBytes = reject;
+        }),
+    } as unknown as Response);
+    const bytesPromise = actualBytes("POST /api/local/chats/:id/messages", {
+      params: { id: "chat-1" },
+      body: { text: "hi" },
+    });
+    await vi.waitFor(() => {
+      expect(rejectBytes).not.toBeNull();
+    });
+    await switchHost();
+    rejectBytes!(new Error("aborted mid-stream"));
+    await expect(bytesPromise).rejects.toBeInstanceOf(StaleHostMutationError);
   });
 });

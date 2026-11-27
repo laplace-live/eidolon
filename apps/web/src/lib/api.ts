@@ -172,6 +172,12 @@ function splitRoute(route: string): { readonly method: string; readonly path: st
   return { method: route.slice(0, space), path: route.slice(space + 1) };
 }
 
+function assertFreshHostWrite(hostScopedWrite: boolean, startedEpoch: number): void {
+  if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+    throw new StaleHostMutationError();
+  }
+}
+
 /** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
 export async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
@@ -199,14 +205,14 @@ export async function send(route: string, input: Loose = {}): Promise<Response> 
   try {
     response = await fetch(urlOf(route, input), init);
   } catch (error) {
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     if (signal?.aborted) throw error;
     throw new ApiError(0, "unreachable", String(error));
   }
-  if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
-    throw new StaleHostMutationError();
-  }
+  assertFreshHostWrite(hostScopedWrite, startedEpoch);
   if (!response.ok) {
     const err = await errorFrom(response);
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     if (err.status === 409 && err.code === "conflict") {
       for (const listener of [...expectedHostConflictListeners]) listener();
     }
@@ -226,12 +232,11 @@ export async function call<R extends JsonRoute>(
   const response = await send(route, input);
   try {
     const parsed = (await response.json()) as Spec<R>["response"];
-    if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
-      throw new StaleHostMutationError();
-    }
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     return parsed;
   } catch (error) {
     if (error instanceof StaleHostMutationError) throw error;
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     throw new ApiError(response.status, "bad-response", "not JSON");
   }
 }
@@ -257,12 +262,12 @@ export async function bytes<R extends RawRoute>(
   const response = await send(route, input);
   try {
     const data = await response.arrayBuffer();
-    if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
-      throw new StaleHostMutationError();
-    }
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     return data;
   } catch (error) {
-    if (error instanceof StaleHostMutationError || input?.signal?.aborted) throw error;
+    if (error instanceof StaleHostMutationError) throw error;
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
+    if (input?.signal?.aborted) throw error;
     throw new ApiError(response.status, "bad-response", "the body stopped short");
   }
 }

@@ -87,7 +87,7 @@ export async function startHeadlessServer(
   options: { readonly entry?: string } = {},
 ): Promise<{
   readonly server: RunningLocalServer;
-  readonly waitExited: Promise<void>;
+  onExited(listener: () => void): () => void;
   checkExited(): Promise<{ readonly code: number; readonly stderr: string } | null>;
   stop(): Promise<void>;
 }> {
@@ -99,10 +99,21 @@ export async function startHeadlessServer(
   let exitCode: number | null = null;
   let stderrLines: string[] = [];
   let stderrDone: Promise<void> = Promise.resolve();
-  let notifyPermExit: (() => void) | null = null;
-  const waitExited = new Promise<void>((resolve) => {
-    notifyPermExit = resolve;
-  });
+  const exitListeners = new Set<() => void>();
+  const notifyPermanentExit = () => {
+    for (const listener of [...exitListeners]) listener();
+    exitListeners.clear();
+  };
+  const onExited = (listener: () => void): (() => void) => {
+    if (exited) {
+      queueMicrotask(listener);
+      return () => {};
+    }
+    exitListeners.add(listener);
+    return () => {
+      exitListeners.delete(listener);
+    };
+  };
 
   const spawnChild = (port: number): Subprocess => {
     boundPort = null;
@@ -146,13 +157,13 @@ export async function startHeadlessServer(
           stderrLines.push(errorText(error));
           exitCode = 1;
           exited = true;
-          notifyPermExit?.();
+          notifyPermanentExit();
           return;
         }
       }
       exitCode = code;
       exited = true;
-      notifyPermExit?.();
+      notifyPermanentExit();
     });
     return child;
   };
@@ -199,7 +210,7 @@ export async function startHeadlessServer(
       if (probed !== null) {
         return {
           server: { ...probed.server, pid: probed.server.pid ?? currentChild?.pid ?? null },
-          waitExited,
+          onExited,
           checkExited,
           stop,
         };
@@ -387,10 +398,21 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
     while (!deps.signal?.aborted) {
       const exitedNow = await reportOwnedExit();
       if (exitedNow !== null) return exitedNow;
-      await Promise.race([
-        abortableSleep(pollMs, deps.signal).catch(() => {}),
-        ownedServer ? ownedServer.waitExited : new Promise<never>(() => {}),
-      ]);
+      if (ownedServer === null) {
+        await abortableSleep(pollMs, deps.signal).catch(() => {});
+      } else {
+        let unsubscribeExit = () => {};
+        try {
+          await Promise.race([
+            abortableSleep(pollMs, deps.signal).catch(() => {}),
+            new Promise<void>((resolve) => {
+              unsubscribeExit = ownedServer.onExited(resolve);
+            }),
+          ]);
+        } finally {
+          unsubscribeExit();
+        }
+      }
       if (deps.signal?.aborted) break;
       const exitedAfterWait = await reportOwnedExit();
       if (exitedAfterWait !== null) return exitedAfterWait;

@@ -1446,6 +1446,110 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(offer.relay?.url).toBe(`ws://127.0.0.1:${port}`);
   });
 
+  test("host_hello_ack restores prior invites before waking createPairingOffer so fresh invites arrive last", async () => {
+    const healthServer = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: "h.p.s", expiresAt: Date.now() + 60_000 }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    let controlAttempts = 0;
+    let firstSocket: import("ws").WebSocket | null = null;
+    const invitesByAttempt: string[][] = [];
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+
+    healthServer.on("upgrade", (req, socket, head) => {
+      if (req.url !== RELAY_PATHS.HOST_CONTROL) {
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const attemptIndex = controlAttempts;
+        controlAttempts += 1;
+        if (attemptIndex === 0) firstSocket = ws;
+        const sentInvites: string[] = [];
+        invitesByAttempt.push(sentInvites);
+        let relayHostId = "";
+        ws.on("message", async (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+          if (msg.type === "host_hello") {
+            relayHostId = String(msg.relayHostId);
+            const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString("base64");
+            await computeRelayControlProof(
+              relayPriv,
+              String(msg.hostPublicKeyB64),
+              challengeB64,
+              "alice",
+            );
+            ws.send(
+              JSON.stringify({
+                type: "host_challenge",
+                challengeB64,
+                relayEphPubB64: relayKp.publicKeyB64,
+                userId: "alice",
+              }),
+            );
+          } else if (msg.type === "host_challenge_ack") {
+            ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+          } else if (msg.type === "invite_create") {
+            sentInvites.push(String(msg.ticketHash));
+            ws.send(JSON.stringify({ type: "invite_created", inviteId: String(msg.inviteId) }));
+          }
+        });
+      });
+    });
+    await new Promise<void>((resolve) => healthServer.listen(0, "127.0.0.1", resolve));
+    const addr = healthServer.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const c of wss.clients) c.terminate();
+          wss.close(() => healthServer.close(() => resolve()));
+        }),
+    );
+
+    const dir = tempDir("subspace-invite-order-");
+    const store = new SubspaceStore(dir);
+    store.saveRelayAuth({
+      authUrl: `http://127.0.0.1:${port}`,
+      relayUrl: `ws://127.0.0.1:${port}`,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const host = new SubspaceHost({
+      store,
+      serverVersion: () => "0.19.0",
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => host.stop());
+
+    const offer1 = await host.createPairingOffer({ mode: "relay" });
+    const hash1 = await sha256Hex(utf8Encode(await deriveRelayInviteToken(offer1.ticket)));
+    expect(invitesByAttempt[0]).toEqual([hash1]);
+    expect(firstSocket).not.toBeNull();
+
+    // Drop the relay control connection and immediately request a replacement offer before
+    // reconnect completes: restored offer1 must be sent before (never after) fresh offer2.
+    (firstSocket as unknown as { close(code: number, reason: string): void }).close(
+      1012,
+      "restart",
+    );
+    await vi.waitFor(() => {
+      expect(host.relayConnected).toBe(false);
+    });
+    const offer2 = await host.createPairingOffer({ mode: "relay" });
+    const hash2 = await sha256Hex(utf8Encode(await deriveRelayInviteToken(offer2.ticket)));
+    expect(offer2.ticket).not.toBe(offer1.ticket);
+    expect(controlAttempts).toBeGreaterThanOrEqual(2);
+    expect(invitesByAttempt[1]).toEqual([hash1, hash2]);
+  });
+
   test("pairServer rejects re-pairing a host with active calls even when activate is false without dropping its tunnel", async () => {
     const hostDir = tempDir("subspace-repair-host-");
     const clientDir = tempDir("subspace-repair-client-");

@@ -386,4 +386,69 @@ server.listen(0, "127.0.0.1", () => {
       rmSync(work, { recursive: true, force: true });
     }
   });
+
+  test("startHeadlessServer onExited unsubscribes listeners without retaining references", async () => {
+    const work = mkdtempSync(join(tmpdir(), "eidolon-pair-onexited-"));
+    const entry = join(work, "exit-server.mjs");
+    const infoPath = lockInfoPath("local-server");
+    const tokenPath = join(dataHome(), "local-token");
+    writeFileSync(
+      entry,
+      `
+import { createHmac } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { dirname } from "node:path";
+
+const token = "exit-test-token-0123456789abcdef";
+const server = createServer((req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+  res.setHeader("content-type", "application/json");
+  if (url.pathname === "/api/local/session") {
+    const probe = url.searchParams.get("probe") ?? "";
+    const proof = createHmac("sha256", token).update("probe:" + probe, "utf8").digest("base64url");
+    res.writeHead(200).end(JSON.stringify({ proof }));
+    return;
+  }
+  if (url.pathname === "/api/local/subspace") {
+    res.writeHead(200).end(JSON.stringify({
+      activeHostId: null,
+      servers: [],
+      share: { hostName: "ExitTest", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants: [] },
+      relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
+    }));
+    setTimeout(() => process.exit(3), 120);
+    return;
+  }
+  res.writeHead(404).end();
+});
+server.listen(0, "127.0.0.1", () => {
+  const port = server.address().port;
+  mkdirSync(${JSON.stringify(dirname(infoPath))}, { recursive: true });
+  writeFileSync(${JSON.stringify(tokenPath)}, token);
+  writeFileSync(${JSON.stringify(infoPath)}, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
+});
+`,
+    );
+    const server = await startHeadlessServer(undefined, { entry });
+    let removedCalls = 0;
+    let keptCalls = 0;
+    try {
+      const unsubscribeRemoved = server.onExited(() => {
+        removedCalls += 1;
+      });
+      unsubscribeRemoved();
+      await new Promise<void>((resolve) => {
+        server.onExited(() => {
+          keptCalls += 1;
+          resolve();
+        });
+      });
+      expect(removedCalls).toBe(0);
+      expect(keptCalls).toBe(1);
+    } finally {
+      await server.stop();
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
 });

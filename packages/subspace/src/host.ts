@@ -875,8 +875,6 @@ export class SubspaceHost {
         return;
       }
       case "host_hello_ack": {
-        this.#relayBackoffMs = 1_000;
-        this.#setRelayState(true, null);
         const now = Date.now();
         await Promise.all([
           ...this.#deps.store
@@ -896,20 +894,21 @@ export class SubspaceHost {
           ...[...this.#invites.values()]
             .filter((invite) => invite.mode === "relay" && invite.expiresAt > now)
             .map(async (invite) => {
-              const ticketHash = await sha256Hex(
-                utf8Encode(await deriveRelayInviteToken(invite.ticket)),
-              );
+              if (!this.#invites.has(invite.id) || this.#relayWs !== ws) return;
               await sendWs(
                 ws,
                 JSON.stringify({
                   type: "invite_create",
                   inviteId: invite.id,
-                  ticketHash,
+                  ticketHash: invite.ticketSha256,
                   expiresAt: invite.expiresAt,
                 }),
               ).catch(() => {});
             }),
         ]);
+        if (this.#relayWs !== ws || this.#stopped || !this.#relayWanted) return;
+        this.#relayBackoffMs = 1_000;
+        this.#setRelayState(true, null);
         return;
       }
       case "connection_open": {
