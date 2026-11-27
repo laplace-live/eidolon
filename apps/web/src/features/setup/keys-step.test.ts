@@ -125,7 +125,7 @@ describe("RolePicker Model input", () => {
     expect(sameProvider).toContain('value="custom-tts"');
   });
 
-  test("keeps the no-default guidance on mind even while a custom model is typed", () => {
+  test("keeps the no-default guidance on mind even while a custom model is typed, unless env supplies one", () => {
     const html = renderPicker(
       "mind",
       { "mind.provider": { value: "openai-compatible", source: "persona" } },
@@ -137,5 +137,13 @@ describe("RolePicker Model input", () => {
     expect(html).toContain('aria-invalid="true"');
     expect(html).toContain("This account has no default model, so name the one to use.");
     expect(html).not.toContain("Default:");
+
+    const withEnv = renderPicker("mind", {
+      "mind.provider": { value: "openai-compatible", source: "persona" },
+      "mind.model": { value: "custom-llm", source: "persona", envValue: "qwen3" },
+    });
+    expect(withEnv).toContain('value="custom-llm"');
+    expect(withEnv).toContain('placeholder="qwen3"');
+    expect(withEnv).toContain("Default: qwen3. Leave blank to use it");
   });
 });

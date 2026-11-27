@@ -13,6 +13,7 @@ import {
   effectiveProviderType,
   fallbackModel,
   REINDEX_PATHS,
+  strip,
 } from "@/components/settings-form/controls";
 import { PROVIDER_OFF_LABELS } from "@/components/settings-form/labels";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
@@ -96,8 +97,9 @@ export function RolePicker({
   const providerType = providerOfAccount(current, accounts);
   const moved = effectiveProviderType(entry, rows, {}, accounts) !== providerType;
   const model = modelAfter(entry, rows, drafts, accounts);
-  const defaultModelId = fallbackModel(entry, rows, drafts, accounts);
   const modelRow = rows.find((row) => row.path === modelPath);
+  const inheritedModel = !moved && modelRow?.envValue ? strip(modelRow.envValue) || null : null;
+  const defaultModelId = inheritedModel ?? fallbackModel(entry, rows, drafts, accounts);
   const savedModel =
     !moved && modelRow && modelRow.source !== "default" && typeof modelRow.value === "string"
       ? modelRow.value

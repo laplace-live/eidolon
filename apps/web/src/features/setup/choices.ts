@@ -115,10 +115,8 @@ export function modelAfter(
   accounts: AccountList | undefined,
 ): string | null {
   const modelPath = `${role.path}.model`;
-  const hasDraft = modelPath in drafts;
   const typed = strip(drafts[modelPath] ?? "");
   if (typed !== "") return typed;
-  if (hasDraft) return fallbackModel(role, rows, drafts, accounts);
   const moved =
     effectiveProviderType(role, rows, {}, accounts) !==
     effectiveProviderType(role, rows, drafts, accounts);
@@ -264,8 +262,12 @@ export function missingFields(
   const provider = providerById(need.provider);
   const account = accounts?.find((entry) => entry.id === need.account);
   const missing: string[] = [];
+  const inheritedBase =
+    account?.baseUrl && account.baseUrl.source !== "account" ? account.baseUrl.value : null;
   const effectiveBase =
-    typedBaseUrl !== undefined ? typedBaseUrl.trim() : (account?.baseUrl?.value ?? "");
+    typedBaseUrl !== undefined
+      ? typedBaseUrl.trim() || (inheritedBase ?? "")
+      : (account?.baseUrl?.value ?? "");
   if (provider?.baseUrl === null && provider.baseUrlEnv !== null && effectiveBase === "") {
     missing.push("baseUrl");
   }

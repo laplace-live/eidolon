@@ -323,12 +323,20 @@ describe("the keys the picks need", () => {
     });
     expect(missingFields(need, [saved], undefined)).toEqual([]);
     expect(missingFields(need, [saved], undefined, "")).toEqual(["baseUrl"]);
+    const inherited = account("openai-compatible", "openai-compatible", {
+      baseUrl: { value: "http://127.0.0.1:8000/v1", source: "env" },
+    });
+    expect(missingFields(need, [inherited], undefined, "")).toEqual([]);
+    const fromSettings = account("openai-compatible", "openai-compatible", {
+      baseUrl: { value: "http://127.0.0.1:8000/v1", source: "settings" },
+    });
+    expect(missingFields(need, [fromSettings], undefined, "")).toEqual([]);
     expect(
       missingFields({ account: "fish-speech", provider: "fish-speech" }, [], undefined),
     ).toEqual([]);
   });
 
-  test("clearing a saved model draft in KeysStep writes null so provider default applies", () => {
+  test("clearing a saved model draft in KeysStep writes null so provider default or env applies", () => {
     const base = rows({
       "voice.provider": { value: "openai-compatible", source: "persona" },
       "voice.model": { value: "kokoro", source: "persona" },
@@ -338,5 +346,33 @@ describe("the keys the picks need", () => {
       persona: { "voice.model": null },
       app: {},
     });
+
+    const mindEnv = rows({
+      "mind.provider": { value: "openai-compatible", source: "persona" },
+      "mind.model": { value: "custom-llm", source: "persona", envValue: "qwen3" },
+    });
+    expect(modelAfter(roleById("mind"), mindEnv, { "mind.model": "" }, [])).toBe("qwen3");
+    expect(
+      modelAfter(
+        roleById("mind"),
+        rows({
+          "mind.provider": { value: "openai-compatible", source: "persona" },
+          "mind.model": { value: "custom-llm", source: "persona" },
+        }),
+        { "mind.model": "" },
+        [],
+      ),
+    ).toBeNull();
+    expect(
+      modelAfter(
+        roleById("mind"),
+        rows({
+          "mind.provider": { value: "openai", source: "persona" },
+          "mind.model": { value: "gpt-6-luna", source: "persona", envValue: "qwen3" },
+        }),
+        { "mind.provider": "openai-compatible" },
+        [],
+      ),
+    ).toBeNull();
   });
 });
