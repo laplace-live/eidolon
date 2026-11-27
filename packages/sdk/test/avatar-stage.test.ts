@@ -9,6 +9,7 @@ import {
   type ModelInventory,
   resolveSetup,
 } from "../src/avatar/model.ts";
+import { stageMotions } from "../src/avatar/motions.ts";
 import { AvatarStage, type FrameClock } from "../src/avatar/stage.ts";
 
 class FakeClock implements FrameClock {
@@ -79,6 +80,7 @@ function fakeModel() {
     mouth: vi.fn<AvatarModel["mouth"]>(),
     lookAt: vi.fn<AvatarModel["lookAt"]>(),
     lookStrength: vi.fn<AvatarModel["lookStrength"]>(),
+    advance: vi.fn<NonNullable<AvatarModel["advance"]>>(),
     roleParameters: vi.fn<AvatarModel["roleParameters"]>((role) =>
       role === "AngleX" ? ["ParamAngleX"] : role === "AngleY" ? ["ParamAngleY"] : [],
     ),
@@ -737,5 +739,123 @@ describe("models and errors", () => {
     const pending = stage.alphaAt(300, 200);
     stage.dispose();
     expect(await pending).toBe(0);
+  });
+});
+
+describe("motion variation across stages", () => {
+  test("pace scales updates, fades, gestures and saccades while mouth stays on real time", () => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    const stage = stageOf({ pace: 0.8, offset: 5, sway: 1.1, away: [-0.3, 0.4] });
+    const model = fakeModel();
+    const read = vi.fn((_dt: number) => 0.5);
+    stage.mouth({ read });
+    stage.show(
+      model,
+      resolveSetup(INVENTORY, {
+        look: 0.6,
+        moodParameters: { happy: [{ id: "ParamMouthForm", value: 1 }] },
+      }),
+    );
+    clock.frame(0);
+    // Idle starts before advance so both her Idle clip and her breathing jump to the offset.
+    const [played] = model.play.mock.invocationCallOrder;
+    const [advanced] = model.advance.mock.invocationCallOrder;
+    expect(advanced).toBeGreaterThan(played ?? Number.POSITIVE_INFINITY);
+    expect(model.advance).toHaveBeenCalledTimes(1);
+    expect(model.advance).toHaveBeenCalledWith(5);
+    expect(model.lookStrength).toHaveBeenCalledWith(0.6, { sway: 1.1 });
+
+    // A setup edited in place does not advance her phase again.
+    stage.show(model, resolveSetup(INVENTORY, { look: 0.6 }));
+    clock.frame(50);
+    expect(model.advance).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenLastCalledWith(0.05);
+    expect(model.update).toHaveBeenLastCalledWith(expect.closeTo(0.04, 6));
+
+    // At pace 0.8, the 5 s max saccade dwell lasts 6250 ms.
+    expect(model.lookAt).toHaveBeenLastCalledWith(0.15, 0.15);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    clock.frame(6200);
+    expect(model.lookAt).toHaveBeenLastCalledWith(0.15, 0.15);
+    clock.frame(6300);
+    expect(model.lookAt).toHaveBeenLastCalledWith(-0.15, -0.15);
+
+    stage.direct(direction({ looking: "away" }));
+    clock.frame(6400);
+    const [ax = 0, ay = 0] = model.lookAt.mock.lastCall ?? [];
+    expect(Math.abs(ax - -0.3)).toBeLessThanOrEqual(0.04);
+    expect(Math.abs(ay - 0.4)).toBeLessThanOrEqual(0.03);
+  });
+
+  test("skips offset under reduced motion and aims away without drifting", () => {
+    const stage = stageOf({ reducedMotion: true, offset: 6, away: [-0.32, 0.48] });
+    const model = fakeModel();
+    stage.show(model, SETUP);
+    stage.direct(direction({ looking: "away" }));
+    clock.frame(0);
+    clock.frame(100);
+    expect(model.advance).not.toHaveBeenCalled();
+    expect(model.lookAt).toHaveBeenLastCalledWith(-0.32, 0.48);
+  });
+
+  test("reaction delays listener gestures in real time while speaking and asked ones fire at once", () => {
+    const stage = stageOf({ pace: 0.8, reaction: 0.2 });
+    const model = fakeModel();
+    stage.show(model, SETUP);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    model.play.mockClear();
+
+    clock.frame(100);
+    clock.frame(190);
+    expect(model.play).not.toHaveBeenCalled();
+    clock.frame(200);
+    expect(model.play).toHaveBeenCalledWith("nod-id", 2, { priority: 2 });
+
+    // Speaking cues land with her voice, without waiting out listener reaction time.
+    model.play.mockClear();
+    stage.direct(direction({ speaking: true, gesture: { name: "nod", seq: 2 } }));
+    clock.frame(220);
+    expect(model.play).toHaveBeenCalledWith("nod-id", 2, { priority: 2 });
+
+    // Studio's Play fires immediately too, cancelling any pending listener reaction.
+    stage.direct(direction({ speaking: false, gesture: { name: "nod", seq: 3 } }));
+    clock.frame(240);
+    model.play.mockClear();
+    stage.gesture("shake");
+    clock.frame(260);
+    expect(model.play).toHaveBeenCalledWith("shake-id", 2, { priority: 2 });
+    model.play.mockClear();
+    clock.frame(360);
+    clock.frame(460);
+    expect(model.play).not.toHaveBeenCalled();
+  });
+
+  test("stageMotions spreads pace, phase, sway, away side and reaction across a cast", () => {
+    expect(stageMotions(0)).toEqual([]);
+    let state = 12345;
+    const random = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x1_0000_0000;
+    };
+    const solo = stageMotions(1, random);
+    expect(solo).toHaveLength(1);
+    expect(solo[0]?.reaction).toBe(0);
+
+    for (let trial = 0; trial < 20; trial++) {
+      const pair = stageMotions(2, random);
+      const [a, b] = pair;
+      expect(Math.abs((a?.pace ?? 1) - (b?.pace ?? 1))).toBeGreaterThan(0.05);
+      const phaseGap = Math.abs((a?.offset ?? 0) - (b?.offset ?? 0));
+      expect(Math.min(phaseGap, 12 - phaseGap)).toBeGreaterThan(1.5);
+      expect(Math.sign(a?.away?.[0] ?? 0)).toBe(-Math.sign(b?.away?.[0] ?? 0));
+      expect(Math.abs((a?.reaction ?? 0) - (b?.reaction ?? 0))).toBeGreaterThan(0.02);
+    }
+
+    const six = stageMotions(6, random);
+    expect(six).toHaveLength(6);
+    expect(new Set(six.map((m) => m.pace)).size).toBe(6);
+    expect(six.filter((m) => (m.away?.[0] ?? 0) < 0)).toHaveLength(3);
+    expect(six.filter((m) => (m.away?.[0] ?? 0) > 0)).toHaveLength(3);
   });
 });

@@ -243,11 +243,11 @@ describe("@laplace.live/eidolon-sdk package build", () => {
         [
           'import { EidolonClient, isAudioQuality, parseMarkup } from "@laplace.live/eidolon-sdk";',
           'import { EidolonClientProvider, useEidolonConversation } from "@laplace.live/eidolon-sdk/react";',
-          'import { AvatarStage, type Direction, directionOf, directionState, inspectPsd2liveRig, moodTags } from "@laplace.live/eidolon-sdk/avatar";',
+          'import { AvatarStage, type Direction, directionOf, directionState, inspectPsd2liveRig, moodTags, stageMotions } from "@laplace.live/eidolon-sdk/avatar";',
           "",
           'const mood: readonly string[] = moodTags("[懒洋洋的，带点笑意]");',
           "const direction: Direction = directionOf(directionState());",
-          "export const show = (canvas: HTMLCanvasElement) => new AvatarStage(canvas, { fps: 30 }).direct(direction);",
+          "export const show = (canvas: HTMLCanvasElement) => new AvatarStage(canvas, { fps: 30, ...stageMotions(2)[0] }).direct(direction);",
           "export const read = (bytes: Uint8Array) => inspectPsd2liveRig(bytes).then((inventory) => inventory.clips.length + mood.length);",
           "const client = new EidolonClient();",
           'const ok: boolean = isAudioQuality("best");',

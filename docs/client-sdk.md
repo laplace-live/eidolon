@@ -16,13 +16,13 @@ Three entries ship in the npm package, licensed under `AGPL-3.0-only`:
   `useEidolonTransportState`, `useEidolonMicControl`, `useEidolonMediaState`,
   `useEidolonMediaTrack`, `useEidolonNetworkInfo`, `useEidolonWatchdog`, `useEidolonConversation`,
   `useEidolonAudioLevel`, and `useEidolonMicDevices`.
-- **`@laplace.live/eidolon-sdk/avatar`** (`./avatar`): `AvatarStage`, `loadPsd2liveModel`,
-  `inspectPsd2liveRig`, `resolveSetup`, the direction reducer (`direct`, `directionOf`,
-  `directionState`), the mood table (`moodTags`, `soundCueEffect`, `DEFAULT_MOOD_EXPRESSIONS`), the
-  mouth (`MouthMeter`, `mouthCurve`), framing (`bustBox`, `companionBox`, `viewFor`, `panBox`,
-  `zoomBox`) and the runtime's loader (`compilePsd2liveRuntime`, `psd2liveRuntimeUrl`). It
-  includes PSD2Live's web player, ported, and ships its runtime: both are MIT
-  ([Avatars](#avatars-eidolon-sdkavatar)).
+- **`@laplace.live/eidolon-sdk/avatar`** (`./avatar`): `AvatarStage`, `stageMotions`,
+  `loadPsd2liveModel`, `inspectPsd2liveRig`, `resolveSetup`, the direction reducer (`direct`,
+  `directionOf`, `directionState`), the mood table (`moodTags`, `soundCueEffect`,
+  `DEFAULT_MOOD_EXPRESSIONS`), the mouth (`MouthMeter`, `mouthCurve`), framing (`bustBox`,
+  `companionBox`, `viewFor`, `panBox`, `zoomBox`) and the runtime's loader
+  (`compilePsd2liveRuntime`, `psd2liveRuntimeUrl`). It includes PSD2Live's web player, ported, and
+  ships its runtime: both are MIT ([Avatars](#avatars-eidolon-sdkavatar)).
 
 The SDK sits on top of `@pipecat-ai/client-js` and `@pipecat-ai/small-webrtc-transport` (exact
 versions in `packages/sdk/package.json`) and hides their transport quirks so downstream apps import
@@ -248,8 +248,9 @@ call's turns. The local app's Studio previews a persona's models with it.
 
 ### Models
 
-- **`loadPsd2liveModel(canvas, bytes, {runtime?})`** loads a rig, checking every chunk's CRC,
-  uploads its texture pages and resolves to a `Psd2liveModel`, the stage's `AvatarModel`.
+- **`loadPsd2liveModel(canvas, bytes, {runtime?, seed?})`** loads a rig, checking every chunk's CRC,
+  seeds its blink timing so rigs in separate runtime instances don't blink together, uploads its
+  texture pages and resolves to a `Psd2liveModel`, the stage's `AvatarModel`.
   `model.rig` reaches what the stage doesn't drive: poses, parameters and part opacity.
 - **`inspectPsd2liveRig(bytes, {runtime?})`** reads the same file without WebGL into a
   `ModelInventory`: the runtime's version, the generator, the canvas, the clips (id, name, group,
@@ -285,8 +286,10 @@ call's turns. The local app's Studio previews a persona's models with it.
 
 ### The stage
 
-`new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, onError?, clock?})` owns the frame
-loop; the model has none of its own.
+`new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, pace?, offset?, sway?, away?, reaction?, onError?, clock?})`
+owns the frame loop; the model has none of its own. `stageMotions(count, random?)` produces
+stratified, shuffled motion settings (`pace`, `offset`, `sway`, `away`, `reaction`) so stages side
+by side don't move in unison, while lip sync stays on real audio time.
 
 - **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
   setup in place, without starting over a clip the setup didn't change, and stops one it took

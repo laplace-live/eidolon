@@ -43,6 +43,7 @@ export {
   type SoundCueEffect,
   soundCueEffect,
 } from "./moods.ts";
+export { type AvatarStageMotion, stageMotions } from "./motions.ts";
 export {
   MOUTH_CURVE,
   type MouthCurveOptions,

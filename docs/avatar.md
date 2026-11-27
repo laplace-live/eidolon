@@ -242,14 +242,15 @@ and ends lent moods. The stage applies the direction each frame:
   alone.
 - **Skipped:** word, token, backchannel and expression outputs, which repeat her sentences or sit
   outside her reply.
-- **Gaze:** at the viewer, (0, 0), while she listens; up and to the side, (0.35, 0.45), drifting
-  slowly, while she thinks; otherwise around the viewer, within 0.15 on each axis, moving every 2 to
-  5 s (each axis -1..1, x right, y up). A page can instead have her follow the pointer or hold a
-  point (`gaze()`). PSD2Live's runtime turns her toward a point by a share of each role's half
-  range, so a point at the edge turns AngleX, AngleY and her eyes all the way and BodyAngleX a
-  third of it; the model's `look` scales all of it through `p2l_behavior_strength`, its sway and
-  speed left at 1, set each time a setup is shown, so Studio's preview, a call and the desktop
-  companion all turn her the same.
+- **Gaze:** at the viewer, (0, 0), while she listens; up and to the side, (0.35, 0.45) by default,
+  drifting slowly, while she thinks; otherwise around the viewer, within 0.15 on each axis, moving
+  every 2 to 5 s scaled by the stage's `pace` (each axis -1..1, x right, y up). A page can instead
+  have her follow the pointer or hold a point (`gaze()`). PSD2Live's runtime turns her toward a
+  point by a share of each role's half range, so a point at the edge turns AngleX, AngleY and her
+  eyes all the way and BodyAngleX a third of it; the model's `look` scales all of it through
+  `p2l_behavior_strength` alongside the stage's `sway` (1 unless given), set each time a setup is
+  shown. `loadPsd2liveModel` also seeds `p2l_behavior_seed` per model, since one runtime instance
+  per model would otherwise start every rig on the first rig's blink sequence.
 - **Reduced motion** keeps her face, her mouth and where she looks, and the blinking and breathing
   the runtime does by itself, and leaves out every clip (idle, talking and gestures), the nods and
   shakes the stage makes itself, the drift and the wandering eyes. A clip a page plays through
@@ -420,8 +421,11 @@ call is the app shell's (`features/call/call-provider.tsx`), and so are her stag
   up.
 - **Her stages.** The Call click makes one stage per member with a model (`CallStages`,
   `stages.ts`), each on a canvas of its own, kept for the call's life and disposed when it is over,
-  and drawing at most 60 frames a second, however fast the display. The same canvas moves between
-  the screen, a group call's tile and the dock's thumbnail
+  and drawing at most 60 frames a second, however fast the display. On a group call, `stageMotions`
+  gives each stage its own motion `pace`, starting `offset` into her idle clip and breathing cycle,
+  breathing `sway`, thinking gaze `away` side, and listener `reaction` delay so members don't sway,
+  blink, look away or nod in unison, while lip sync stays on real audio time. The same canvas moves
+  between the screen, a group call's tile and the dock's thumbnail
   (`avatar-view.tsx`). Out of the page it pauses, and its GL context survives the move, so leaving
   the chat costs no drawing and coming back no reload.
 - **Loaded on demand.** The renderer comes in through `import("./avatar-loader")`, so the app's

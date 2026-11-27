@@ -16,15 +16,26 @@ import {
   type Psd2liveRuntimeSource,
 } from "./runtime.ts";
 
+// p2l_rig_load_ex seeds each rig after the first in a wasm instance so rigs side by side don't
+// blink together (p2l_runtime.h); one instance per model makes every rig the first unless seeded.
+let nextSeed = 0;
+
+function nextBlinkSeed(): number {
+  nextSeed = (nextSeed + 1) >>> 0;
+  const mixed = ((Math.random() * 0x1_0000_0000) ^ Math.imul(nextSeed, 0x9e37_79b1)) >>> 0;
+  return mixed || 1;
+}
+
 /** Loads a .p2lrt model to draw on `canvas`, with the vendored runtime unless given another. */
 export async function loadPsd2liveModel(
   canvas: HTMLCanvasElement,
   bytes: Uint8Array,
-  o: { readonly runtime?: Psd2liveRuntimeSource } = {},
+  o: { readonly runtime?: Psd2liveRuntimeSource; readonly seed?: number } = {},
 ): Promise<Psd2liveModel> {
   const rig = Psd2liveRig.load(instantiatePsd2live(await compilePsd2liveRuntime(o.runtime)), bytes);
   let renderer: Psd2liveRenderer | null = null;
   try {
+    rig.behaviorSeed((o.seed ?? nextBlinkSeed()) >>> 0 || 1);
     renderer = new Psd2liveRenderer(rig, canvas);
     await renderer.loadTextures();
     return new Psd2liveModel(rig, renderer);
@@ -101,8 +112,13 @@ export class Psd2liveModel implements AvatarModel {
     this.#run(() => this.rig.lookAt(x, y));
   }
 
-  lookStrength(strength: number): void {
-    this.#run(() => this.rig.behaviorStrength(1, strength, 1));
+  lookStrength(strength: number, o?: { readonly sway?: number }): void {
+    this.#run(() => this.rig.behaviorStrength(o?.sway ?? 1, strength, 1));
+  }
+
+  advance(seconds: number): void {
+    if (this.#disposed) return;
+    this.#run(() => this.rig.advance(seconds));
   }
 
   roleParameters(role: string): readonly string[] {
