@@ -156,12 +156,14 @@ export function rewriteSdpAnswer(
 function attachIdleUdpSocket(
   socket: Socket,
   onClose: () => void,
+  idleMs = UDP_BRIDGE_IDLE_MS,
 ): { readonly touch: () => void; readonly stop: () => void } {
   let closed = false;
   let lastActiveAt = Date.now();
+  const checkMs = Math.min(5_000, Math.max(25, Math.floor(idleMs / 2)));
   const check = setInterval(() => {
-    if (!closed && Date.now() - lastActiveAt >= UDP_BRIDGE_IDLE_MS) onClose();
-  }, 5_000);
+    if (!closed && Date.now() - lastActiveAt >= idleMs) onClose();
+  }, checkMs);
   check.unref?.();
 
   socket.on("error", () => onClose());
@@ -247,12 +249,31 @@ export function openHostUdpBridge(
   };
 }
 
+export interface ClientCallBridgePoolOptions {
+  readonly idleTimeoutMs?: number;
+  readonly onCallOpened?: (pcId: string) => void;
+  readonly onBridgeClosed?: (pcId: string, closedByAlert: boolean) => void;
+}
+
 /** Client-side UDP bridge pool rewriting `/api/offer` answers to loopback ports over the mux. */
 export class ClientCallBridgePool {
   readonly #bridges = new Map<string, BridgeEntry>();
+  readonly #options: ClientCallBridgePoolOptions;
+
+  constructor(options: ClientCallBridgePoolOptions = {}) {
+    this.#options = options;
+  }
 
   get activeCount(): number {
     return this.#bridges.size;
+  }
+
+  hasBridge(pcId: string): boolean {
+    return this.#bridges.has(pcId);
+  }
+
+  activePcIds(): IterableIterator<string> {
+    return this.#bridges.keys();
   }
 
   async adaptOfferResponse(
@@ -281,6 +302,7 @@ export class ClientCallBridgePool {
     }
     this.#bridges.get(payload.pc_id)?.close();
     const bridge = await this.#openBridge(payload.pc_id, candidate, mux);
+    this.#options.onCallOpened?.(payload.pc_id);
     const rewrittenSdp = rewriteSdpAnswer(payload.sdp, {
       localPort: bridge.localPort,
       mode: options.mode,
@@ -320,6 +342,7 @@ export class ClientCallBridgePool {
       const channel: MuxCallChannelHandle = mux.openCallChannel(target.port, target.address);
       let browserPeer: { address: string; port: number } | null = null;
       let closed = false;
+      let closedByAlert = false;
 
       const close = () => {
         if (closed) return;
@@ -330,14 +353,16 @@ export class ClientCallBridgePool {
         }
         idle.stop();
         this.#bridges.delete(pcId);
+        this.#options.onBridgeClosed?.(pcId, closedByAlert);
         channel.close();
       };
       const scheduleAlertClose = () => {
         if (closed || alertTimer !== null) return;
+        closedByAlert = true;
         alertTimer = setTimeout(close, DTLS_ALERT_CLOSE_DELAY_MS);
         alertTimer.unref?.();
       };
-      const idle = attachIdleUdpSocket(socket, close);
+      const idle = attachIdleUdpSocket(socket, close, this.#options.idleTimeoutMs);
 
       socket.on("message", (msg, rinfo) => {
         if (closed) return;

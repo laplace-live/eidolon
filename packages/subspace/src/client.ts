@@ -285,11 +285,18 @@ export interface SubspaceClientEvents {
   readonly onStateChange?: () => void;
 }
 
+export interface SubspaceClientOptions {
+  readonly callBridgeIdleMs?: number;
+  readonly callProbeIntervalMs?: number;
+}
+
 /** Persistent E2EE WebSocket + Mux client for a paired remote Eidolon instance. */
 export class SubspaceClient {
   #server: SubspaceSavedServer;
   readonly #events: SubspaceClientEvents;
-  readonly #bridges = new ClientCallBridgePool();
+  readonly #callProbeIntervalMs: number;
+  readonly #bridges: ClientCallBridgePool;
+  readonly #activePcIds = new Set<string>();
 
   #tunnel: ActiveTunnel | null = null;
   #connecting: Promise<ActiveTunnel> | null = null;
@@ -305,14 +312,33 @@ export class SubspaceClient {
   #backoffMs = 500;
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   #pingTimer: ReturnType<typeof setInterval> | null = null;
+  #callProbeTimer: ReturnType<typeof setInterval> | null = null;
+  #callProbeTask: Promise<void> | null = null;
 
   constructor(
     server: SubspaceSavedServer,
     events: SubspaceClientEvents = {},
     initialTunnel?: ActiveTunnel,
+    options: SubspaceClientOptions = {},
   ) {
     this.#server = server;
     this.#events = events;
+    this.#callProbeIntervalMs = options.callProbeIntervalMs ?? 5_000;
+    this.#bridges = new ClientCallBridgePool({
+      idleTimeoutMs: options.callBridgeIdleMs,
+      onCallOpened: (pcId) => {
+        this.#activePcIds.add(pcId);
+        if (this.#server.mode === "direct") this.#ensureCallProbeTimer();
+      },
+      onBridgeClosed: (pcId, closedByAlert) => {
+        if (closedByAlert || this.#server.mode === "relay") {
+          this.#activePcIds.delete(pcId);
+          if (this.#activePcIds.size === 0) this.#stopCallProbeTimer();
+        } else if (this.#activePcIds.has(pcId)) {
+          void this.refreshActiveCallCount();
+        }
+      },
+    });
     if (initialTunnel !== undefined) {
       this.#wanted = true;
       this.#attachTunnel(initialTunnel);
@@ -340,7 +366,58 @@ export class SubspaceClient {
   }
 
   get activeCallCount(): number {
-    return this.#pendingOffers + this.#bridges.activeCount;
+    let calls = this.#activePcIds.size;
+    for (const pcId of this.#bridges.activePcIds()) {
+      if (!this.#activePcIds.has(pcId)) calls += 1;
+    }
+    return this.#pendingOffers + calls;
+  }
+
+  async refreshActiveCallCount(): Promise<number> {
+    if (this.#activePcIds.size === 0 || this.#server.mode === "relay") {
+      return this.activeCallCount;
+    }
+    if (this.#tunnel === null || this.#tunnel.mux.closed) {
+      this.#activePcIds.clear();
+      this.#stopCallProbeTimer();
+      return this.activeCallCount;
+    }
+    if (this.#callProbeTask !== null) {
+      await this.#callProbeTask;
+      return this.activeCallCount;
+    }
+    const tunnel = this.#tunnel;
+    const task = (async () => {
+      for (const pcId of [...this.#activePcIds]) {
+        if (this.#tunnel !== tunnel || tunnel.mux.closed) {
+          this.#activePcIds.clear();
+          break;
+        }
+        try {
+          const res = await tunnel.mux.request({
+            method: "PATCH",
+            path: "/api/offer",
+            headers: [["content-type", "application/json"]],
+            body: new Response(JSON.stringify({ pc_id: pcId, candidates: [] })).body,
+          });
+          if (res.body !== null && !res.body.locked) void res.body.cancel().catch(() => {});
+          if (res.status === 404 || res.status === 400 || res.status === 410) {
+            this.#activePcIds.delete(pcId);
+          }
+        } catch {
+          if (this.#tunnel !== tunnel || tunnel.mux.closed) {
+            this.#activePcIds.clear();
+            break;
+          }
+        }
+      }
+    })().finally(() => {
+      if (this.#callProbeTask === task) this.#callProbeTask = null;
+      if (this.#activePcIds.size === 0) this.#stopCallProbeTimer();
+    });
+    this.#callProbeTask = task;
+    await task;
+    return this.activeCallCount;
   }
 
   updateServer(server: SubspaceSavedServer): void {
@@ -409,6 +486,21 @@ export class SubspaceClient {
       new URL(targetPathWithSearch, "http://subspace.local").pathname === "/api/offer";
     if (isOfferRequest) this.#pendingOffers += 1;
     try {
+      let renegotiatedPcId: string | null = null;
+      let offerReqBuf: ArrayBuffer | null = null;
+      if (isOfferRequest && request.body !== null) {
+        offerReqBuf = await request.arrayBuffer();
+        try {
+          const parsedReq = JSON.parse(new TextDecoder().decode(offerReqBuf)) as {
+            pc_id?: unknown;
+          } | null;
+          if (typeof parsedReq?.pc_id === "string" && parsedReq.pc_id.length > 0) {
+            renegotiatedPcId = parsedReq.pc_id;
+          }
+        } catch {
+          // Ignore non-JSON /api/offer payloads.
+        }
+      }
       let tunnel: ActiveTunnel;
       try {
         tunnel = await this.connect();
@@ -431,7 +523,13 @@ export class SubspaceClient {
         method: request.method,
         path: targetPathWithSearch,
         headers,
-        body: bodiless ? null : request.body,
+        body: isOfferRequest
+          ? offerReqBuf === null
+            ? null
+            : new Response(offerReqBuf).body
+          : bodiless
+            ? null
+            : request.body,
         signal: request.signal,
       });
       const outHeaders = new Headers();
@@ -442,10 +540,21 @@ export class SubspaceClient {
         headers: outHeaders,
       });
       if (isOfferRequest) {
-        return await this.#bridges.adaptOfferResponse(response, tunnel.mux, {
+        const adapted = await this.#bridges.adaptOfferResponse(response, tunnel.mux, {
           mode: this.#server.mode,
           directHost: this.#server.endpoint?.host,
         });
+        if (adapted.ok && renegotiatedPcId !== null) {
+          try {
+            const parsedRes = (await adapted.clone().json()) as { pc_id?: unknown } | null;
+            if (typeof parsedRes?.pc_id === "string" && parsedRes.pc_id !== renegotiatedPcId) {
+              this.#activePcIds.delete(renegotiatedPcId);
+            }
+          } catch {
+            // Ignore non-JSON /api/offer answers.
+          }
+        }
+        return adapted;
       }
       return response;
     } finally {
@@ -577,6 +686,8 @@ export class SubspaceClient {
       clearInterval(this.#pingTimer);
       this.#pingTimer = null;
     }
+    this.#stopCallProbeTimer();
+    this.#activePcIds.clear();
     this.#bridges.closeAll();
     const current = this.#tunnel;
     this.#tunnel = null;
@@ -585,6 +696,20 @@ export class SubspaceClient {
       current.mux.close(reason);
       safeCloseWs(current.ws, 1000, reason);
     }
+  }
+
+  #ensureCallProbeTimer(): void {
+    if (this.#callProbeTimer !== null) return;
+    this.#callProbeTimer = setInterval(() => {
+      void this.refreshActiveCallCount();
+    }, this.#callProbeIntervalMs);
+    this.#callProbeTimer.unref?.();
+  }
+
+  #stopCallProbeTimer(): void {
+    if (this.#callProbeTimer === null) return;
+    clearInterval(this.#callProbeTimer);
+    this.#callProbeTimer = null;
   }
 
   #scheduleReconnect(): void {

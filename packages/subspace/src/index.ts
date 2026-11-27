@@ -18,6 +18,7 @@ export {
   performPairingHandshake,
   SubspaceClient,
   type SubspaceClientEvents,
+  type SubspaceClientOptions,
   SubspaceConnectError,
   type SubspaceConnectionState,
 } from "./client.ts";
@@ -65,6 +66,7 @@ export {
 } from "./store.ts";
 export {
   ClientCallBridgePool,
+  type ClientCallBridgePoolOptions,
   extractHostUdpCandidate,
   extractHostUdpCandidates,
   extractHostUdpPort,

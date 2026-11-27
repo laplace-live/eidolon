@@ -45,6 +45,7 @@ export interface SubspaceManagerDeps {
   readonly dispatchLocal: (request: Request) => Promise<Response>;
   readonly relayUrl?: () => string;
   readonly authUrl?: () => string;
+  readonly callBridgeIdleMs?: number;
   readonly onHostEvent?: (event: SubspaceHostEvent) => void;
 }
 
@@ -314,8 +315,11 @@ export class SubspaceManager {
 
   async setActiveHostId(hostId: string | null): Promise<SubspaceStateSnapshot> {
     if (hostId !== null) this.#requireServer(hostId);
-    if (hostId !== this.activeHostId && this.#totalActiveCalls() > 0) {
-      throw codedError("call-active", "A call is in progress; hang up before switching servers");
+    if (hostId !== this.activeHostId) {
+      await this.#refreshRemoteActiveCalls();
+      if (this.#totalActiveCalls() > 0) {
+        throw codedError("call-active", "A call is in progress; hang up before switching servers");
+      }
     }
     const previous = this.activeHostId;
     if (previous !== null && previous !== hostId) {
@@ -351,6 +355,7 @@ export class SubspaceManager {
       );
     }
     const offer = parsed.offer;
+    await this.#refreshRemoteActiveCalls();
     if (this.#hasActiveCallsOnHostKey(offer.hostPublicKeyB64)) {
       throw codedError(
         "call-active",
@@ -358,6 +363,7 @@ export class SubspaceManager {
       );
     }
     const handshake = await performPairingHandshake(offer);
+    await this.#refreshRemoteActiveCalls();
     if (this.#hasActiveCallsOnHostKey(offer.hostPublicKeyB64)) {
       handshake.tunnel.mux.close("Call active");
       handshake.tunnel.ws.terminate();
@@ -384,6 +390,7 @@ export class SubspaceManager {
       file.servers.find((s) => s.hostPublicKeyB64 === saved.hostPublicKeyB64) ?? saved;
     this.#clients.get(persisted.id)?.stop();
     this.#attachClient(persisted, handshake.tunnel);
+    await this.#refreshRemoteActiveCalls();
     if (input.activate && this.#totalActiveCalls() === 0) {
       await this.setActiveHostId(persisted.id);
     }
@@ -405,11 +412,14 @@ export class SubspaceManager {
         : target.endpoint;
     const endpointChanged =
       nextEndpoint?.host !== target.endpoint?.host || nextEndpoint?.port !== target.endpoint?.port;
-    if (endpointChanged && (this.#clients.get(id)?.activeCallCount ?? 0) > 0) {
-      throw codedError(
-        "call-active",
-        "A call is in progress on this server; hang up before changing its address or port",
-      );
+    if (endpointChanged) {
+      await this.#clients.get(id)?.refreshActiveCallCount();
+      if ((this.#clients.get(id)?.activeCallCount ?? 0) > 0) {
+        throw codedError(
+          "call-active",
+          "A call is in progress on this server; hang up before changing its address or port",
+        );
+      }
     }
     const updated: SubspaceSavedServer = {
       ...target,
@@ -425,11 +435,14 @@ export class SubspaceManager {
   }
 
   async removeServer(id: string): Promise<SubspaceStateSnapshot> {
-    if (this.activeHostId === id && this.#totalActiveCalls() > 0) {
-      throw codedError(
-        "call-active",
-        "A call is in progress; hang up before removing the active server",
-      );
+    if (this.activeHostId === id) {
+      await this.#refreshRemoteActiveCalls();
+      if (this.#totalActiveCalls() > 0) {
+        throw codedError(
+          "call-active",
+          "A call is in progress; hang up before removing the active server",
+        );
+      }
     }
     this.#clients.get(id)?.stop();
     this.#clients.delete(id);
@@ -680,6 +693,10 @@ export class SubspaceManager {
     return await client.proxyFetch(request, targetPathWithSearch);
   }
 
+  async #refreshRemoteActiveCalls(): Promise<void> {
+    await Promise.all([...this.#clients.values()].map((client) => client.refreshActiveCallCount()));
+  }
+
   #totalActiveCalls(): number {
     return this.#deps.activeCalls() + this.activeCallCount;
   }
@@ -737,6 +754,9 @@ export class SubspaceManager {
         },
       },
       initialTunnel,
+      this.#deps.callBridgeIdleMs === undefined
+        ? undefined
+        : { callBridgeIdleMs: this.#deps.callBridgeIdleMs },
     );
     this.#clients.set(server.id, client);
     return client;
