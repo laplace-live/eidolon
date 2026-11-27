@@ -1006,7 +1006,7 @@ export class SubspaceHost {
     }
     guardWsErrors(ws);
     this.#relayWs = ws;
-    const controlBinding = { ws, relayUrl, auth } as const;
+    const controlBinding = { ws, relayUrl, auth, hasMoreDevices: false };
     let wsFailed = false;
 
     ws.on("open", () => {
@@ -1021,14 +1021,21 @@ export class SubspaceHost {
         hostName: identity.hostName,
       };
       let usedBytes = Buffer.byteLength(
-        JSON.stringify({ ...baseHello, devices: [], revokedGrantIds: [] }),
+        JSON.stringify({ ...baseHello, devices: [], revokedGrantIds: [], hasMoreDevices: true }),
         "utf8",
       );
+      let hasMoreDevices = false;
       const revokedGrantIds: string[] = [];
       for (const id of this.#deps.store.readRevokedRelayGrantIds()) {
-        if (revokedGrantIds.length >= 512) break;
+        if (revokedGrantIds.length >= 512) {
+          hasMoreDevices = true;
+          break;
+        }
         const itemBytes = Buffer.byteLength(JSON.stringify(id), "utf8") + 1;
-        if (usedBytes + itemBytes > helloBudgetBytes) break;
+        if (usedBytes + itemBytes > helloBudgetBytes) {
+          hasMoreDevices = true;
+          break;
+        }
         usedBytes += itemBytes;
         revokedGrantIds.push(id);
       }
@@ -1038,24 +1045,32 @@ export class SubspaceHost {
         readonly clientName: string;
       }[] = [];
       for (const grant of this.#deps.store.readGrants()) {
-        if (initialDevices.length >= 512) break;
         if (!grantSupportsRelay(grant)) continue;
+        if (initialDevices.length >= 512) {
+          hasMoreDevices = true;
+          break;
+        }
         const entry = {
           grantId: grant.id,
           tokenHash: grant.relayTokenSha256 ?? grant.tokenSha256,
           clientName: grant.clientName,
         };
         const itemBytes = Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
-        if (usedBytes + itemBytes > helloBudgetBytes) break;
+        if (usedBytes + itemBytes > helloBudgetBytes) {
+          hasMoreDevices = true;
+          break;
+        }
         usedBytes += itemBytes;
         initialDevices.push(entry);
       }
+      controlBinding.hasMoreDevices = hasMoreDevices;
       void sendWs(
         ws,
         JSON.stringify({
           ...baseHello,
           ...(revokedGrantIds.length > 0 ? { revokedGrantIds } : {}),
           ...(initialDevices.length > 0 ? { devices: initialDevices } : {}),
+          ...(hasMoreDevices ? { hasMoreDevices: true } : {}),
         }),
       ).catch(() => {});
     });
@@ -1127,6 +1142,7 @@ export class SubspaceHost {
       readonly ws: WebSocket;
       readonly relayUrl: string;
       readonly auth: SubspaceRelayAuthRecord;
+      readonly hasMoreDevices: boolean;
     },
   ): Promise<void> {
     let parsed: RelayHostControlOutbound;
@@ -1228,6 +1244,17 @@ export class SubspaceHost {
           !this.#relayWanted
         ) {
           return;
+        }
+        if (binding.hasMoreDevices) {
+          await sendWs(ws, JSON.stringify({ type: "host_sync_ready" })).catch(() => {});
+          if (
+            this.#relayWs !== ws ||
+            ws.readyState !== WebSocket.OPEN ||
+            this.#stopped ||
+            !this.#relayWanted
+          ) {
+            return;
+          }
         }
         this.#relayBackoffMs = 1_000;
         this.#setRelayState(true, null);
@@ -1363,9 +1390,25 @@ export class SubspaceHost {
       close: (code = 1000, reason = "Closed") => closeSocket(code, reason),
     };
 
+    const bufferedFrames: WebSocket.RawData[] = [];
+    const bufferMessage = (raw: WebSocket.RawData) => {
+      if (bufferedFrames.length >= 256) {
+        closeSocket(RELAY_CLOSE_CODE.RATE_LIMITED, "Too many buffered frames");
+        return;
+      }
+      bufferedFrames.push(raw);
+    };
+    const sendAuthenticated = async (response: E2eeAuthResponse) => {
+      // Buffer client Mux frames arriving immediately after e2ee_authenticated until mux attaches.
+      ws.on("message", bufferMessage);
+      await session.sendJson(response, (sealed) => sendWs(ws, sealed));
+    };
+
     const closeSocket = (code = 1000, reason = "Closed") => {
       if (closed) return;
       closed = true;
+      ws.off("message", bufferMessage);
+      bufferedFrames.length = 0;
       this.#sessions.delete(sessionHandle);
       allowedCallTargets.length = 0;
       mux?.close(reason);
@@ -1447,18 +1490,15 @@ export class SubspaceHost {
           lastSeenAt: Date.now(),
         });
         await this.#installDeviceOnRelay(grantId, relayTokenSha256, clientName);
-        await session.sendJson(
-          {
-            type: "e2ee_authenticated",
-            ok: true,
-            grantId,
-            hostName: currentIdentity.hostName,
-            serverVersion: this.#deps.serverVersion(),
-            deviceToken,
-            ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
-          } satisfies E2eeAuthResponse,
-          (sealed) => sendWs(ws, sealed),
-        );
+        await sendAuthenticated({
+          type: "e2ee_authenticated",
+          ok: true,
+          grantId,
+          hostName: currentIdentity.hostName,
+          serverVersion: this.#deps.serverVersion(),
+          deviceToken,
+          ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
+        });
         if (
           closed ||
           this.#stopped ||
@@ -1499,17 +1539,14 @@ export class SubspaceHost {
           }
           await this.#installDeviceOnRelay(grantId, missingRelayHash, grant.clientName);
         }
-        await session.sendJson(
-          {
-            type: "e2ee_authenticated",
-            ok: true,
-            grantId,
-            hostName: identity.hostName,
-            serverVersion: this.#deps.serverVersion(),
-            ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
-          } satisfies E2eeAuthResponse,
-          (sealed) => sendWs(ws, sealed),
-        );
+        await sendAuthenticated({
+          type: "e2ee_authenticated",
+          ok: true,
+          grantId,
+          hostName: identity.hostName,
+          serverVersion: this.#deps.serverVersion(),
+          ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
+        });
         if (
           closed ||
           this.#stopped ||
@@ -1611,34 +1648,43 @@ export class SubspaceHost {
         closeSocket(1001, "Server stopping");
         return;
       }
-      sessionHandle.mux = mux;
-      // If Relay connected while the handshake was still attaching mux, push the latest Relay endpoint now.
-      if (mode === "direct" && this.#relayConnected && relayCapable) {
-        const latestRelay = await this.#activeRelayEndpoint(identity.publicKeyB64);
-        if (
-          !closed &&
-          !this.#stopped &&
-          !mux.closed &&
-          latestRelay !== undefined &&
-          (relayInfo === undefined ||
-            relayInfo.url !== latestRelay.url ||
-            relayInfo.relayHostId !== latestRelay.relayHostId)
-        ) {
-          void mux.sendRelayUpdate(latestRelay);
-        }
-      }
-
-      ws.on("message", (raw) => {
+      const endpoint = mux;
+      sessionHandle.mux = endpoint;
+      const handleMuxMessage = (raw: WebSocket.RawData) => {
         void (async () => {
           try {
             const plain = await session.open(rawDataToUint8Array(raw));
-            await mux?.handleFrame(plain);
+            await endpoint.handleFrame(plain);
           } catch (error) {
             logger.warning(`[subspace] Host session error for ${grantId}: ${errorText(error)}`);
             closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Decryption error");
           }
         })();
-      });
+      };
+      ws.off("message", bufferMessage);
+      ws.on("message", handleMuxMessage);
+      for (const frame of bufferedFrames.splice(0)) {
+        handleMuxMessage(frame);
+      }
+
+      // Push the latest Relay endpoint asynchronously so #activeRelayEndpoint never delays message handling.
+      if (mode === "direct" && this.#relayConnected && relayCapable) {
+        void this.#activeRelayEndpoint(identity.publicKeyB64)
+          .then((latestRelay) => {
+            if (
+              !closed &&
+              !this.#stopped &&
+              !endpoint.closed &&
+              latestRelay !== undefined &&
+              (relayInfo === undefined ||
+                relayInfo.url !== latestRelay.url ||
+                relayInfo.relayHostId !== latestRelay.relayHostId)
+            ) {
+              void endpoint.sendRelayUpdate(latestRelay);
+            }
+          })
+          .catch(() => {});
+      }
     } catch {
       closeSocket(1011, "Handshake failed");
     }

@@ -21,7 +21,11 @@ function readCleanEnvValue(name: string, raw: string, expectation: string): stri
   return value;
 }
 
-function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: boolean): string {
+function readNormalizedUrl(
+  name: string,
+  raw: string,
+  options: { readonly stripTrailingSlashes: boolean; readonly preserveRawValue?: boolean },
+): string {
   // Reject shell line-continuation characters and single-slash typos before URL parsing.
   const value = readCleanEnvValue(
     name,
@@ -38,14 +42,20 @@ function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: bool
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`${name} must use http or https (got ${JSON.stringify(raw)})`);
   }
-  // Preserve explicit default port (e.g. :443) for string-matched JWT iss while canonicalizing case.
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new Error(`${name} must not include URL credentials (got ${JSON.stringify(raw)})`);
+  }
+  if (options.preserveRawValue) {
+    return options.stripTrailingSlashes ? withoutTrailingSlashes(value) : value;
+  }
+  // Preserve explicit default port (e.g. :443) while canonicalizing scheme/host case.
   const explicitPortMatch = /^https?:\/\/(?:\[[^\]]+\]|[^/:]+):(\d+)/i.exec(value);
   const authority =
     explicitPortMatch !== null && parsed.port === ""
       ? `${parsed.hostname}:${explicitPortMatch[1]}`
       : parsed.host;
   const canonical = `${parsed.protocol}//${authority}${parsed.pathname}${parsed.search}${parsed.hash}`;
-  return stripTrailingSlashes ? withoutTrailingSlashes(canonical) : canonical;
+  return options.stripTrailingSlashes ? withoutTrailingSlashes(canonical) : canonical;
 }
 
 function readNormalizedToken(name: string, raw: string): string {
@@ -58,13 +68,14 @@ export function loadRelayConfig(): RelayConfig {
   const publicUrl = readNormalizedUrl(
     "EIDOLON_RELAY_PUBLIC_URL",
     envStr("EIDOLON_RELAY_PUBLIC_URL", `http://localhost:${port}`),
-    true,
+    { stripTrailingSlashes: true },
   );
   const dbPath = envStr("EIDOLON_RELAY_DB_PATH", "./data/relay.sqlite");
+  // Keep authIssuer's configured string intact (aside from trailing slashes) for exact JWT `iss` checks.
   const authIssuer = readNormalizedUrl(
     "EIDOLON_RELAY_AUTH_ISSUER",
     envStr("EIDOLON_RELAY_AUTH_ISSUER", DEFAULT_RELAY_AUTH_ISSUER),
-    true,
+    { stripTrailingSlashes: true, preserveRawValue: true },
   );
   const authAudience = readNormalizedToken(
     "EIDOLON_RELAY_AUTH_AUDIENCE",
@@ -74,7 +85,9 @@ export function loadRelayConfig(): RelayConfig {
   const jwksUrl =
     explicitJwks === undefined
       ? `${authIssuer}/.well-known/jwks.json`
-      : readNormalizedUrl("EIDOLON_RELAY_JWKS_URL", explicitJwks, false);
+      : readNormalizedUrl("EIDOLON_RELAY_JWKS_URL", explicitJwks, {
+          stripTrailingSlashes: false,
+        });
 
   return {
     host,

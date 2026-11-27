@@ -942,21 +942,23 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       }
     };
     try {
-      process.env.EIDOLON_RELAY_PUBLIC_URL = " https://relay.example.com/ ";
+      process.env.EIDOLON_RELAY_PUBLIC_URL = " https://Relay.Example.com/ ";
       process.env.EIDOLON_RELAY_AUTH_ISSUER = " https://ID.Example.com:443/ ";
       process.env.EIDOLON_RELAY_AUTH_AUDIENCE = " eidolon-relay ";
       delete process.env.EIDOLON_RELAY_JWKS_URL;
       expect(loadRelayConfig()).toMatchObject({
         publicUrl: "https://relay.example.com",
-        authIssuer: "https://id.example.com:443",
+        authIssuer: "https://ID.Example.com:443",
         authAudience: "eidolon-relay",
-        jwksUrl: "https://id.example.com:443/.well-known/jwks.json",
+        jwksUrl: "https://ID.Example.com:443/.well-known/jwks.json",
       });
 
       for (const [key, badValue] of [
         ["EIDOLON_RELAY_AUTH_ISSUER", "https://id.laplace.live \\"],
         ["EIDOLON_RELAY_AUTH_ISSUER", "https:/id.example.com"],
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https://user:123@example.com"],
         ["EIDOLON_RELAY_PUBLIC_URL", "https://eidolon-relay.vrp.moe \\"],
+        ["EIDOLON_RELAY_PUBLIC_URL", "https://user:123@example.com"],
         ["EIDOLON_RELAY_AUTH_AUDIENCE", "eidolon-relay \\"],
         ["EIDOLON_RELAY_JWKS_URL", "https://id.laplace.live/.well-known/jwks.json \\"],
       ] as const) {
@@ -1275,5 +1277,141 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       code: RELAY_CLOSE_CODE.UNAUTHORIZED,
       reason: "Revoked or invalid device token",
     });
+  });
+
+  test("host_hello hasMoreDevices holds client connections at retryable 4404 until host_sync_ready installs overflow devices", async () => {
+    const syncAuth = await startMockAuthServer(new Map([["sess-sync", "alice"]]));
+    const syncRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => syncRelay.stop());
+
+    const syncNow = Math.floor(Date.now() / 1000);
+    const syncJwt = signEdDsaJwt(syncAuth.ed.privateKey, "ed-1", {
+      iss: syncAuth.issuer,
+      aud: ["eidolon-relay"],
+      sub: "alice",
+      iat: syncNow,
+      exp: syncNow + 900,
+    });
+    const syncHostKeys = await generateX25519KeyPair();
+    const syncPrivKey = await importX25519PrivateKey(syncHostKeys.privateKeyPkcs8B64);
+    const syncHostId = await deriveRelayHostId(base64ToBytes(syncHostKeys.publicKeyB64));
+    const syncToken = "b".repeat(64);
+    const syncTokenHash = await sha256Hex(utf8Encode(syncToken));
+
+    const syncHostWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      {
+        headers: { authorization: `Bearer ${syncJwt}` },
+      },
+    );
+    cleanups.push(() => {
+      if (syncHostWs.readyState !== WebSocket.CLOSED) syncHostWs.terminate();
+    });
+    const syncMessages: Record<string, unknown>[] = [];
+    syncHostWs.on("message", (raw) => {
+      syncMessages.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await new Promise<void>((resolve, reject) => {
+      syncHostWs.once("open", () => resolve());
+      syncHostWs.once("error", reject);
+    });
+    syncHostWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "OverflowHost",
+        hasMoreDevices: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "host_challenge")).toBe(true),
+    );
+    const syncChallenge = syncMessages.find((m) => m.type === "host_challenge")!;
+    const syncProof = await computeRelayControlProof(
+      syncPrivKey,
+      String(syncChallenge.relayEphPubB64),
+      String(syncChallenge.challengeB64),
+      String(syncChallenge.userId),
+    );
+    syncHostWs.send(JSON.stringify({ type: "host_challenge_ack", proofB64: syncProof }));
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "host_hello_ack")).toBe(true),
+    );
+
+    // Client connecting during overflow sync must get retryable 4404 HOST_NOT_FOUND, never fatal 4401.
+    const earlyClientWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`,
+    );
+    cleanups.push(() => {
+      if (earlyClientWs.readyState !== WebSocket.CLOSED) earlyClientWs.terminate();
+    });
+    const earlyClosed = waitForClose(earlyClientWs);
+    await new Promise<void>((resolve, reject) => {
+      earlyClientWs.once("open", () => resolve());
+      earlyClientWs.once("error", reject);
+    });
+    earlyClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: syncHostId,
+        credential: { kind: "device", grantId: "overflow-g1", relayToken: syncToken },
+      }),
+    );
+    expect((await earlyClosed).code).toBe(RELAY_CLOSE_CODE.HOST_NOT_FOUND);
+
+    // After installing the overflow device and signaling host_sync_ready, the same client reaches the host.
+    syncHostWs.send(
+      JSON.stringify({
+        type: "device_install",
+        grantId: "overflow-g1",
+        tokenHash: syncTokenHash,
+        clientName: "OverflowClient",
+      }),
+    );
+    syncHostWs.send(JSON.stringify({ type: "host_sync_ready" }));
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "device_installed")).toBe(true),
+    );
+
+    const readyClientWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`,
+    );
+    cleanups.push(() => {
+      if (readyClientWs.readyState !== WebSocket.CLOSED) readyClientWs.terminate();
+    });
+    const readyClosed = waitForClose(readyClientWs);
+    await new Promise<void>((resolve, reject) => {
+      readyClientWs.once("open", () => resolve());
+      readyClientWs.once("error", reject);
+    });
+    readyClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: syncHostId,
+        credential: { kind: "device", grantId: "overflow-g1", relayToken: syncToken },
+      }),
+    );
+    const opened = await Promise.race([
+      vi
+        .waitFor(() => {
+          const msg = syncMessages.find((m) => m.type === "connection_open");
+          if (!msg) throw new Error("waiting");
+          return msg;
+        })
+        .then(() => "connection_open"),
+      readyClosed.then((c) => `closed:${c.code}`),
+    ]);
+    expect(opened).toBe("connection_open");
   });
 });

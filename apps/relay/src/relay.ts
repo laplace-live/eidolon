@@ -412,9 +412,18 @@ export class RelayHub {
       const previous = this.#hosts.get(relayHostId);
       if (previous !== undefined && previous.ws !== ws) {
         safeClose(previous.ws, 1000, "Replaced by newer host connection");
+        this.#hosts.delete(relayHostId);
       }
       const entry: OnlineHost = { relayHostId, userId, ws, alive: true };
-      this.#hosts.set(relayHostId, entry);
+      let registered = false;
+      const registerHost = () => {
+        if (registered || ws.readyState !== WebSocket.OPEN) return;
+        registered = true;
+        this.#hosts.set(relayHostId, entry);
+      };
+      if (hello.hasMoreDevices !== true) {
+        registerHost();
+      }
       const dropHost = () => {
         if (this.#hosts.get(relayHostId) === entry) {
           this.#hosts.delete(relayHostId);
@@ -450,6 +459,9 @@ export class RelayHub {
             case "device_revoke":
               this.#store.revokeDevice(relayHostId, msg.grantId);
               ws.send(JSON.stringify({ type: "device_revoked", grantId: msg.grantId }));
+              return;
+            case "host_sync_ready":
+              registerHost();
               return;
             default:
               return;

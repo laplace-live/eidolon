@@ -3413,7 +3413,24 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
   });
 
   test("MuxEndpoint buffers early RELAY_UPDATE, pairing preserves slow post-ticket auth, and host_hello stays within 64 KiB", async () => {
-    // 1. MuxEndpoint buffers RELAY_UPDATE received before handler attaches and flushes on setOnRelayUpdate.
+    // 1. MuxEndpoint buffers RELAY_UPDATE received before handler attaches and isolates throwing replay handlers.
+    const throwingMux = new MuxEndpoint({ sendFrame: async () => {} });
+    await throwingMux.handleFrame(
+      encodeMuxFrame(
+        MUX_FRAME.RELAY_UPDATE,
+        0,
+        utf8Encode(
+          JSON.stringify({ url: "https://relay.example.test", relayHostId: "host_throw" }),
+        ),
+      ),
+    );
+    expect(() =>
+      throwingMux.setOnRelayUpdate(() => {
+        throw new Error("boom");
+      }),
+    ).not.toThrow();
+    throwingMux.close();
+
     const mux = new MuxEndpoint({ sendFrame: async () => {} });
     const earlyPayload = { url: "https://relay.example.test", relayHostId: "host_abc123" };
     await mux.handleFrame(
@@ -3493,6 +3510,8 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     const relayKp = await generateX25519KeyPair();
     let seenHelloBytes = 0;
     let helloDeviceCount = 0;
+    let seenHasMoreDevices = false;
+    let seenSyncReady = false;
     const totalInstalled = new Set<string>();
     const relaySrv = createServer((req, res) => {
       if (new URL(req.url ?? "/", "http://127.0.0.1").pathname === "/api/auth/token") {
@@ -3511,6 +3530,7 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
         const msg = JSON.parse(text) as Record<string, unknown>;
         if (msg.type === "host_hello") {
           seenHelloBytes = Buffer.byteLength(text, "utf8");
+          seenHasMoreDevices = msg.hasMoreDevices === true;
           const devs = (msg.devices as { grantId: string }[] | undefined) ?? [];
           helloDeviceCount = devs.length;
           for (const d of devs) totalInstalled.add(d.grantId);
@@ -3528,6 +3548,8 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
         } else if (msg.type === "device_install") {
           totalInstalled.add(String(msg.grantId));
           ws.send(JSON.stringify({ type: "device_installed", grantId: msg.grantId }));
+        } else if (msg.type === "host_sync_ready") {
+          seenSyncReady = true;
         }
       });
     });
@@ -3570,7 +3592,9 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     await vi.waitFor(() => expect(capHost.relayConnected).toBe(true), { timeout: 10_000 });
     expect(seenHelloBytes).toBeGreaterThan(0);
     expect(seenHelloBytes).toBeLessThanOrEqual(48 * 1024);
+    expect(seenHasMoreDevices).toBe(true);
     expect(helloDeviceCount).toBeLessThan(350);
-    expect(totalInstalled.size).toBe(350);
+    await vi.waitFor(() => expect(totalInstalled.size).toBe(350), { timeout: 10_000 });
+    await vi.waitFor(() => expect(seenSyncReady).toBe(true), { timeout: 10_000 });
   });
 });

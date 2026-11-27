@@ -340,7 +340,15 @@ export class MuxEndpoint {
     if (handler !== undefined && this.#pendingRelayUpdate !== null) {
       const pending = this.#pendingRelayUpdate;
       this.#pendingRelayUpdate = null;
-      handler(pending.payload);
+      this.#dispatchRelayUpdate(handler, pending.payload);
+    }
+  }
+
+  #dispatchRelayUpdate(handler: (payload: unknown) => void, payload: unknown): void {
+    try {
+      handler(payload);
+    } catch {
+      // Ignore relay update handler errors so tunnel setup and incoming frames never break.
     }
   }
 
@@ -588,7 +596,7 @@ export class MuxEndpoint {
         try {
           const decoded = JSON.parse(utf8Decode(payload));
           if (this.#onRelayUpdate !== undefined) {
-            this.#onRelayUpdate(decoded);
+            this.#dispatchRelayUpdate(this.#onRelayUpdate, decoded);
           } else {
             this.#pendingRelayUpdate = { payload: decoded };
           }
