@@ -247,8 +247,8 @@ function decodeXmlEntities(text: string): string {
 }
 
 const XML_WS = /\s+/y;
-const XML_OPEN = /<([a-zA-Z0-9_-]+)(?:\s[^>]*)?(\/?)>/y;
-const XML_KEY_OPEN = /<key(?:\s[^>]*)?(\/?)>/y;
+const XML_OPEN = /<([a-zA-Z0-9_-]+)(?:\s[^>]*?)?(\/?)>/y;
+const XML_KEY_OPEN = /<key(?:\s[^>]*?)?(\/?)>/y;
 const XML_PLIST_OPEN = /<plist\b[^>]*>/y;
 
 /** Parses Apple's XML1 plist output (supports `<date>` and `<data>`, unlike `plutil -convert json`). */

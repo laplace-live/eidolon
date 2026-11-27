@@ -669,4 +669,24 @@ describe("macOS anti-doxxing checks", () => {
     );
     expect(provisioningProfileChecks(parsed, [realCert]).every((c) => c.pass)).toBe(true);
   });
+
+  test("parses self-closing Apple XML1 plist tags with whitespace before />", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Enabled</key><true />
+  <key>Disabled</key><false />
+  <key>Empty</key><string />
+  <key>NestedDict</key><dict />
+  <key>NestedArray</key><array />
+</dict>
+</plist>`;
+    expect(parseAppleXmlPlist(xml)).toEqual({
+      Enabled: true,
+      Disabled: false,
+      Empty: "",
+      NestedDict: {},
+      NestedArray: [],
+    });
+  });
 });

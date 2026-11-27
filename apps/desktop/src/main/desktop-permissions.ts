@@ -86,7 +86,7 @@ const CONNECT_TIMEOUT_MS = 4_000;
 const CHILD_TIMEOUT_MS = CONNECT_TIMEOUT_MS + 1_000;
 const MDNS_PROMPT_TIMEOUT_MS = 1_000;
 
-const CONNECT_SCRIPT = `
+export const LOCAL_NETWORK_CONNECT_SCRIPT = `
 const net = require("node:net");
 const host = process.argv[1];
 const port = Number(process.argv[2]);
@@ -100,6 +100,15 @@ function finish(code) {
     process.exitCode = 1;
   }
   socket.destroy();
+}
+function errorCodeOf(error) {
+  if (error && Array.isArray(error.errors) && error.errors.length > 0) {
+    const codes = error.errors.map(errorCodeOf);
+    if (codes.includes("ECONNREFUSED")) return "ECONNREFUSED";
+    if (codes.includes("ETIMEDOUT")) return "ETIMEDOUT";
+    return error.code || codes.find(Boolean) || "FAILED";
+  }
+  return (error && error.code) || "FAILED";
 }
 function isLanAddress(address) {
   const normalized = (address || "").toLowerCase().split("%", 1)[0];
@@ -125,7 +134,7 @@ function isLanAddress(address) {
 socket.setTimeout(${CONNECT_TIMEOUT_MS});
 socket.once("connect", () => finish(isLanAddress(socket.remoteAddress) ? undefined : "INVALID_TARGET"));
 socket.once("timeout", () => finish("ETIMEDOUT"));
-socket.once("error", (error) => finish(error.code || "FAILED"));
+socket.once("error", (error) => finish(errorCodeOf(error)));
 `;
 
 export function permissionIdsForPlatform(platform: NodeJS.Platform): readonly PermissionId[] {
@@ -173,7 +182,7 @@ function isIpv6Lan(ip: string): boolean {
 }
 
 function isLoopbackHost(withoutZone: string): boolean {
-  const lower = withoutZone.toLowerCase();
+  const lower = withoutZone.toLowerCase().replace(/\.$/, "");
   if (lower === "localhost" || lower.endsWith(".localhost")) return true;
   if (lower === "0.0.0.0" || lower === "::1" || lower === "::") return true;
   return /^127\./.test(lower);
@@ -181,7 +190,10 @@ function isLoopbackHost(withoutZone: string): boolean {
 
 /** Accepts RFC 1918 / link-local IPs and non-loopback LAN hostnames; rejects loopback and public WAN IPs. */
 export function normalizeLocalNetworkHost(rawHost: string): string | null {
-  const host = rawHost.trim().replace(/^\[|\]$/g, "");
+  const trimmed = rawHost.trim();
+  const bracketed = trimmed.startsWith("[") || trimmed.endsWith("]");
+  if (bracketed && !(trimmed.startsWith("[") && trimmed.endsWith("]"))) return null;
+  const host = bracketed ? trimmed.slice(1, -1) : trimmed;
   if (
     !host ||
     host.startsWith("-") ||
@@ -192,11 +204,16 @@ export function normalizeLocalNetworkHost(rawHost: string): string | null {
   ) {
     return null;
   }
-  const withoutZone = host.split("%", 1)[0] ?? host;
+  const zoneIndex = host.indexOf("%");
+  const withoutZone = zoneIndex === -1 ? host : host.slice(0, zoneIndex);
+  const zone = zoneIndex === -1 ? null : host.slice(zoneIndex + 1);
+  if (zone !== null && (zone.length === 0 || zone.includes("%"))) return null;
   if (isLoopbackHost(withoutZone)) return null;
   const ipVersion = isIP(withoutZone);
-  if (ipVersion === 4) return isIpv4Lan(withoutZone) ? host : null;
+  if (bracketed && ipVersion !== 6) return null;
+  if (ipVersion === 4) return zone === null && isIpv4Lan(withoutZone) ? host : null;
   if (ipVersion === 6) return isIpv6Lan(withoutZone) ? host : null;
+  if (zone !== null || host.includes(":")) return null;
   return host;
 }
 
@@ -408,7 +425,7 @@ export function createDesktopPermissions(host: DesktopPermissionsHost): DesktopP
     return new Promise((resolve) => {
       runChild(
         host.execPath,
-        [...BACKEND_RUNTIME_ARGS, "-e", CONNECT_SCRIPT, normalizedHost, String(port)],
+        [...BACKEND_RUNTIME_ARGS, "-e", LOCAL_NETWORK_CONNECT_SCRIPT, normalizedHost, String(port)],
         {
           env: { ...host.env, ELECTRON_RUN_AS_NODE: "1" },
           timeout: CHILD_TIMEOUT_MS,

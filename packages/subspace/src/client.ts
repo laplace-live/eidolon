@@ -62,11 +62,12 @@ export class SubspaceConnectError extends Error {
 }
 
 function hasErrnoCode(error: unknown, code: string): boolean {
-  if ((error as NodeJS.ErrnoException | null)?.code === code) return true;
+  // Node 24's net.createConnection copies errors[0].code onto AggregateError; check nested first.
   const nested = (error as { errors?: unknown } | null)?.errors;
-  return (
-    Array.isArray(nested) && nested.length > 0 && nested.every((item) => hasErrnoCode(item, code))
-  );
+  if (Array.isArray(nested) && nested.length > 0) {
+    return nested.every((item) => hasErrnoCode(item, code));
+  }
+  return (error as NodeJS.ErrnoException | null)?.code === code;
 }
 
 /**

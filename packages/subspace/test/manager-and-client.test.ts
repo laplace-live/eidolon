@@ -2381,5 +2381,22 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
         "darwin",
       ),
     ).toBe(false);
+    // Node 24's net.createConnection sets AggregateError.code = errors[0].code; mixed errors must still inspect nested items.
+    expect(
+      isMacLocalNetworkBlocked(
+        Object.assign(new AggregateError([ehostunreach, econnrefused]), { code: "EHOSTUNREACH" }),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(false);
+    expect(
+      isMacLocalNetworkBlocked(
+        Object.assign(new AggregateError([ehostunreach, ehostunreach]), { code: "EHOSTUNREACH" }),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(true);
   });
 });

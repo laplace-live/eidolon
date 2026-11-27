@@ -3,19 +3,75 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import {
+  cloneElement,
+  createContext,
+  createElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+  useContext,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { EidolonDesktop, PermissionsState } from "@/lib/desktop";
+import { type MountedRoot, mountFakeDom } from "@/test/fake-dom";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
+
+const CollapsibleCtx = createContext<{ open: boolean; toggle: () => void }>({
+  open: false,
+  toggle: () => {},
+});
 
 vi.doMock("@lingui/core/macro", linguiMacro);
 vi.doMock("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@/components/ui/collapsible", () => ({
+  Collapsible: ({
+    open,
+    onOpenChange,
+    className,
+    children,
+  }: {
+    readonly open?: boolean;
+    readonly onOpenChange?: (next: boolean) => void;
+    readonly className?: string;
+    readonly children?: ReactNode;
+  }) =>
+    createElement(
+      CollapsibleCtx.Provider,
+      { value: { open: open === true, toggle: () => onOpenChange?.(!open) } },
+      createElement("div", { className }, children),
+    ),
+  CollapsibleTrigger: ({
+    asChild,
+    children,
+  }: {
+    readonly asChild?: boolean;
+    readonly children?: ReactNode;
+  }) => {
+    const { toggle } = useContext(CollapsibleCtx);
+    if (asChild && isValidElement(children)) {
+      const child = children as ReactElement<{ readonly onClick?: () => void }>;
+      return cloneElement(child, {
+        onClick: () => {
+          child.props.onClick?.();
+          toggle();
+        },
+      });
+    }
+    return createElement("button", { type: "button", onClick: toggle }, children);
+  },
+  CollapsibleContent: ({ children }: { readonly children?: ReactNode }) => {
+    const { open } = useContext(CollapsibleCtx);
+    return open ? createElement("div", null, children) : null;
+  },
+}));
 
 const { permissionActionKind, permissionNote, permissionStatusText, requestResultNotice } =
   await import("./permissions-notes");
 const { PermissionsSection, permissionsQuery } = await import("./permissions-card");
 const { offersPermissions } = await import("./sections");
+const { subspaceQuery } = await import("@/features/subspace/queries");
 
 const ignore = () => {};
 const refuse = () => Promise.reject(new Error("card reads seeded state"));
@@ -39,7 +95,11 @@ function bridge(platform: string, withPerms = true): EidolonDesktop {
   };
 }
 
-afterEach(() => {
+let mounted: MountedRoot | null = null;
+
+afterEach(async () => {
+  await mounted?.unmount();
+  mounted = null;
   globalThis.eidolonDesktop = undefined;
 });
 
@@ -205,5 +265,106 @@ describe("PermissionsSection", () => {
     expect(row(markup, "microphone")).toContain('data-disabled="true"');
     expect(row(markup, "microphone")).toContain('disabled=""');
     expect(row(markup, "local-network")).toContain('disabled=""');
+  });
+
+  test("clears the local-network success status once host or port is edited", async () => {
+    const testLocalNetwork = vi.fn(async () => ({
+      ok: true as const,
+      host: "10.0.1.5",
+      port: 63427,
+      testedAt: 1_795_773_000_000,
+    }));
+    const app: EidolonDesktop = { ...bridge("darwin"), testLocalNetwork };
+    globalThis.eidolonDesktop = app;
+    if (!offersPermissions(app)) throw new Error("expected permissions bridge");
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
+    });
+    client.setQueryData(permissionsQuery(app).queryKey, {
+      background: false,
+      items: [{ id: "local-network", status: "unknown" }],
+    });
+    client.setQueryData(subspaceQuery.queryKey, {
+      activeHostId: null,
+      servers: [],
+      relayAuth: { status: "signed-out" },
+    } as never);
+
+    type FakeNode = {
+      readonly tagName?: string;
+      readonly textContent?: string;
+      readonly childNodes?: readonly FakeNode[];
+      readonly [key: string]: unknown;
+    };
+    const findProps = (
+      match: (node: FakeNode, props: Record<string, unknown>) => boolean,
+    ): Record<string, unknown> => {
+      const queue: unknown[] = [mounted?.container];
+      while (queue.length > 0) {
+        const current = queue.shift() as FakeNode | undefined;
+        if (!current) continue;
+        const propsKey = Object.keys(current).find((k) => k.startsWith("__reactProps$"));
+        const props = propsKey ? (current[propsKey] as Record<string, unknown>) : undefined;
+        if (props && match(current, props)) return props;
+        if (Array.isArray(current.childNodes)) queue.push(...current.childNodes);
+      }
+      throw new Error(
+        `expected React node in mounted PermissionsSection (${mounted?.container.innerHTML ?? ""})`,
+      );
+    };
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    try {
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(QueryClientProvider, { client }, createElement(PermissionsSection)),
+        ),
+      );
+
+      const toggleProps = findProps(
+        (node) =>
+          node.tagName === "BUTTON" && (node.textContent?.includes("Test Connection") ?? false),
+      ) as { readonly onClick?: () => void };
+      await mounted.act(() => toggleProps.onClick?.());
+
+      const hostProps = findProps(
+        (node, props) => node.tagName === "INPUT" && props.name === "host",
+      ) as { readonly onChange?: (event: { target: { value: string } }) => void };
+      const portProps = findProps(
+        (node, props) => node.tagName === "INPUT" && props.name === "port",
+      ) as { readonly onChange?: (event: { target: { value: string } }) => void };
+
+      await mounted.act(() => {
+        hostProps.onChange?.({ target: { value: "10.0.1.5" } });
+        portProps.onChange?.({ target: { value: "63427" } });
+      });
+      const formProps = findProps((node) => node.tagName === "FORM") as {
+        readonly onSubmit?: (event: { preventDefault(): void }) => void;
+      };
+      await mounted.act(async () => {
+        formProps.onSubmit?.({ preventDefault() {} });
+      });
+
+      expect(testLocalNetwork).toHaveBeenCalledWith({ host: "10.0.1.5", port: 63427 });
+      expect(mounted.container.textContent).toContain(
+        "Connection succeeded over your local network.",
+      );
+
+      const updatedHostProps = findProps(
+        (node, props) => node.tagName === "INPUT" && props.name === "host",
+      ) as { readonly onChange?: (event: { target: { value: string } }) => void };
+      await mounted.act(() => {
+        updatedHostProps.onChange?.({ target: { value: "10.0.1.6" } });
+      });
+
+      expect(mounted.container.textContent).not.toContain(
+        "Connection succeeded over your local network.",
+      );
+    } finally {
+      client.clear();
+    }
   });
 });

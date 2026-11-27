@@ -144,6 +144,7 @@ function LocalNetworkConnectionTest({
     setValue(value);
     if (failure !== null) setFailure(null);
     if (invalidField === field) setInvalidField(null);
+    if (succeededNow) setSucceededNow(false);
   };
 
   async function submit(event: SubmitEvent) {

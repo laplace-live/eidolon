@@ -1,9 +1,11 @@
-import type { ExecFileException } from "node:child_process";
+import { type ExecFileException, execFile } from "node:child_process";
+import { createServer } from "node:net";
 import { describe, expect, test } from "vitest";
 import { BACKEND_RUNTIME_ARGS } from "../src/main/controller.ts";
 import {
   createDesktopPermissions,
   type DesktopPermissionsHost,
+  LOCAL_NETWORK_CONNECT_SCRIPT,
   type LocalNetworkChildRunner,
   normalizeLocalNetworkHost,
   permissionIdsForPlatform,
@@ -327,12 +329,15 @@ describe("testLocalNetwork", () => {
     expect(normalizeLocalNetworkHost("[fe80::1%en0]")).toBe("fe80::1%en0");
     expect(normalizeLocalNetworkHost("[fd12:3456:789a::1]")).toBe("fd12:3456:789a::1");
     expect(normalizeLocalNetworkHost("asi.local")).toBe("asi.local");
+    expect(normalizeLocalNetworkHost("asi.local.")).toBe("asi.local.");
 
     for (const bad of [
       "",
       "-invalid",
       "localhost",
+      "localhost.",
       "foo.localhost",
+      "foo.localhost.",
       "127.0.0.1",
       "::1",
       "0.0.0.0",
@@ -341,6 +346,14 @@ describe("testLocalNetwork", () => {
       "2001:4860:4860::8888",
       "http://10.0.1.5",
       "10.0.1.5/path",
+      "10.0.1.5:63427",
+      "asi.local:63427",
+      "10.0.1.5%en0",
+      "asi.local%en0",
+      "[10.0.1.5]",
+      "[fe80::1",
+      "fe80::1]",
+      "[fe80::1%]",
     ]) {
       expect(normalizeLocalNetworkHost(bad), bad).toBeNull();
     }
@@ -393,6 +406,75 @@ describe("testLocalNetwork", () => {
     expect(await timedOut.testLocalNetwork({ host: "10.0.1.5", port: 63427 })).toMatchObject({
       ok: false,
       failure: "timeout",
+    });
+  });
+
+  test("LOCAL_NETWORK_CONNECT_SCRIPT rejects loopback sockets and inspects nested AggregateError codes", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected TCP address");
+
+    try {
+      const loopback = await new Promise<{
+        readonly error: ExecFileException | null;
+        readonly stderr: string;
+      }>((resolve) => {
+        execFile(
+          process.execPath,
+          ["-e", LOCAL_NETWORK_CONNECT_SCRIPT, "127.0.0.1", String(address.port)],
+          { timeout: 5_000 },
+          (error, _stdout, stderr) => resolve({ error, stderr }),
+        );
+      });
+      expect(loopback.error).not.toBeNull();
+      expect(loopback.error?.code).toBe(1);
+      expect(loopback.stderr).toBe("INVALID_TARGET");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const runWithCodes = (codes: readonly string[]): LocalNetworkChildRunner => {
+      const preload = `(() => {
+        const net = require("node:net");
+        const { EventEmitter } = require("node:events");
+        net.createConnection = () => {
+          const socket = new EventEmitter();
+          socket.setTimeout = () => {};
+          socket.destroy = () => {};
+          process.nextTick(() => {
+            const nested = ${JSON.stringify(codes)}.map((code) => Object.assign(new Error(code), { code }));
+            socket.emit("error", Object.assign(new AggregateError(nested, "connect"), { code: nested[0]?.code }));
+          });
+          return socket;
+        };
+      })();\n`;
+      return (_file, args, options, callback) => {
+        const script = args.at(-3) ?? "";
+        const target = args.slice(-2);
+        execFile(
+          process.execPath,
+          ["-e", `${preload}${script}`, ...target],
+          { timeout: options.timeout },
+          callback,
+        );
+      };
+    };
+
+    const mixed = createDesktopPermissions(
+      makeHost({ runChild: runWithCodes(["EHOSTUNREACH", "ECONNREFUSED"]) }),
+    );
+    expect(await mixed.testLocalNetwork({ host: "asi.local", port: 63427 })).toMatchObject({
+      ok: false,
+      failure: "refused",
+    });
+
+    const allBlocked = createDesktopPermissions(
+      makeHost({ runChild: runWithCodes(["EHOSTUNREACH", "EHOSTUNREACH"]) }),
+    );
+    expect(await allBlocked.testLocalNetwork({ host: "asi.local", port: 63427 })).toMatchObject({
+      ok: false,
+      failure: "blocked",
     });
   });
 });
