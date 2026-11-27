@@ -158,7 +158,9 @@ export function ShareCard() {
       ? t`Sharing is off. Generating a pairing link starts Direct sharing on your local network.`
       : share.listening && share.listeningPort !== null
         ? t`Listening directly on port ${ph({ port: String(share.listeningPort) })}.`
-        : t`Starting direct listener…`;
+        : share.shareMode === "relay"
+          ? t`Direct sharing is inactive in Relay-only mode.`
+          : t`Starting direct listener…`;
   const relayStatus = !signedInToRelay
     ? t`Sign in to your Subspace Relay account below to add automatic Relay fallback.`
     : share.shareMode === "off"

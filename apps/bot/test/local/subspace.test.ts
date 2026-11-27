@@ -613,8 +613,11 @@ describe("subspaceRoutes error handling", () => {
       server,
     );
     expect(badOfferRes.status).toBe(400);
-    expect((await badOfferRes.json()) as ErrorBody).toMatchObject({
-      error: { code: "bad-request" },
+    expect((await badOfferRes.json()) as ErrorBody).toEqual({
+      error: {
+        code: "bad-request",
+        message: 'Send { mode?: "auto" | "direct" | "relay" }',
+      },
     });
 
     const localNetRes = await router(

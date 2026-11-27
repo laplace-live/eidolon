@@ -515,17 +515,28 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     mode = "cached-retry";
     tokenCalls = 0;
     seenWsAuths.length = 0;
+    activeControlSockets.clear();
+    let sawConnected = false;
+    let resolveDisconnect!: () => void;
+    const disconnected = new Promise<void>((resolve) => {
+      resolveDisconnect = resolve;
+    });
     const hostCached = new SubspaceHost({
       store,
       serverVersion: () => "0.22.0",
       relayUrl: () => serverBaseUrl,
       dispatch: async () => new Response("ok"),
+      onEvent: (event) => {
+        if (event.type !== "relay-state") return;
+        if (event.connected) sawConnected = true;
+        else if (sawConnected) resolveDisconnect();
+      },
     });
     cleanups.push(() => hostCached.stop());
 
     await hostCached.createPairingOffer({ mode: "relay" });
     for (const sock of activeControlSockets) sock.close(1012, "Restart");
-    await vi.waitFor(() => expect(hostCached.relayConnected).toBe(false));
+    await disconnected;
     const retriedOffer = await hostCached.createPairingOffer({ mode: "relay", rotate: true });
     expect(retriedOffer.mode).toBe("relay");
     expect(tokenCalls).toBe(2);
@@ -2799,5 +2810,317 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     const tunnel = await fallbackClient.connect();
     expect(tunnel.transport).toBe("relay");
     expect(fallbackClient.activeTransport).toBe("relay");
+  });
+
+  test("startRelay clears stale auth error on retry, legacy Direct grants backfill relay tokens, updateServer leaves Relay fallback, and Direct calls probe over Relay", async () => {
+    const startMockRelayServer = async () => {
+      const relayKp = await generateX25519KeyPair();
+      const { WebSocketServer: RelayWsServer } = await import("ws");
+      let tokenStatus: 200 | 401 = 200;
+      let tokenDelayMs = 0;
+      const installedDevices = new Map<string, string>();
+      let onlineHostWs: import("ws").default | null = null;
+      const pendingData = new Map<string, import("ws").default>();
+
+      const httpServer = createServer((req, res) => {
+        if (req.url === "/api/auth/token") {
+          const reply = () => {
+            if (tokenStatus === 401) {
+              res.writeHead(401, { "content-type": "application/json" });
+              res.end(JSON.stringify({ error: "unauthorized" }));
+              return;
+            }
+            const exp = Math.floor(Date.now() / 1000) + 300;
+            const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+            const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString(
+              "base64url",
+            );
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ token: `${header}.${payload}.sig` }));
+          };
+          if (tokenDelayMs > 0) setTimeout(reply, tokenDelayMs);
+          else reply();
+          return;
+        }
+        res.writeHead(404).end();
+      });
+
+      const controlWss = new RelayWsServer({ noServer: true });
+      const dataWss = new RelayWsServer({ noServer: true });
+      controlWss.on("connection", (ws) => {
+        let relayHostId = "";
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+          if (msg.type === "host_hello") {
+            relayHostId = String(msg.relayHostId);
+            ws.send(
+              JSON.stringify({
+                type: "host_challenge",
+                challengeB64: Buffer.from("ch-32-bytes-0123456789abcdef0123").toString("base64"),
+                relayEphPubB64: relayKp.publicKeyB64,
+                userId: "alice",
+              }),
+            );
+          } else if (msg.type === "host_challenge_ack") {
+            onlineHostWs = ws;
+            ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+          } else if (msg.type === "invite_create") {
+            ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+          } else if (msg.type === "device_install") {
+            installedDevices.set(String(msg.grantId), String(msg.tokenHash));
+            ws.send(JSON.stringify({ type: "device_installed", grantId: msg.grantId }));
+          } else if (msg.type === "device_revoke") {
+            installedDevices.delete(String(msg.grantId));
+            ws.send(JSON.stringify({ type: "device_revoked", grantId: msg.grantId }));
+          }
+        });
+      });
+      dataWss.on("connection", (ws, req) => {
+        const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+        if (path === RELAY_PATHS.CLIENT_CONNECT) {
+          ws.once("message", async (raw) => {
+            const msg = JSON.parse(raw.toString("utf8")) as {
+              readonly credential?: {
+                readonly kind?: string;
+                readonly grantId?: string;
+                readonly relayToken?: string;
+              };
+            };
+            if (msg.credential?.kind === "device") {
+              const tokenHash = await sha256Hex(
+                utf8Encode(String(msg.credential.relayToken ?? "")),
+              );
+              if (installedDevices.get(String(msg.credential.grantId)) !== tokenHash) {
+                ws.close(RELAY_CLOSE_CODE.UNAUTHORIZED, "Revoked or invalid device token");
+                return;
+              }
+            }
+            const sessionId = `sess_${Date.now()}_${Math.random()}`;
+            pendingData.set(sessionId, ws);
+            onlineHostWs?.send(
+              JSON.stringify({
+                type: "connection_open",
+                sessionId,
+                grantId: msg.credential?.grantId ?? null,
+              }),
+            );
+          });
+        } else if (path === RELAY_PATHS.HOST_DATA) {
+          ws.once("message", (raw) => {
+            const msg = JSON.parse(raw.toString("utf8")) as { sessionId: string };
+            const clientWs = pendingData.get(msg.sessionId);
+            pendingData.delete(msg.sessionId);
+            if (!clientWs) return;
+            clientWs.send(JSON.stringify({ type: "relay_ready", sessionId: msg.sessionId }));
+            clientWs.on("message", (d, b) => ws.readyState === 1 && ws.send(d, { binary: b }));
+            ws.on(
+              "message",
+              (d, b) => clientWs.readyState === 1 && clientWs.send(d, { binary: b }),
+            );
+          });
+        }
+      });
+      httpServer.on("upgrade", (req, socket, head) => {
+        const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+        if (path === RELAY_PATHS.HOST_CONTROL) {
+          controlWss.handleUpgrade(req, socket, head, (ws) =>
+            controlWss.emit("connection", ws, req),
+          );
+        } else if (path === RELAY_PATHS.CLIENT_CONNECT || path === RELAY_PATHS.HOST_DATA) {
+          dataWss.handleUpgrade(req, socket, head, (ws) => dataWss.emit("connection", ws, req));
+        } else {
+          socket.destroy();
+        }
+      });
+      await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+      const port = (httpServer.address() as { port: number }).port;
+      const baseUrl = `http://127.0.0.1:${port}`;
+      cleanups.push(
+        () =>
+          new Promise<void>((resolve) => {
+            for (const ws of [...controlWss.clients, ...dataWss.clients]) ws.terminate();
+            controlWss.close(() => dataWss.close(() => httpServer.close(() => resolve())));
+          }),
+      );
+      return {
+        baseUrl,
+        setTokenMode(status: 200 | 401, delayMs = 0) {
+          tokenStatus = status;
+          tokenDelayMs = delayMs;
+        },
+      };
+    };
+
+    const relay = await startMockRelayServer();
+
+    // 1. Re-login / startRelay() after relay-auth-expired clears stale error code before host_hello_ack completes.
+    const dirRetry = tempDir("subspace-retry-clear-");
+    const storeRetry = new SubspaceStore(dirRetry);
+    storeRetry.saveRelayAuth({
+      authUrl: relay.baseUrl,
+      relayUrl: relay.baseUrl,
+      token: "sess-expired",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    relay.setTokenMode(401);
+    const hostRetry = new SubspaceHost({
+      store: storeRetry,
+      serverVersion: () => "0.22.0",
+      relayUrl: () => relay.baseUrl,
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => hostRetry.stop());
+
+    const offerNoRelay = await hostRetry.createPairingOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    expect(offerNoRelay.relay).toBeUndefined();
+    expect(hostRetry.relayError).toContain("expired");
+
+    relay.setTokenMode(200, 40);
+    storeRetry.saveRelayAuth({
+      authUrl: relay.baseUrl,
+      relayUrl: relay.baseUrl,
+      token: "sess-fresh",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    hostRetry.startRelay();
+    const offerWithRelay = await hostRetry.createPairingOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+    });
+    expect(offerWithRelay.relay?.url).toBe(relay.baseUrl);
+    expect(offerWithRelay.ticket).not.toBe(offerNoRelay.ticket);
+    expect(hostRetry.relayConnected).toBe(true);
+    await hostRetry.stop();
+
+    // 2. Legacy Direct grant (relayTokenSha256 omitted) backfills on Direct reconnect, then falls back cleanly.
+    relay.setTokenMode(200, 0);
+    const dirHost = tempDir("subspace-reg-host-");
+    const dirClient = tempDir("subspace-reg-client-");
+    let callActive = true;
+    let patchCalls = 0;
+
+    const hostMgr = new SubspaceManager({
+      dataHome: dirHost,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async (req) => {
+        const path = new URL(req.url).pathname;
+        if (path === "/api/offer" && req.method === "POST") {
+          return Response.json({
+            sdp: [
+              "v=0",
+              "o=- 1 1 IN IP4 127.0.0.1",
+              "s=-",
+              "t=0 0",
+              "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+              "a=candidate:1 1 udp 2122260223 127.0.0.1 45678 typ host generation 0",
+              "",
+            ].join("\r\n"),
+            type: "answer",
+            pc_id: "pc-roam",
+          });
+        }
+        if (path === "/api/offer" && req.method === "PATCH") {
+          patchCalls += 1;
+          return Response.json(callActive ? { status: "success" } : { detail: "Gone" }, {
+            status: callActive ? 200 : 410,
+          });
+        }
+        return Response.json({ path });
+      },
+      relayUrl: () => relay.baseUrl,
+    });
+    cleanups.push(() => hostMgr.stop());
+
+    const directOnlyOffer = await hostMgr.createShareOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    const clientMgr = new SubspaceManager({
+      dataHome: dirClient,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => clientMgr.stop());
+
+    const paired = await clientMgr.pairServer({ code: directOnlyOffer.pairingUrl, activate: true });
+    const legacyGrants = hostMgr.store
+      .readGrants()
+      .map(({ relayTokenSha256: _r, ...rest }) => rest);
+    hostMgr.store.saveGrants(legacyGrants);
+
+    hostMgr.store.saveRelayAuth({
+      authUrl: relay.baseUrl,
+      relayUrl: relay.baseUrl,
+      token: "sess-host",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    await hostMgr.updateShareSettings({});
+    await vi.waitFor(() => expect(hostMgr.host.relayConnected).toBe(true));
+
+    await clientMgr.disconnectServer(paired.pairedServerId);
+    await clientMgr.connectServer(paired.pairedServerId);
+    expect(hostMgr.store.readGrants()[0]?.relayTokenSha256).toMatch(/^[0-9a-f]{64}$/);
+
+    // 3. Direct call survives Direct tunnel drop onto Relay reconnect and clears when PATCH /api/offer returns 410.
+    const savedHybrid = clientMgr.store.readServers().servers[0]!;
+    const callClient = new SubspaceClient(savedHybrid, {}, undefined, {
+      callBridgeIdleMs: 5_000,
+      callProbeIntervalMs: 60_000,
+      directFallbackTimeoutMs: 50,
+    });
+    cleanups.push(() => callClient.stop());
+    await callClient.connect();
+    expect(callClient.activeTransport).toBe("direct");
+
+    const offerRes = await callClient.proxyFetch(
+      new Request("http://local/api/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sdp: "v=0", type: "offer" }),
+      }),
+      "/api/offer",
+    );
+    expect(offerRes.status).toBe(200);
+    expect(callClient.activeCallCount).toBe(1);
+
+    await hostMgr.host.stopDirect();
+    await vi.waitFor(() => expect(callClient.activeTransport).toBe("relay"));
+    expect(callClient.activeCallCount).toBe(1);
+    expect(await callClient.refreshActiveCallCount()).toBe(1);
+    expect(patchCalls).toBeGreaterThanOrEqual(1);
+
+    callActive = false;
+    expect(await callClient.refreshActiveCallCount()).toBe(0);
+    callClient.stop();
+
+    // Legacy client falling back to Relay succeeds with backfilled relayTokenSha256.
+    await clientMgr.disconnectServer(paired.pairedServerId);
+    await clientMgr.connectServer(paired.pairedServerId);
+    const relayedState = await clientMgr.getState();
+    expect(relayedState.servers[0]?.activeTransport).toBe("relay");
+    const pingRes = await clientMgr.proxyToActive(new Request("http://local/ping"), "/ping");
+    expect(pingRes.status).toBe(200);
+    expect(await pingRes.json()).toEqual({ path: "/ping" });
+
+    // 4. Editing Direct endpoint while connected on Relay fallback reconnects back to Direct.
+    const newDirectPort = await hostMgr.host.startDirect(0);
+    await clientMgr.updateServer(paired.pairedServerId, {
+      host: "127.0.0.1",
+      port: newDirectPort,
+    });
+    await vi.waitFor(async () => {
+      const s = await clientMgr.getState();
+      expect(s.servers[0]?.activeTransport).toBe("direct");
+    });
   });
 });

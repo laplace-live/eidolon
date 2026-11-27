@@ -440,7 +440,7 @@ export class SubspaceClient {
   readonly #callProbeIntervalMs: number;
   readonly #directFallbackTimeoutMs: number | undefined;
   readonly #bridges: ClientCallBridgePool;
-  readonly #activePcIds = new Set<string>();
+  readonly #activePcIds = new Map<string, "direct" | "relay">();
 
   #tunnel: ActiveTunnel | null = null;
   #connecting: Promise<ActiveTunnel> | null = null;
@@ -473,14 +473,16 @@ export class SubspaceClient {
     this.#bridges = new ClientCallBridgePool({
       idleTimeoutMs: options.callBridgeIdleMs,
       onCallOpened: (pcId) => {
-        this.#activePcIds.add(pcId);
-        if (this.activeTransport === "direct") this.#ensureCallProbeTimer();
+        const transport = this.activeTransport ?? "direct";
+        this.#activePcIds.set(pcId, transport);
+        if (transport === "direct") this.#ensureCallProbeTimer();
       },
       onBridgeClosed: (pcId, closedByAlert) => {
-        if (closedByAlert || this.activeTransport === "relay") {
+        const openedTransport = this.#activePcIds.get(pcId);
+        if (closedByAlert || openedTransport === "relay") {
           this.#activePcIds.delete(pcId);
-          if (this.#activePcIds.size === 0) this.#stopCallProbeTimer();
-        } else if (this.#activePcIds.has(pcId)) {
+          if (!this.#hasDirectActiveCalls()) this.#stopCallProbeTimer();
+        } else if (openedTransport === "direct") {
           void this.refreshActiveCallCount();
         }
       },
@@ -489,6 +491,13 @@ export class SubspaceClient {
       this.#wanted = true;
       this.#attachTunnel(initialTunnel);
     }
+  }
+
+  #hasDirectActiveCalls(): boolean {
+    for (const transport of this.#activePcIds.values()) {
+      if (transport === "direct") return true;
+    }
+    return false;
   }
 
   get server(): SubspaceSavedServer {
@@ -528,7 +537,10 @@ export class SubspaceClient {
   }
 
   async refreshActiveCallCount(): Promise<number> {
-    if (this.#activePcIds.size === 0 || this.activeTransport === "relay") {
+    const directPcIds = [...this.#activePcIds.entries()]
+      .filter(([, transport]) => transport === "direct")
+      .map(([pcId]) => pcId);
+    if (directPcIds.length === 0) {
       return this.activeCallCount;
     }
     if (!this.#wanted || this.#revoked) {
@@ -548,7 +560,7 @@ export class SubspaceClient {
     }
     const tunnel = this.#tunnel;
     const task = (async () => {
-      for (const pcId of [...this.#activePcIds]) {
+      for (const pcId of directPcIds) {
         if (!this.#wanted || this.#revoked) {
           this.#activePcIds.clear();
           this.#bridges.closeAll();
@@ -582,7 +594,7 @@ export class SubspaceClient {
       }
     })().finally(() => {
       if (this.#callProbeTask === task) this.#callProbeTask = null;
-      if (this.#activePcIds.size === 0) this.#stopCallProbeTimer();
+      if (!this.#hasDirectActiveCalls()) this.#stopCallProbeTimer();
     });
     this.#callProbeTask = task;
     await task;
@@ -593,14 +605,14 @@ export class SubspaceClient {
     const directChanged =
       server.endpoint?.host !== this.#server.endpoint?.host ||
       server.endpoint?.port !== this.#server.endpoint?.port;
-    const relayChanged = server.relay?.url !== this.#server.relay?.url;
+    const relayChanged =
+      server.relay?.url !== this.#server.relay?.url ||
+      server.relay?.relayHostId !== this.#server.relay?.relayHostId;
     const activeTransport = this.activeTransport;
     const endpointChanged =
-      activeTransport === "direct"
-        ? directChanged
-        : activeTransport === "relay"
-          ? relayChanged
-          : server.mode !== this.#server.mode || directChanged || relayChanged;
+      directChanged ||
+      (activeTransport !== "direct" && relayChanged) ||
+      (activeTransport === null && server.mode !== this.#server.mode);
     this.#server = server;
     if (endpointChanged && this.#wanted) {
       this.#cancelConnecting();
@@ -871,7 +883,7 @@ export class SubspaceClient {
       this.#failActiveTunnel(tunnel, "Socket error", "Could not connect to remote server");
     });
 
-    if (this.#activePcIds.size > 0 && tunnel.transport === "direct") {
+    if (this.#hasDirectActiveCalls()) {
       this.#ensureCallProbeTimer();
       void this.refreshActiveCallCount();
     }
@@ -888,8 +900,12 @@ export class SubspaceClient {
     const droppedTransport = current?.transport ?? this.#server.mode;
     this.#tunnel = null;
     this.#latencyMs = null;
-    if (droppedTransport === "relay" || !this.#wanted || this.#revoked) {
+    if (!this.#wanted || this.#revoked) {
       this.#activePcIds.clear();
+    } else if (droppedTransport === "relay") {
+      for (const [pcId, transport] of this.#activePcIds) {
+        if (transport === "relay") this.#activePcIds.delete(pcId);
+      }
     }
     this.#bridges.closeAll();
     if (current !== null) {

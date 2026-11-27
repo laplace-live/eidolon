@@ -2020,6 +2020,10 @@ msgstr "直连"
 msgid "Direct · Relay"
 msgstr "直连 · 中继"
 
+#: src/features/subspace/share-card.tsx
+msgid "Direct sharing is inactive in Relay-only mode."
+msgstr "仅中继模式下直连共享未开启。"
+
 #: src/features/settings/permissions-notes.ts
 msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
 msgstr "用于在局域网内直连远程亚空间服务器，以及使用本地网络工具和 MCP 服务器。"

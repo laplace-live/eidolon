@@ -196,9 +196,19 @@ export class SubspaceStore {
     return true;
   }
 
-  touchGrant(id: string): void {
+  touchGrant(id: string, relayTokenSha256?: string): void {
     const current = this.readGrants();
-    const next = current.map((g) => (g.id === id ? { ...g, lastSeenAt: Date.now() } : g));
+    const next = current.map((g) =>
+      g.id === id
+        ? {
+            ...g,
+            lastSeenAt: Date.now(),
+            ...(relayTokenSha256 !== undefined && g.relayTokenSha256 === undefined
+              ? { relayTokenSha256 }
+              : {}),
+          }
+        : g,
+    );
     this.saveGrants(next);
   }
 

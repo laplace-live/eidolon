@@ -2020,6 +2020,10 @@ msgstr "Direct"
 msgid "Direct · Relay"
 msgstr "Direct · Relay"
 
+#: src/features/subspace/share-card.tsx
+msgid "Direct sharing is inactive in Relay-only mode."
+msgstr "Direct sharing is inactive in Relay-only mode."
+
 #: src/features/settings/permissions-notes.ts
 msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
 msgstr "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."

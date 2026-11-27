@@ -160,8 +160,9 @@ export function subspaceRoutes(manager?: SubspaceManager | null): LocalRouteSpec
         const body = await readJson(request);
         if (!body.ok) return body.response;
         const parsed = ShareOfferBodySchema.safeParse(body.value);
-        if (!parsed.success)
-          return localError(400, "bad-request", 'Send { mode: "direct" | "relay" }');
+        if (!parsed.success) {
+          return localError(400, "bad-request", 'Send { mode?: "auto" | "direct" | "relay" }');
+        }
         return withManager(
           (m): Promise<SubspaceShareOfferResponse> => m.createShareOffer(parsed.data),
         );

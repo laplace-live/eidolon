@@ -1478,4 +1478,47 @@ describe("Subspace web UI regressions", () => {
       history.dispose();
     }
   });
+
+  test("subspaceQuery.refetchInterval tolerates partial fixtures without share and ShareCard handles relay-only shareMode", () => {
+    const interval = subspaceQuery.refetchInterval as (query: {
+      readonly state: { readonly data?: unknown };
+    }) => number | false;
+    expect(
+      interval({
+        state: {
+          data: {
+            activeHostId: null,
+            servers: [],
+            relayAuth: { status: "signed-in" },
+          },
+        },
+      }),
+    ).toBe(15_000);
+
+    const client = new QueryClient();
+    client.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "relay",
+          listening: false,
+          listeningPort: null,
+          relayConnected: true,
+        },
+        relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+      }),
+    );
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    const html = renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+    expect(html).toContain("Direct sharing is inactive in Relay-only mode.");
+    expect(html).not.toContain("Starting direct listener");
+    client.clear();
+  });
 });

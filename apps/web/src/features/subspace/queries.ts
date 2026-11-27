@@ -51,7 +51,8 @@ export const subspaceQuery = queryOptions({
     const busy =
       data.relayAuth.status === "pending" ||
       data.servers.some((s) => s.connectionState === "connecting") ||
-      (data.share?.shareMode !== "off" &&
+      (data.share !== undefined &&
+        data.share.shareMode !== "off" &&
         data.relayAuth.status === "signed-in" &&
         !data.share.relayConnected &&
         data.share.relayError === null);
