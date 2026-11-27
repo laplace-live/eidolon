@@ -68,6 +68,12 @@ describe("BOOT_READ", () => {
     expect(kept).toEqual([]);
   });
 
+  test("Subspace relay URL needs a restart while auth URL is live-read", () => {
+    expect(BOOT_READ.EIDOLON_SUBSPACE_RELAY_URL).toEqual(["server"]);
+    expect(LIVE_READ).toContain("EIDOLON_SUBSPACE_AUTH_URL");
+    expect(LIVE_READ).not.toContain("EIDOLON_SUBSPACE_RELAY_URL");
+  });
+
   test("two personas get their own Mem0 engine and reranker, as LIVE_READ says", async () => {
     write(
       "personas/alice/persona.yaml",

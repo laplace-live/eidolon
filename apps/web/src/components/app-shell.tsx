@@ -2,7 +2,7 @@
 // page. In the desktop app both sit below the strip that stands in for the title bar.
 
 import { useLingui } from "@lingui/react/macro";
-import { type ReactNode, Suspense, useRef, useState } from "react";
+import { Fragment, type ReactNode, Suspense, useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBar } from "@/components/mobile-bar";
 import { RouteBoundary, RouteError } from "@/components/route-error";
@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { BelowTitleStrip } from "@/components/window-drag-strip";
 import { CallBar } from "@/features/call/call-bar";
 import { CallProvider } from "@/features/call/call-provider";
+import { useSubspaceHostEpoch } from "@/features/subspace/queries";
 import { useOnNavigate } from "@/lib/navigation";
 
 /** Whether the sidebar was left collapsed, in this browser. */
@@ -62,6 +63,7 @@ export function AppShell({ children }: { readonly children?: ReactNode }) {
   const { t } = useLingui();
   const [open, setOpen] = useState(storedOpen);
   const main = useRef<HTMLElement>(null);
+  const hostEpoch = useSubspaceHostEpoch();
 
   return (
     <CallProvider>
@@ -102,7 +104,7 @@ export function AppShell({ children }: { readonly children?: ReactNode }) {
                   </div>
                 }
               >
-                {children}
+                {children !== undefined && <Fragment key={hostEpoch}>{children}</Fragment>}
               </Suspense>
             </RouteBoundary>
           </BelowTitleStrip>

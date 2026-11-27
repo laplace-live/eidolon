@@ -21,6 +21,7 @@ COPY apps/bot/package.json apps/bot/
 COPY apps/cli/package.json apps/cli/
 COPY apps/desktop/package.json apps/desktop/
 COPY apps/eidolon/package.json apps/eidolon/
+COPY apps/relay/package.json apps/relay/
 COPY apps/web/package.json apps/web/
 COPY packages/access/package.json packages/access/
 COPY packages/assistant/package.json packages/assistant/
@@ -36,6 +37,7 @@ COPY packages/providers/package.json packages/providers/
 COPY packages/retrieval/package.json packages/retrieval/
 COPY packages/runtime/package.json packages/runtime/
 COPY packages/sdk/package.json packages/sdk/
+COPY packages/subspace/package.json packages/subspace/
 COPY packages/tools/package.json packages/tools/
 COPY packages/turn/package.json packages/turn/
 COPY packages/usage/package.json packages/usage/
@@ -45,12 +47,14 @@ COPY packages/webrtc/package.json packages/webrtc/
 # No install script runs: onnxruntime-node's would download the CUDA execution provider on
 # linux/x64, and the CPU binaries already ship in the tarball.
 #
-# --filter skips the browser SDK's dependencies (its manifest is still checked against
-# pnpm-lock.yaml). The prune removes the non-Linux and other-arch binaries onnxruntime-node bundles.
+# --filter skips the browser SDK's and Subspace's dependencies (their manifests are still checked
+# against pnpm-lock.yaml). The prune removes the non-Linux and other-arch binaries onnxruntime-node bundles.
 ARG TARGETARCH
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm/store \
       --filter '!@laplace.live/eidolon-sdk' \
+      --filter '!@eidolon/relay' \
+      --filter '!@eidolon/subspace' \
  && ORT="$(echo node_modules/.pnpm/onnxruntime-node@1.31.*/node_modules/onnxruntime-node/bin/napi-v6)" \
  && rm -rf "$ORT/darwin" "$ORT/win32" \
            "$ORT/linux/$(if [ "$TARGETARCH" = arm64 ]; then echo x64; else echo arm64; fi)"

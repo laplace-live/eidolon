@@ -11,6 +11,7 @@ export const SECTIONS = [
   "downloads",
   "assistant",
   "skills",
+  "subspace",
   "desktop",
   "advanced",
 ] as const;
@@ -50,7 +51,14 @@ export function shownSections(app: EidolonDesktop | null): readonly SectionId[] 
     : SECTIONS.filter((id) => id !== "desktop");
 }
 
-export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant" | "kinds";
+export type CardId =
+  | "you"
+  | "storage"
+  | "embeddings"
+  | "ytDlp"
+  | "assistant"
+  | "kinds"
+  | "subspaceRelay";
 
 export interface CardSpec {
   /** Picks its title and description. */
@@ -109,6 +117,7 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
   ],
   // No rows: its card is the owner's skill folders.
   skills: [],
+  subspace: [{ id: "subspaceRelay", paths: ["subspace.relayUrl", "subspace.authUrl"] }],
   // No rows: its card asks the desktop app, never the server.
   desktop: [],
 };

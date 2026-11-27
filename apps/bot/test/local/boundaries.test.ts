@@ -100,9 +100,11 @@ describe("production never loads the local app", () => {
         file.startsWith("apps/web/") ||
         file.startsWith("apps/desktop/") ||
         file.startsWith("apps/cli/") ||
+        file.startsWith("apps/relay/") ||
         file.startsWith("packages/ingest/") ||
         file.startsWith("packages/assistant/") ||
         file.startsWith("packages/sdk/") ||
+        file.startsWith("packages/subspace/") ||
         file === "packages/chat/src/jsonl.ts" ||
         file === "packages/chat/src/contract.ts",
     );
@@ -110,7 +112,7 @@ describe("production never loads the local app", () => {
     expect(
       [...specifiers].filter(
         (s) =>
-          /^@eidolon\/(ingest|assistant|cli)(\/|$)/.test(s) ||
+          /^@eidolon\/(ingest|assistant|cli|subspace|relay)(\/|$)/.test(s) ||
           /^@laplace\.live\/eidolon-sdk(\/|$)/.test(s) ||
           /^@eidolon\/chat\/(jsonl|contract)$/.test(s) ||
           s.includes("/local"),

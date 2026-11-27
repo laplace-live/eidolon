@@ -357,6 +357,7 @@ msgstr "{name} remembers your conversations between calls."
 
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "{name} removed."
 msgstr "{name} removed."
 
@@ -545,6 +546,11 @@ msgstr "A call fills the screen it's on: try her on a wide one and on a phone's.
 msgid "A call is in progress: switch personas after it ends."
 msgstr "A call is in progress: switch personas after it ends."
 
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/add-server-dialog.tsx
+msgid "A call is in progress: switch servers after it ends."
+msgstr "A call is in progress: switch servers after it ends."
+
 #: src/features/settings/restart-button.tsx
 #: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
@@ -701,6 +707,7 @@ msgstr "Account"
 
 #: src/components/persona-badges.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Active"
 msgstr "Active"
 
@@ -712,6 +719,14 @@ msgstr "Active Persona"
 #: src/components/persona-switcher.tsx
 msgid "Active Persona: {name}"
 msgstr "Active Persona: {name}"
+
+#: src/components/subspace-switcher.tsx
+msgid "Active Subspace Server: {name}"
+msgstr "Active Subspace Server: {name}"
+
+#: src/components/subspace-switcher.tsx
+msgid "Active Subspace Server: This Computer"
+msgstr "Active Subspace Server: This Computer"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Add a .txt file of what she knows about herself, then index it. Files matching {patterns} are indexed."
@@ -1060,6 +1075,10 @@ msgstr "API Keys"
 msgid "Appearance"
 msgstr "Appearance"
 
+#: src/features/subspace/share-card.tsx
+msgid "Apply"
+msgstr "Apply"
+
 #: src/features/chats/labels.ts
 msgid "Approve for Me"
 msgstr "Approve for Me"
@@ -1103,6 +1122,10 @@ msgstr "Approve for Me asks you: this reaches beyond this computer, such as a pu
 #: src/features/tasks/labels.ts
 msgid "Approve for Me asks you: this runs code from the internet."
 msgstr "Approve for Me asks you: this runs code from the internet."
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Approve this computer in your browser by entering the verification code below:"
+msgstr "Approve this computer in your browser by entering the verification code below:"
 
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
@@ -1192,6 +1215,10 @@ msgstr "Attachments"
 #: src/features/jobs/labels.ts
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
 msgstr "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Auth: {auth} · Relay: {relay}"
+msgstr "Auth: {auth} · Relay: {relay}"
 
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
@@ -1403,6 +1430,10 @@ msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
 msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
 msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
 
+#: src/lib/labels.ts
+msgid "Can't reach that Subspace server. Check that it's running and connected."
+msgstr "Can't reach that Subspace server. Check that it's running and connected."
+
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
@@ -1413,6 +1444,9 @@ msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and 
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
 #: src/features/studio/voice-styles-card.tsx
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/relay-account-card.tsx
+#: src/features/subspace/servers-card.tsx
 #: src/features/tasks/stop-picker.tsx
 msgid "Cancel"
 msgstr "Cancel"
@@ -1652,6 +1686,26 @@ msgstr "Connect a microphone, then call again."
 msgid "Connect a microphone, then try again."
 msgstr "Connect a microphone, then try again."
 
+#: src/features/subspace/servers-card.tsx
+msgid "Connected"
+msgstr "Connected"
+
+#: src/features/subspace/share-card.tsx
+msgid "Connected to Subspace Relay with end-to-end encryption."
+msgstr "Connected to Subspace Relay with end-to-end encryption."
+
+#: src/features/subspace/share-card.tsx
+msgid "Connecting to Subspace Relay…"
+msgstr "Connecting to Subspace Relay…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Connecting…"
+msgstr "Connecting…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Connection Error"
+msgstr "Connection Error"
+
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/voice-step.tsx
@@ -1688,6 +1742,19 @@ msgstr "Cookies come from the file {file}."
 msgid "Cookies File"
 msgstr "Cookies File"
 
+#: src/features/subspace/relay-account-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Copied"
+msgstr "Copied"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Copy Code"
+msgstr "Copy Code"
+
+#: src/features/subspace/share-card.tsx
+msgid "Copy Link"
+msgstr "Copy Link"
+
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 msgid "Cost"
@@ -1700,6 +1767,10 @@ msgstr "Cost So Far"
 #: src/features/call/call-notices.tsx
 msgid "Couldn't connect the call."
 msgstr "Couldn't connect the call."
+
+#: src/features/subspace/queries.ts
+msgid "Couldn't copy to clipboard."
+msgstr "Couldn't copy to clipboard."
 
 #: src/features/call/call-notices.tsx
 msgid "Couldn't get the connection settings for the call."
@@ -1761,6 +1832,18 @@ msgstr "Credit left: {amount}"
 #: src/components/voice-picker/parts.tsx
 msgid "Current voice:"
 msgstr "Current voice:"
+
+#: src/components/route-error.tsx
+msgid "Currently targeting remote Subspace server {name}."
+msgstr "Currently targeting remote Subspace server {name}."
+
+#: src/features/subspace/share-card.tsx
+msgid "Custom Address"
+msgstr "Custom Address"
+
+#: src/features/subspace/share-card.tsx
+msgid "Custom Host or IP"
+msgstr "Custom Host or IP"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "Customize"
@@ -1854,6 +1937,19 @@ msgstr "Desktop Companion"
 msgid "Details"
 msgstr "Details"
 
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Direct"
+msgstr "Direct"
+
+#: src/features/subspace/share-card.tsx
+msgid "Direct and Relay Subspace access is turned off for new pairings."
+msgstr "Direct and Relay Subspace access is turned off for new pairings."
+
+#: src/features/subspace/share-card.tsx
+msgid "Direct Network"
+msgstr "Direct Network"
+
 #: src/components/settings-form/settings-card.tsx
 msgid "Discard"
 msgstr "Discard"
@@ -1861,6 +1957,11 @@ msgstr "Discard"
 #: src/features/studio/text-editor.tsx
 msgid "Discard Changes"
 msgstr "Discard Changes"
+
+#: src/components/route-error.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "Disconnect"
+msgstr "Disconnect"
 
 #: src/features/home/readiness-labels.ts
 msgid "Disk Space"
@@ -1987,6 +2088,14 @@ msgstr "Edit"
 msgid "Edit {name}"
 msgstr "Edit {name}"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Edit Server"
+msgstr "Edit Server"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Edit Subspace Server"
+msgstr "Edit Subspace Server"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Edit the {name} Style"
 msgstr "Edit the {name} Style"
@@ -1998,6 +2107,10 @@ msgstr "Eidolon"
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
+
+#: src/features/home/route.tsx
+msgid "Eidolon {version} · {host}"
+msgstr "Eidolon {version} · {host}"
 
 #: src/lib/labels.ts
 msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
@@ -2466,6 +2579,10 @@ msgstr "Full Access"
 msgid "General"
 msgstr "General"
 
+#: src/features/subspace/share-card.tsx
+msgid "Generate Pairing Code"
+msgstr "Generate Pairing Code"
+
 #: src/features/studio/appearance-labels.ts
 msgctxt "mood"
 msgid "Gentle"
@@ -2706,6 +2823,18 @@ msgstr "Hold the microphone button while you talk, or click it to start and agai
 #: src/components/app-sidebar.tsx
 msgid "Home"
 msgstr "Home"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Host"
+msgstr "Host"
+
+#: src/features/subspace/share-card.tsx
+msgid "Host Name"
+msgstr "Host Name"
+
+#: src/features/subspace/share-card.tsx
+msgid "Host name updated."
+msgstr "Host name updated."
 
 #: src/features/setup/voice-step.tsx
 msgid "How {name} sounds."
@@ -3187,6 +3316,10 @@ msgstr "Keep keys out of mcp.json: write {reference} where one goes, and set NAM
 msgid "Keep Running"
 msgstr "Keep Running"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Keep Server"
+msgstr "Keep Server"
+
 #: src/features/setup/persona-step.tsx
 msgid "Keep talking to her."
 msgstr "Keep talking to her."
@@ -3238,6 +3371,10 @@ msgstr "Knowledge"
 msgid "Knowledge Index"
 msgstr "Knowledge Index"
 
+#: src/features/subspace/share-card.tsx
+msgid "LAN"
+msgstr "LAN"
+
 #: src/components/preferences.tsx
 msgid "Language"
 msgstr "Language"
@@ -3246,6 +3383,10 @@ msgstr "Language"
 msgid "LAPLACE Eidolon {version} · server {server}"
 msgstr "LAPLACE Eidolon {version} · server {server}"
 
+#: src/features/home/route.tsx
+msgid "LAPLACE Eidolon {version} · server {server} · {host}"
+msgstr "LAPLACE Eidolon {version} · server {server} · {host}"
+
 #: src/components/settings-form/labels.ts
 msgid "LAPLACE Workers URL"
 msgstr "LAPLACE Workers URL"
@@ -3253,6 +3394,10 @@ msgstr "LAPLACE Workers URL"
 #: src/features/home/readiness-labels.ts
 msgid "Last Call"
 msgstr "Last Call"
+
+#: src/features/subspace/share-card.tsx
+msgid "Last connected {time}"
+msgstr "Last connected {time}"
 
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
@@ -3279,6 +3424,10 @@ msgstr "Leave without saving?"
 #: src/features/studio/video-table.tsx
 msgid "Length"
 msgstr "Length"
+
+#: src/features/subspace/share-card.tsx
+msgid "Let another LAPLACE Eidolon app connect to this computer over your local network, Tailscale, or Subspace Relay."
+msgstr "Let another LAPLACE Eidolon app connect to this computer over your local network, Tailscale, or Subspace Relay."
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Let go to send, or slide off the button to cancel."
@@ -3332,6 +3481,10 @@ msgstr "Links Checked"
 msgid "Links to"
 msgstr "Links to"
 
+#: src/features/subspace/share-card.tsx
+msgid "Listening directly on port {port} without a Relay account."
+msgstr "Listening directly on port {port} without a Relay account."
+
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
 msgstr "Listening…"
@@ -3347,6 +3500,18 @@ msgstr "Listening…"
 #: src/features/tasks/transcript-view.tsx
 msgid "Loading…"
 msgstr "Loading…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Local"
+msgstr "Local"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Local LAPLACE Eidolon server on this computer."
+msgstr "Local LAPLACE Eidolon server on this computer."
+
+#: src/components/subspace-switcher.tsx
+msgid "Local Server"
+msgstr "Local Server"
 
 #: src/features/jobs/detail.tsx
 msgid "Log"
@@ -3678,6 +3843,10 @@ msgstr "Needs ffmpeg"
 msgid "Needs prepaid credit."
 msgstr "Needs prepaid credit."
 
+#: src/features/subspace/share-card.tsx
+msgid "Network Address"
+msgstr "Network Address"
+
 #: src/components/app-sidebar.tsx
 #: src/features/chats/route.tsx
 msgid "New Chat"
@@ -3690,6 +3859,10 @@ msgstr "New Fact File"
 #: src/features/studio/knowledge-section.tsx
 msgid "New File"
 msgstr "New File"
+
+#: src/features/subspace/share-card.tsx
+msgid "New Pairing Code"
+msgstr "New Pairing Code"
 
 #: src/components/persona-switcher.tsx
 #: src/features/home/persona-grid.tsx
@@ -3999,6 +4172,7 @@ msgstr "Nothing yet."
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
+#: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "Off"
 
@@ -4021,6 +4195,10 @@ msgstr "Off: she won't remember you between calls."
 #: src/components/settings-form/labels.ts
 msgid "Off: Three Models"
 msgstr "Off: Three Models"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Offline"
+msgstr "Offline"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4118,6 +4296,14 @@ msgstr "Open one's studio to build her up, or make another the one your calls re
 msgid "Open Settings"
 msgstr "Open Settings"
 
+#: src/features/subspace/relay-account-card.tsx
+msgid "Open Sign-In Page"
+msgstr "Open Sign-In Page"
+
+#: src/components/route-error.tsx
+msgid "Open Subspace Settings"
+msgstr "Open Subspace Settings"
+
 #: src/features/settings/assistant.tsx
 msgid "Open Tasks"
 msgstr "Open Tasks"
@@ -4154,6 +4340,7 @@ msgid "OpenRouter App URL"
 msgstr "OpenRouter App URL"
 
 #: src/features/setup/stepper.tsx
+#: src/features/subspace/add-server-dialog.tsx
 msgid "Optional"
 msgstr "Optional"
 
@@ -4226,6 +4413,52 @@ msgstr "Outfits you add stay on this computer: deploying {name} copies only her 
 msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 msgstr "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "Pair a Server"
+msgstr "Pair a Server"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Pair Server"
+msgstr "Pair Server"
+
+#: src/features/subspace/share-card.tsx
+msgid "Paired {time}"
+msgstr "Paired {time}"
+
+#: src/features/subspace/share-card.tsx
+msgid "Paired Devices"
+msgstr "Paired Devices"
+
+#: src/features/subspace/subspace-section.tsx
+msgid "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
+msgstr "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paired with {name}."
+msgstr "Paired with {name}."
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paired with the remote server."
+msgstr "Paired with the remote server."
+
+#: src/features/subspace/share-card.tsx
+msgid "Pairing Link"
+msgstr "Pairing Link"
+
+#: src/features/subspace/share-card.tsx
+msgid "Pairing link copied."
+msgstr "Pairing link copied."
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Pairing Link or Code"
+msgstr "Pairing Link or Code"
+
+#: src/lib/labels.ts
+msgid "Pairing with the Subspace server failed."
+msgstr "Pairing with the Subspace server failed."
+
 #: src/features/studio/model-outfits.tsx
 msgid "Parameters"
 msgstr "Parameters"
@@ -4250,6 +4483,10 @@ msgstr "Paste a new key to replace it"
 #: src/features/studio/model-controls.tsx
 msgid "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
 msgstr "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paste a Subspace pairing link or code from another LAPLACE Eidolon computer or CLI."
+msgstr "Paste a Subspace pairing link or code from another LAPLACE Eidolon computer or CLI."
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
@@ -4401,6 +4638,10 @@ msgstr "Playback Position"
 msgid "Pop Out"
 msgstr "Pop Out"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Port"
+msgstr "Port"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Pose Group {group}"
 msgstr "Pose Group {group}"
@@ -4469,6 +4710,7 @@ msgid "PSD2Live's runtime stopped while it drew her model."
 msgstr "PSD2Live's runtime stopped while it drew her model."
 
 #: src/components/voice-picker/parts.tsx
+#: src/features/subspace/share-card.tsx
 msgid "Public"
 msgstr "Public"
 
@@ -4568,6 +4810,10 @@ msgstr "Recommended"
 msgid "Recommended Providers"
 msgstr "Recommended Providers"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Reconnect"
+msgstr "Reconnect"
+
 #: src/features/chats/voice-recorder.tsx
 msgid "Record Voice Message"
 msgstr "Record Voice Message"
@@ -4619,11 +4865,25 @@ msgstr "Refresh"
 msgid "Relative to her folder. Default prompt.md."
 msgstr "Relative to her folder. Default prompt.md."
 
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Relay"
+msgstr "Relay"
+
+#: src/features/subspace/share-card.tsx
+msgid "Relay error: {error}"
+msgstr "Relay error: {error}"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Relay sign-in failed."
+msgstr "Relay sign-in failed."
+
 #: src/features/settings/commands-card.tsx
 #: src/features/settings/desktop-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Remove"
 msgstr "Remove"
 
@@ -4651,6 +4911,7 @@ msgstr "Remove {name}"
 
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Remove {name}?"
 msgstr "Remove {name}?"
 
@@ -4673,6 +4934,10 @@ msgstr "Remove Persona"
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove the {name} style?"
 msgstr "Remove the {name} style?"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Removing the active server switches this app back to This Computer. You will need a new pairing link to connect again."
+msgstr "Removing the active server switches this app back to This Computer. You will need a new pairing link to connect again."
 
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/model-list.tsx
@@ -4869,6 +5134,10 @@ msgstr "Return to Call"
 msgid "Revert"
 msgstr "Revert"
 
+#: src/features/subspace/share-card.tsx
+msgid "Revoke"
+msgstr "Revoke"
+
 #: src/components/settings-form/labels.ts
 msgid "Rounds per Reply"
 msgstr "Rounds per Reply"
@@ -4939,6 +5208,8 @@ msgstr "Same as Assistant Tasks"
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/model-list.tsx
 #: src/features/studio/text-editor.tsx
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
 msgid "Save"
 msgstr "Save"
 
@@ -4958,6 +5229,10 @@ msgstr "Save Style"
 #: src/features/settings/accounts-card.tsx
 msgid "Saved"
 msgstr "Saved"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Saved changes to {name}."
+msgstr "Saved changes to {name}."
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/studio/identity-section.tsx
@@ -5126,6 +5401,15 @@ msgstr "Sent as text"
 msgid "Sent by you"
 msgstr "Sent by you"
 
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "Server Name"
+msgstr "Server Name"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Server Options"
+msgstr "Server Options"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Set by {env} in settings.yaml; a value saved here replaces it."
 msgstr "Set by {env} in settings.yaml; a value saved here replaces it."
@@ -5196,6 +5480,10 @@ msgstr "Setup would end the call. Hang up first."
 msgid "Share"
 msgstr "Share"
 
+#: src/features/subspace/share-card.tsx
+msgid "Share This Computer"
+msgstr "Share This Computer"
+
 #: src/features/settings/skills-card.tsx
 msgid "Shared"
 msgstr "Shared"
@@ -5207,6 +5495,10 @@ msgstr "Shared Folder"
 #: src/features/settings/skills-card.tsx
 msgid "Shared folder:"
 msgstr "Shared folder:"
+
+#: src/features/subspace/share-card.tsx
+msgid "Sharing Mode"
+msgstr "Sharing Mode"
 
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
@@ -5378,6 +5670,10 @@ msgstr "Show Task"
 msgid "Show Transcript"
 msgstr "Show Transcript"
 
+#: src/features/subspace/share-card.tsx
+msgid "Shown in the Subspace switcher on paired devices."
+msgstr "Shown in the Subspace switcher on paired devices."
+
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "Shown only: set it in settings.yaml or with <0>{env}</0>."
@@ -5395,9 +5691,33 @@ msgstr "Shy"
 msgid "Sidebar"
 msgstr "Sidebar"
 
+#: src/features/subspace/share-card.tsx
+msgid "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
+msgstr "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
+
+#: src/lib/labels.ts
+msgid "Sign in to your Subspace Relay account first."
+msgstr "Sign in to your Subspace Relay account first."
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign In with Browser"
+msgstr "Sign In with Browser"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign in with your LAPLACE ID in your browser to pair and reach your servers through the Subspace Relay without opening ports."
+msgstr "Sign in with your LAPLACE ID in your browser to pair and reach your servers through the Subspace Relay without opening ports."
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign Out"
+msgstr "Sign Out"
+
 #: src/features/usage/route.tsx
 msgid "since recording began"
 msgstr "since recording began"
+
+#: src/features/subspace/share-card.tsx
+msgid "Single-use link expires at {time}. Generating a new code invalidates this one."
+msgstr "Single-use link expires at {time}. Generating a new code invalidates this one."
 
 #: src/features/settings/route.tsx
 #: src/features/settings/skills-card.tsx
@@ -5581,6 +5901,10 @@ msgstr "Started at {time}"
 msgid "Starting a task…"
 msgstr "Starting a task…"
 
+#: src/features/subspace/share-card.tsx
+msgid "Starting direct listener…"
+msgstr "Starting direct listener…"
+
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
 msgstr "Starting…"
@@ -5711,6 +6035,42 @@ msgstr "Studio"
 msgid "STUN URL"
 msgstr "STUN URL"
 
+#: src/components/settings-form/labels.ts
+#: src/components/subspace-switcher.tsx
+#: src/features/settings/route.tsx
+msgid "Subspace"
+msgstr "Subspace"
+
+#: src/components/settings-form/labels.ts
+msgid "Subspace Auth URL"
+msgstr "Subspace Auth URL"
+
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Pairing QR Code"
+msgstr "Subspace Pairing QR Code"
+
+#: src/features/settings/route.tsx
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Relay"
+msgstr "Subspace Relay"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Subspace Relay Account"
+msgstr "Subspace Relay Account"
+
+#: src/components/settings-form/labels.ts
+msgid "Subspace Relay URL"
+msgstr "Subspace Relay URL"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Subspace Servers"
+msgstr "Subspace Servers"
+
+#: src/components/subspace-switcher.tsx
+msgid "Subspace Settings"
+msgstr "Subspace Settings"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Such as 温柔/轻柔/柔一点"
 msgstr "Such as 温柔/轻柔/柔一点"
@@ -5725,9 +6085,29 @@ msgctxt "mood"
 msgid "Surprised"
 msgstr "Surprised"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Switch between this computer and remote Eidolon servers you've paired with."
+msgstr "Switch between this computer and remote Eidolon servers you've paired with."
+
+#: src/features/subspace/servers-card.tsx
+msgid "Switch Here"
+msgstr "Switch Here"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Switch the app to use this server as soon as pairing finishes."
+msgstr "Switch the app to use this server as soon as pairing finishes."
+
 #: src/features/setup/new-persona.tsx
 msgid "Switch to Her Now"
 msgstr "Switch to Her Now"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Switch to Server Now"
+msgstr "Switch to Server Now"
+
+#: src/components/route-error.tsx
+msgid "Switch to This Computer"
+msgstr "Switch to This Computer"
 
 #: src/features/settings/skills-card.tsx
 msgid "Switched Off"
@@ -5753,6 +6133,10 @@ msgstr "Table"
 msgctxt "index storage"
 msgid "Table"
 msgstr "Table"
+
+#: src/features/subspace/share-card.tsx
+msgid "Tailscale"
+msgstr "Tailscale"
 
 #: src/features/settings/accounts-card.tsx
 msgid "Takes no key"
@@ -5910,6 +6294,18 @@ msgid "That model was removed. Reload to see her models."
 msgstr "That model was removed. Reload to see her models."
 
 #: src/lib/labels.ts
+msgid "That paired device is no longer listed."
+msgstr "That paired device is no longer listed."
+
+#: src/lib/labels.ts
+msgid "That pairing link has expired. Generate a fresh one on the host."
+msgstr "That pairing link has expired. Generate a fresh one on the host."
+
+#: src/lib/labels.ts
+msgid "That pairing link or code isn't valid."
+msgstr "That pairing link or code isn't valid."
+
+#: src/lib/labels.ts
 msgid "That part of the file doesn't exist."
 msgstr "That part of the file doesn't exist."
 
@@ -5920,6 +6316,10 @@ msgstr "That service isn't available right now."
 #: src/lib/labels.ts
 msgid "That setting doesn't exist."
 msgstr "That setting doesn't exist."
+
+#: src/lib/labels.ts
+msgid "That Subspace server is no longer saved."
+msgstr "That Subspace server is no longer saved."
 
 #: src/lib/labels.ts
 msgid "That task is waiting for an approval. Answer it first."
@@ -6102,6 +6502,10 @@ msgid "The language you speak in calls, as a two-letter code. Default zh."
 msgstr "The language you speak in calls, as a two-letter code. Default zh."
 
 #: src/components/settings-form/labels.ts
+msgid "The LAPLACE ID or OIDC server used to sign in when pairing through the Subspace Relay."
+msgstr "The LAPLACE ID or OIDC server used to sign in when pairing through the Subspace Relay."
+
+#: src/components/settings-form/labels.ts
 msgid "The largest allowed value is {max}."
 msgstr "The largest allowed value is {max}."
 
@@ -6206,6 +6610,10 @@ msgstr "The provider rejected this key."
 msgid "The provider sent an answer the check doesn't recognize."
 msgstr "The provider sent an answer the check doesn't recognize."
 
+#: src/features/settings/route.tsx
+msgid "The relay server used for account-based Subspace pairing and connections."
+msgstr "The relay server used for account-based Subspace pairing and connections."
+
 #: src/features/jobs/labels.ts
 msgid "The request got no answer. Check the network connection."
 msgstr "The request got no answer. Check the network connection."
@@ -6227,6 +6635,10 @@ msgstr "The request wasn't valid."
 msgid "The same steps came three turns running, so it paused. Continue lets it try again."
 msgstr "The same steps came three turns running, so it paused. Continue lets it try again."
 
+#: src/features/subspace/servers-card.tsx
+msgid "The saved pairing key and device token will be removed from this computer."
+msgstr "The saved pairing key and device token will be removed from this computer."
+
 #: src/features/tasks/labels.ts
 msgid "The server says this tool can change or delete things."
 msgstr "The server says this tool can change or delete things."
@@ -6242,6 +6654,10 @@ msgstr "The site refused yt-dlp, usually because it is out of date."
 #: src/components/settings-form/labels.ts
 msgid "The smallest allowed value is {min}."
 msgstr "The smallest allowed value is {min}."
+
+#: src/components/settings-form/labels.ts
+msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
+msgstr "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
 
 #: src/features/studio/prompt-section.tsx
 msgid "The system prompt: who she is, how she talks and the rules she keeps. Calls that start after you save use it."
@@ -6371,6 +6787,11 @@ msgstr "This chat is in a call. Hang up first."
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
 msgstr "This checked the key from the environment, which wins over the one saved here."
+
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "This Computer"
+msgstr "This Computer"
 
 #: src/lib/labels.ts
 msgid "This file ships with Eidolon and can't be changed or deleted."
@@ -6707,6 +7128,14 @@ msgstr "Until you choose, this chat follows Settings: {level}."
 msgid "Until you choose, this chat follows Settings."
 msgstr "Until you choose, this chat follows Settings."
 
+#: src/features/subspace/servers-card.tsx
+msgid "Update the display name for this Relay server."
+msgstr "Update the display name for this Relay server."
+
+#: src/features/subspace/servers-card.tsx
+msgid "Update the display name or direct network endpoint for this server."
+msgstr "Update the display name or direct network endpoint for this server."
+
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx
 msgid "Upload"
@@ -6805,6 +7234,10 @@ msgstr "Verbose"
 msgid "Verbose is on for this chat"
 msgstr "Verbose is on for this chat"
 
+#: src/features/subspace/relay-account-card.tsx
+msgid "Verification code copied."
+msgstr "Verification code copied."
+
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Version {tag}"
 msgstr "Version {tag}"
@@ -6845,6 +7278,10 @@ msgstr "View"
 #: src/components/settings-form/labels.ts
 msgid "Viewer Memory"
 msgstr "Viewer Memory"
+
+#: src/features/subspace/subspace-section.tsx
+msgid "Viewing a Remote Server"
+msgstr "Viewing a Remote Server"
 
 #: src/components/voice-picker/mine.tsx
 msgid "Visibility"
@@ -6933,6 +7370,10 @@ msgstr "Waiting for {name} to answer…"
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "Waiting for a reply…"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Waiting for browser sign-in…"
+msgstr "Waiting for browser sign-in…"
 
 #: src/features/tasks/waiting-bar.tsx
 msgid "Waiting for You"

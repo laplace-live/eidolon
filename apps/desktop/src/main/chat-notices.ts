@@ -170,10 +170,30 @@ function personasOf(answer: unknown): Map<string, PersonaNames> {
   );
 }
 
-async function read(fetch: BackendFetch, path: string, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch(path, { signal });
+class HostMismatchError extends Error {
+  constructor(path: string, expectedHost: string) {
+    super(`GET ${path} answered 409 for expected host ${expectedHost}`);
+  }
+}
+
+async function read(
+  fetch: BackendFetch,
+  path: string,
+  signal: AbortSignal,
+  expectedHost?: string,
+): Promise<{ readonly data: unknown; readonly host: string | null }> {
+  const response = await fetch(
+    path,
+    expectedHost !== undefined ? { signal, expectedHost } : { signal },
+  );
+  if (response.status === 409 && expectedHost !== undefined) {
+    throw new HostMismatchError(path, expectedHost);
+  }
   if (!response.ok) throw new Error(`GET ${path} answered ${response.status}`);
-  return await response.json();
+  return {
+    data: await response.json(),
+    host: response.headers?.get("x-eidolon-subspace-host") ?? null,
+  };
 }
 
 function aborted(signal: AbortSignal): Promise<never> {
@@ -236,6 +256,8 @@ export class ChatWatch {
   readonly #requests = new Set<AbortController>();
   #seen = new Map<string, number>();
   #chats = new Map<string, ChatSummary>();
+  /** Which host supplied the previous poll (`"local"` or Subspace server id). */
+  #host: string | null = null;
   #baseline = false;
   #personas: ReadonlyMap<string, PersonaNames> | null = null;
   /** Retain recent handles so Electron does not GC click callbacks while banners are visible. */
@@ -245,6 +267,10 @@ export class ChatWatch {
   constructor(options: ChatWatchOptions) {
     this.#options = options;
     this.#timers = options.timers ?? globalThis;
+  }
+
+  get host(): string | null {
+    return this.#host;
   }
 
   /** A server is ready (owned or attached): a new baseline, then polls. */
@@ -275,14 +301,39 @@ export class ChatWatch {
   async groupFor(
     chatId: string,
     speakerId: string,
+    expectedHost?: string | null,
   ): Promise<{ readonly groupTitle: string; readonly groupPeers: readonly string[] } | null> {
+    if (
+      expectedHost !== undefined &&
+      expectedHost !== null &&
+      this.#host !== null &&
+      this.#host !== expectedHost
+    ) {
+      return null;
+    }
     const summary = this.#chats.get(chatId);
     if (summary === undefined || summary.participants.length < 2) return null;
     const run = this.#run;
-    const names =
-      (summary.title ?? "").trim() !== "" || run === null
-        ? this.#personas
-        : await this.#personaNames(run, summary.participants);
+    const pinnedHost = expectedHost ?? this.#host ?? undefined;
+    let names: ReadonlyMap<string, PersonaNames> | null;
+    if ((summary.title ?? "").trim() !== "" || run === null) {
+      names = this.#personas;
+    } else {
+      try {
+        names = await this.#personaNames(run, summary.participants, pinnedHost);
+      } catch (error) {
+        if (error instanceof HostMismatchError) return null;
+        throw error;
+      }
+    }
+    if (
+      expectedHost !== undefined &&
+      expectedHost !== null &&
+      this.#host !== null &&
+      this.#host !== expectedHost
+    ) {
+      return null;
+    }
     return groupMetadata(summary, speakerId, names, this.#options.strings());
   }
 
@@ -295,14 +346,28 @@ export class ChatWatch {
 
   async #poll(run: object): Promise<void> {
     try {
-      const list = chatsOf(await this.#get(CHATS));
+      const { data, host } = await this.#get(CHATS);
+      const list = chatsOf(data);
       if (this.#failing) {
         this.#failing = false;
         this.#options.log.info("Eidolon: chat notifications read the chats again");
       }
-      await this.#take(run, list);
+      if (host !== null && this.#host !== null && host !== this.#host) {
+        for (const handle of this.#shown.values()) handle.close();
+        this.#shown.clear();
+        this.#seen = new Map();
+        this.#chats.clear();
+        this.#personas = null;
+        this.#baseline = true;
+      }
+      if (host !== null) this.#host = host;
+      await this.#take(run, list, host ?? undefined);
     } catch (error) {
       if (this.#run !== run) return;
+      if (error instanceof HostMismatchError) {
+        if (this.#run === run) this.#schedule(run, POLL_MS);
+        return;
+      }
       if (!this.#failing) {
         this.#failing = true;
         this.#options.log.warn(
@@ -313,7 +378,7 @@ export class ChatWatch {
     if (this.#run === run) this.#schedule(run, POLL_MS);
   }
 
-  async #take(run: object, list: readonly ChatSummary[]): Promise<void> {
+  async #take(run: object, list: readonly ChatSummary[], expectedHost?: string): Promise<void> {
     this.#chats = new Map(list.map((chat) => [chat.id, chat]));
     if (this.#baseline) {
       this.#baseline = false;
@@ -333,7 +398,7 @@ export class ChatWatch {
       advanced.map(async (chat) => {
         const prev = this.#seen.get(chat.id) ?? 0;
         const path = `${CHATS}/${encodeURIComponent(chat.id)}?afterSeq=${prev}`;
-        return { chat, events: eventsOf(await this.#get(path), path) };
+        return { chat, events: eventsOf((await this.#get(path, expectedHost)).data, path) };
       }),
     );
     if (this.#run !== run) return;
@@ -376,7 +441,7 @@ export class ChatWatch {
     const neededIds = [
       ...new Set(pending.flatMap((item) => [item.speakerId, ...item.summary.participants])),
     ];
-    const names = await this.#personaNames(run, neededIds);
+    const names = await this.#personaNames(run, neededIds, expectedHost);
     if (this.#run !== run) return;
     updateSeen();
     if (this.#options.focused()) return;
@@ -423,12 +488,14 @@ export class ChatWatch {
   async #personaNames(
     run: object,
     ids: readonly string[],
+    expectedHost?: string,
   ): Promise<ReadonlyMap<string, PersonaNames> | null> {
     const known = this.#personas;
     if (ids.every((id) => known?.has(id) === true)) return known;
     try {
-      this.#personas = personasOf(await this.#get(PERSONAS));
+      this.#personas = personasOf((await this.#get(PERSONAS, expectedHost)).data);
     } catch (error) {
+      if (error instanceof HostMismatchError) throw error;
       if (this.#run === run) {
         this.#options.log.warn(
           `Eidolon: chat notifications couldn't read the personas' names: ${explain(error)}`,
@@ -438,7 +505,10 @@ export class ChatWatch {
     return this.#personas;
   }
 
-  async #get(path: string): Promise<unknown> {
+  async #get(
+    path: string,
+    expectedHost?: string,
+  ): Promise<{ readonly data: unknown; readonly host: string | null }> {
     const request = new AbortController();
     this.#requests.add(request);
     const timer = this.#timers.setTimeout(
@@ -447,7 +517,7 @@ export class ChatWatch {
     );
     try {
       return await Promise.race([
-        read(this.#options.fetch, path, request.signal),
+        read(this.#options.fetch, path, request.signal, expectedHost),
         aborted(request.signal),
       ]);
     } finally {

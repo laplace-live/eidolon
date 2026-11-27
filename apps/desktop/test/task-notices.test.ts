@@ -215,6 +215,7 @@ function taskServer() {
   const state = {
     tasks: [] as TaskSnapshot[],
     personas: [MILKY] as PersonaSummary[],
+    host: "local" as string | null,
     /** A path's status other than 200, or `never`: no answer, even once its request is aborted. */
     fails: new Map<string, number | "never">(),
     /** What GET tasks answers in place of its tasks. */
@@ -230,7 +231,15 @@ function taskServer() {
         ? (state.body ?? { tasks: state.tasks })
         : { active: MILKY.id, personas: state.personas };
     const status = fail ?? 200;
-    return Promise.resolve({ ok: status === 200, status, json: async () => body });
+    return Promise.resolve({
+      ok: status === 200,
+      status,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === "x-eidolon-subspace-host" ? state.host : null,
+      },
+      json: async () => body,
+    });
   };
   return Object.assign(state, {
     fetch,
@@ -779,6 +788,26 @@ describe("TaskWatch", () => {
     watch.ready();
     await time.advance(0);
     expect(backend.requests.map(({ signal }) => signal.aborted)).toEqual([true]);
+    watch.stop();
+  });
+
+  test("changing X-Eidolon-Subspace-Host closes open notices and treats the new host as a fresh baseline", async () => {
+    const { time, backend, shown, watch } = watching();
+    backend.tasks = [snapshot(TASK)];
+    watch.ready();
+    await time.advance(0);
+    backend.tasks = [snapshot(TASK, RUN_TESTS)];
+    await time.advance(3_000);
+    expect(told(shown)).toEqual(["A command"]);
+
+    backend.host = "sub_remote_1";
+    backend.tasks = [snapshot(TASK_B, WRITE)];
+    await time.advance(30_000);
+    expect(told(shown)).toEqual(["A command closed"]);
+
+    backend.tasks = [snapshot(TASK_B, WRITE), snapshot(TASK_C, START)];
+    await time.advance(30_000);
+    expect(told(shown)).toEqual(["A command closed", "C start"]);
     watch.stop();
   });
 });

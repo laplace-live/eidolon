@@ -11,6 +11,65 @@ export type * from "../../../bot/src/local/api.ts";
 export const CLIENT_ERROR_CODES = ["unreachable", "bad-response"] as const;
 export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
 
+let expectedSubspaceHost: string | undefined;
+let hostMutationEpoch = 0;
+const expectedHostConflictListeners = new Set<() => void>();
+const hostMutationEpochListeners = new Set<() => void>();
+
+export class StaleHostMutationError extends Error {
+  override readonly name = "StaleHostMutationError";
+
+  constructor() {
+    super("Active Subspace server changed before request completed");
+  }
+}
+
+export function bumpHostMutationEpoch(): void {
+  hostMutationEpoch += 1;
+  for (const listener of [...hostMutationEpochListeners]) listener();
+}
+
+export function subscribeHostMutationEpoch(listener: () => void): () => void {
+  hostMutationEpochListeners.add(listener);
+  return () => {
+    hostMutationEpochListeners.delete(listener);
+  };
+}
+
+export function setExpectedSubspaceHost(activeHostId: string | null): void {
+  expectedSubspaceHost = activeHostId ?? "local";
+}
+
+export function getExpectedSubspaceHost(): string | undefined {
+  return expectedSubspaceHost;
+}
+
+export function expectedHostHeaders(
+  expectedHost: string | undefined = expectedSubspaceHost,
+): Record<string, string> {
+  return expectedHost === undefined ? {} : { "X-Eidolon-Expected-Host": expectedHost };
+}
+
+export function resetExpectedSubspaceHost(): void {
+  expectedSubspaceHost = undefined;
+  hostMutationEpoch = 0;
+}
+
+export function primeExpectedSubspaceHost(activeHostId: string | null): void {
+  if (expectedSubspaceHost === undefined) setExpectedSubspaceHost(activeHostId);
+}
+
+export function notifyExpectedHostConflict(): void {
+  for (const listener of [...expectedHostConflictListeners]) listener();
+}
+
+export function subscribeExpectedHostConflict(listener: () => void): () => void {
+  expectedHostConflictListeners.add(listener);
+  return () => {
+    expectedHostConflictListeners.delete(listener);
+  };
+}
+
 export class ApiError extends Error {
   override readonly name = "ApiError";
   /** 0 when no response arrived. */
@@ -122,12 +181,45 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
   return urlOf(route, input);
 }
 
+function isHostScopedWrite(method: string, path: string): boolean {
+  return (
+    method !== "GET" &&
+    method !== "HEAD" &&
+    !path.startsWith("/api/local/session") &&
+    !path.startsWith("/api/local/subspace")
+  );
+}
+
+function splitRoute(route: string): { readonly method: string; readonly path: string } {
+  const space = route.indexOf(" ");
+  return { method: route.slice(0, space), path: route.slice(space + 1) };
+}
+
+function assertFreshHostWrite(
+  hostScopedWrite: boolean,
+  startedEpoch: number,
+  response?: Response,
+): void {
+  if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+    if (response !== undefined && !response.bodyUsed) {
+      void response.body?.cancel().catch(() => {});
+    }
+    throw new StaleHostMutationError();
+  }
+}
+
 /** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
 export async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
   const headers = proofHeaders();
+  if (expectedSubspaceHost !== undefined && hostScopedWrite) {
+    headers["X-Eidolon-Expected-Host"] = expectedSubspaceHost;
+  }
   const init: RequestInit = {
-    method: route.slice(0, route.indexOf(" ")),
+    method,
     credentials: "same-origin",
     signal,
     headers,
@@ -143,10 +235,19 @@ export async function send(route: string, input: Loose = {}): Promise<Response> 
   try {
     response = await fetch(urlOf(route, input), init);
   } catch (error) {
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     if (signal?.aborted) throw error;
     throw new ApiError(0, "unreachable", String(error));
   }
-  if (!response.ok) throw await errorFrom(response);
+  assertFreshHostWrite(hostScopedWrite, startedEpoch, response);
+  if (!response.ok) {
+    const err = await errorFrom(response);
+    assertFreshHostWrite(hostScopedWrite, startedEpoch, response);
+    if (err.status === 409 && err.code === "conflict") {
+      for (const listener of [...expectedHostConflictListeners]) listener();
+    }
+    throw err;
+  }
   return response;
 }
 
@@ -155,10 +256,17 @@ export async function call<R extends JsonRoute>(
   route: R,
   ...[input]: Args<R>
 ): Promise<Spec<R>["response"]> {
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
   const response = await send(route, input);
   try {
-    return (await response.json()) as Spec<R>["response"];
-  } catch {
+    const parsed = (await response.json()) as Spec<R>["response"];
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
+    return parsed;
+  } catch (error) {
+    if (error instanceof StaleHostMutationError) throw error;
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     throw new ApiError(response.status, "bad-response", "not JSON");
   }
 }
@@ -178,10 +286,17 @@ export async function bytes<R extends RawRoute>(
   route: R,
   ...[input]: Args<R>
 ): Promise<ArrayBuffer> {
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
   const response = await send(route, input);
   try {
-    return await response.arrayBuffer();
+    const data = await response.arrayBuffer();
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
+    return data;
   } catch (error) {
+    if (error instanceof StaleHostMutationError) throw error;
+    assertFreshHostWrite(hostScopedWrite, startedEpoch);
     if (input?.signal?.aborted) throw error;
     throw new ApiError(response.status, "bad-response", "the body stopped short");
   }

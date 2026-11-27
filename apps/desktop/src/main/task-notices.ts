@@ -146,10 +146,17 @@ function namesOf(answer: unknown): Map<string, string> {
   );
 }
 
-async function read(fetch: BackendFetch, path: string, signal: AbortSignal): Promise<unknown> {
+async function read(
+  fetch: BackendFetch,
+  path: string,
+  signal: AbortSignal,
+): Promise<{ readonly data: unknown; readonly host: string | null }> {
   const response = await fetch(path, { signal });
   if (!response.ok) throw new Error(`GET ${path} answered ${response.status}`);
-  return await response.json();
+  return {
+    data: await response.json(),
+    host: response.headers?.get("x-eidolon-subspace-host") ?? null,
+  };
 }
 
 /** Rejects with `signal`'s reason once it aborts, so a request that ignores it still ends. */
@@ -182,6 +189,8 @@ export class TaskWatch {
   #request: AbortController | null = null;
   /** Each task as the last answer had it, this run's or an earlier one's; null until the first. */
   #seen: Map<string, Seen> | null = null;
+  /** Which host supplied the previous poll (`"local"` or Subspace server id). */
+  #host: string | null = null;
   /** The next answer is ready()'s baseline: it closes the notices it outdates, and shows none. */
   #baseline = false;
   /** The personas' names by id, read once a run and again for an id they lack. */
@@ -193,6 +202,10 @@ export class TaskWatch {
   constructor(options: TaskWatchOptions) {
     this.#options = options;
     this.#timers = options.timers ?? globalThis;
+  }
+
+  get host(): string | null {
+    return this.#host;
   }
 
   /** A server is ready (owned or attached): a new baseline, then polls. */
@@ -226,11 +239,20 @@ export class TaskWatch {
     let delay = IDLE_POLL_MS;
     try {
       // stop() aborts the request in flight, so an answer that arrives is this run's.
-      const tasks = tasksOf(await this.#get(TASKS));
+      const { data, host } = await this.#get(TASKS);
+      const tasks = tasksOf(data);
       if (this.#failing) {
         this.#failing = false;
         this.#options.log.info("Eidolon: notifications read the tasks again");
       }
+      if (host !== null && this.#host !== null && host !== this.#host) {
+        // Host switched (e.g. local <-> remote Subspace): treat this answer as a clean baseline.
+        for (const id of [...this.#shown.keys()]) this.#close(id);
+        this.#seen = null;
+        this.#baseline = true;
+        this.#names = null;
+      }
+      if (host !== null) this.#host = host;
       if (tasks.some((task) => task.status === "running")) delay = RUNNING_POLL_MS;
       await this.#take(run, tasks);
     } catch (error) {
@@ -291,7 +313,8 @@ export class TaskWatch {
     const ids = due.flatMap(({ task }) => task.chat?.persona ?? []);
     if (ids.every((id) => known?.has(id) === true)) return known;
     try {
-      this.#names = namesOf(await this.#get(PERSONAS));
+      const { data } = await this.#get(PERSONAS);
+      this.#names = namesOf(data);
     } catch (error) {
       if (this.#run === run) {
         this.#options.log.warn(
@@ -308,7 +331,7 @@ export class TaskWatch {
   }
 
   /** GET `path`'s JSON under REQUEST_TIMEOUT_MS; stop() cancels it. */
-  async #get(path: string): Promise<unknown> {
+  async #get(path: string): Promise<{ readonly data: unknown; readonly host: string | null }> {
     const request = new AbortController();
     this.#request = request;
     const timer = this.#timers.setTimeout(

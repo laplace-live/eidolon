@@ -97,6 +97,18 @@ export const LOCAL_ROUTES = [
   "GET /api/local/skills",
   "POST /api/local/skills",
   "PUT /api/local/skills/:name",
+  "GET /api/local/subspace",
+  "POST /api/local/subspace/active",
+  "POST /api/local/subspace/servers",
+  "PATCH /api/local/subspace/servers/:id",
+  "DELETE /api/local/subspace/servers/:id",
+  "POST /api/local/subspace/servers/:id/connect",
+  "POST /api/local/subspace/servers/:id/disconnect",
+  "POST /api/local/subspace/share/offer",
+  "POST /api/local/subspace/share/settings",
+  "DELETE /api/local/subspace/share/grants/:id",
+  "POST /api/local/subspace/auth/start",
+  "POST /api/local/subspace/auth/logout",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -160,6 +172,13 @@ export const ERROR_CODES = [
   "skill-exists",
   "invalid-model",
   "unknown-model",
+  "subspace-unreachable",
+  "invalid-pairing-code",
+  "pairing-expired",
+  "pairing-failed",
+  "relay-auth-required",
+  "unknown-subspace-server",
+  "unknown-subspace-grant",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -206,6 +225,14 @@ export interface SessionRequest {
  * pages hold the proof.
  */
 export const PROOF_HEADER = "X-Eidolon-Proof";
+/** Forces the local server to handle a request itself even when a remote Subspace host is active. */
+export const TARGET_HEADER = "X-Eidolon-Target";
+/** Names the Subspace host (`"local"` or a server id) the client expects to handle the request. */
+export const EXPECTED_HOST_HEADER = "X-Eidolon-Expected-Host";
+/** Marks responses proxied from a remote Subspace host so the desktop forwarder skips local restarts. */
+export const SUBSPACE_REMOTE_HEADER = "X-Eidolon-Subspace";
+/** Identifies which host (`"local"` or a Subspace server id) served `GET /api/local/tasks` or `GET /api/local/chats`. */
+export const SUBSPACE_HOST_HEADER = "X-Eidolon-Subspace-Host";
 
 /** POST session's answer beside the cookie: the proof to send as PROOF_HEADER. */
 export interface SessionGrant {
@@ -1307,6 +1334,27 @@ export interface LocalApi {
    * name.
    */
   "PUT /api/local/skills/:name": Endpoint<SkillChange, SkillsResponse>;
+  "GET /api/local/subspace": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/active": Endpoint<SubspaceActiveRequest, SubspaceStateResponse>;
+  "POST /api/local/subspace/servers": Endpoint<SubspacePairRequest, SubspacePairResponse>;
+  "PATCH /api/local/subspace/servers/:id": Endpoint<
+    SubspaceServerUpdateRequest,
+    SubspaceStateResponse
+  >;
+  "DELETE /api/local/subspace/servers/:id": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/servers/:id/connect": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/servers/:id/disconnect": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/share/offer": Endpoint<
+    SubspaceShareOfferRequest,
+    SubspaceShareOfferResponse
+  >;
+  "POST /api/local/subspace/share/settings": Endpoint<
+    SubspaceShareSettingsRequest,
+    SubspaceStateResponse
+  >;
+  "DELETE /api/local/subspace/share/grants/:id": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/auth/start": Endpoint<undefined, SubspaceStateResponse>;
+  "POST /api/local/subspace/auth/logout": Endpoint<undefined, SubspaceStateResponse>;
 }
 
 /** A chat in GET chats' list: its summary, how many of her items are unread, and whether it runs. */
@@ -2095,3 +2143,130 @@ export type StartTaskFinal = {
 
 /** How each line she passes on with steer_task starts, in the task's inbox and its transcript. */
 export const STEER_PREFIX = "The assistant updates the brief: ";
+
+export type SubspaceConnectionState = "disconnected" | "connecting" | "connected" | "error";
+export type SubspaceShareMode = "off" | "direct" | "relay";
+
+export interface SubspaceShareableAddress {
+  readonly address: string;
+  readonly interfaceName: string;
+  readonly kind: "tailscale" | "lan" | "public";
+}
+
+export interface SubspaceServerView {
+  readonly id: string;
+  readonly name: string;
+  readonly mode: "direct" | "relay";
+  readonly endpoint: {
+    readonly host: string;
+    readonly port: number;
+    readonly tls?: boolean;
+  } | null;
+  readonly relay: { readonly url: string; readonly relayHostId: string } | null;
+  readonly addedAt: number;
+  readonly lastConnectedAt: number | null;
+  readonly lastVersion: string | null;
+  readonly connectionState: SubspaceConnectionState;
+  readonly lastError: string | null;
+  readonly latencyMs: number | null;
+}
+
+export interface SubspaceOfferSnapshot {
+  readonly mode: "direct" | "relay";
+  readonly hostName: string;
+  readonly expiresAt: number;
+  readonly pairingUrl: string;
+  readonly pairingCode: string;
+  readonly qrSvg: string;
+}
+
+export interface SubspaceGrantView {
+  readonly id: string;
+  readonly clientName: string;
+  readonly mode: "direct" | "relay";
+  readonly createdAt: number;
+  readonly lastSeenAt: number | null;
+}
+
+export interface SubspaceRelayUser {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly image?: string | null;
+}
+
+export interface SubspaceDeviceFlowSnapshot {
+  readonly status: "idle" | "pending" | "approved" | "error";
+  readonly userCode: string | null;
+  readonly verificationUri: string | null;
+  readonly verificationUriComplete: string | null;
+  readonly expiresAt: number | null;
+  readonly error: string | null;
+}
+
+export interface SubspaceStateResponse {
+  readonly activeHostId: string | null;
+  readonly servers: readonly SubspaceServerView[];
+  readonly share: {
+    readonly hostName: string;
+    readonly shareMode: SubspaceShareMode;
+    readonly directPort: number;
+    readonly directAddress: string | null;
+    readonly addresses: readonly SubspaceShareableAddress[];
+    readonly listening: boolean;
+    readonly listeningPort: number | null;
+    readonly relayConnected: boolean;
+    readonly relayError: string | null;
+    readonly activeOffer: SubspaceOfferSnapshot | null;
+    readonly grants: readonly SubspaceGrantView[];
+  };
+  readonly relayAuth: {
+    readonly authUrl: string;
+    readonly relayUrl: string;
+    readonly status: "signed-out" | "pending" | "signed-in";
+    readonly user: SubspaceRelayUser | null;
+    readonly deviceFlow: SubspaceDeviceFlowSnapshot;
+  };
+}
+
+export interface SubspacePairResponse extends SubspaceStateResponse {
+  readonly pairedServerId: string;
+}
+
+export interface SubspaceActiveRequest {
+  readonly hostId: string | null;
+}
+
+export interface SubspacePairRequest {
+  readonly code: string;
+  readonly name?: string;
+  readonly activate?: boolean;
+}
+
+export interface SubspaceServerUpdateRequest {
+  readonly name?: string;
+  readonly host?: string;
+  readonly port?: number;
+}
+
+export interface SubspaceShareOfferRequest {
+  readonly mode: "direct" | "relay";
+  readonly address?: string;
+  readonly port?: number;
+  readonly rotate?: boolean;
+}
+
+export interface SubspaceShareOfferResponse {
+  readonly pairingUrl: string;
+  readonly pairingCode: string;
+  readonly qrSvg: string;
+  readonly expiresAt: number;
+  readonly state: SubspaceStateResponse;
+}
+
+export interface SubspaceShareSettingsRequest {
+  readonly hostName?: string;
+  readonly shareMode?: SubspaceShareMode;
+  readonly directAddress?: string | null;
+  readonly directPort?: number;
+}

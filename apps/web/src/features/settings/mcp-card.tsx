@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { call, type McpServerChange, type McpServerView } from "@/lib/api";
+import { call, type McpServerChange, type McpServerView, StaleHostMutationError } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 
 /** A secret's reference as mcp.json writes one. */
@@ -125,7 +125,9 @@ export function McpServersCard() {
     onSuccess: (data) => queryClient.setQueryData(mcpServersQuery.queryKey, data),
     onError: (error) => {
       toastError(error);
-      void queryClient.invalidateQueries({ queryKey: mcpServersQuery.queryKey });
+      if (!(error instanceof StaleHostMutationError)) {
+        void queryClient.invalidateQueries({ queryKey: mcpServersQuery.queryKey });
+      }
     },
   });
   const path = servers.data?.path ?? "mcp.json";

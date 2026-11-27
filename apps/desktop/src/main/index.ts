@@ -177,8 +177,21 @@ function run(): void {
       return waitingPage(shellPageStrings(language(), strings()));
     },
   });
-  const backendFetch = (path: string, { signal }: { readonly signal: AbortSignal }) =>
-    backend.get(path, signal);
+  const hostMismatches = new Map<string, number>();
+  const backendFetch = async (
+    path: string,
+    { signal, expectedHost }: { readonly signal: AbortSignal; readonly expectedHost?: string },
+  ) => {
+    const response = await backend.get(
+      path,
+      signal,
+      expectedHost !== undefined ? { expectedHost } : undefined,
+    );
+    if (response.status === 409 && expectedHost !== undefined) {
+      hostMismatches.set(expectedHost, (hostMismatches.get(expectedHost) ?? 0) + 1);
+    }
+    return response;
+  };
   const avatarCache =
     notifies && !background
       ? new NotificationAvatarCache({
@@ -255,7 +268,7 @@ function run(): void {
       ...(senderId !== null ? { sender: { id: senderId, name: senderName, ...withAvatar } } : {}),
     };
   };
-  const chatWatch = notifies
+  const chatWatch: ChatWatch | null = notifies
     ? new ChatWatch({
         fetch: backendFetch,
         focused: () => mainWindow()?.isFocused() === true,
@@ -273,18 +286,29 @@ function run(): void {
               avatarPath,
             });
           if (avatarCache === null) return native.notify(toDesktopNotice(null), events);
-          return showAsyncNotice(
-            async (signal) =>
-              toDesktopNotice(
-                await avatarCache.resolve(notice.speakerId, notice.groupPeers, signal),
-              ),
-            events,
-          );
+          const noticeHost = chatWatch?.host;
+          const mismatchBefore = noticeHost != null ? (hostMismatches.get(noticeHost) ?? 0) : 0;
+          return showAsyncNotice(async (signal) => {
+            const avatarPath = await avatarCache.resolve(
+              notice.speakerId,
+              notice.groupPeers,
+              signal,
+              noticeHost,
+            );
+            if (
+              noticeHost != null &&
+              (chatWatch?.host !== noticeHost ||
+                (hostMismatches.get(noticeHost) ?? 0) !== mismatchBefore)
+            ) {
+              return null;
+            }
+            return toDesktopNotice(avatarPath);
+          }, events);
         },
         log: mainLog,
       })
     : null;
-  const watch = notifies
+  const watch: TaskWatch | null = notifies
     ? new TaskWatch({
         fetch: backendFetch,
         focused: () => mainWindow()?.isFocused() === true,
@@ -308,16 +332,25 @@ function run(): void {
             );
           }
           const personaId = notice.personaId;
+          const noticeHost = watch?.host;
+          const mismatchBefore = noticeHost != null ? (hostMismatches.get(noticeHost) ?? 0) : 0;
+          const hostSwitched = () =>
+            noticeHost != null &&
+            (watch?.host !== noticeHost ||
+              (hostMismatches.get(noticeHost) ?? 0) !== mismatchBefore);
           return showAsyncNotice(async (signal) => {
             const groupInfo =
               notice.chat !== null
-                ? ((await chatWatch?.groupFor(notice.chat, personaId)) ?? null)
+                ? ((await chatWatch?.groupFor(notice.chat, personaId, noticeHost)) ?? null)
                 : null;
+            if (hostSwitched()) return null;
             const avatarPath = await avatarCache.resolve(
               personaId,
               groupInfo?.groupPeers ?? [],
               signal,
+              noticeHost,
             );
+            if (hostSwitched()) return null;
             return toDesktopNotice(groupInfo?.groupTitle ?? null, avatarPath);
           }, events);
         },

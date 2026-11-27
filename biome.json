@@ -94,7 +94,8 @@
         "packages/**",
         "!packages/ingest/**",
         "!packages/assistant/**",
-        "!packages/sdk/**"
+        "!packages/sdk/**",
+        "!packages/subspace/**"
       ],
       "linter": {
         "rules": {
@@ -114,6 +115,15 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/subspace",
+                      "@eidolon/subspace/**",
+                      "@eidolon/relay",
+                      "@eidolon/relay/**"
+                    ],
+                    "message": "The bot image skips builds for Subspace changes (docker.yml); only apps/bot/src/local, apps/cli, and apps/relay may import it."
                   },
                   {
                     "group": [
@@ -159,6 +169,15 @@
                   {
                     "group": ["@eidolon/cli", "@eidolon/cli/**"],
                     "message": "The bot image skips builds for apps/cli changes (docker.yml); only apps/bot/src/local, which the image leaves out, may import it."
+                  },
+                  {
+                    "group": [
+                      "@eidolon/subspace",
+                      "@eidolon/subspace/**",
+                      "@eidolon/relay",
+                      "@eidolon/relay/**"
+                    ],
+                    "message": "The bot image skips builds for Subspace changes (docker.yml); only apps/bot/src/local, apps/cli, and apps/relay may import it."
                   },
                   {
                     "group": [
@@ -215,6 +234,15 @@
                   },
                   {
                     "group": [
+                      "@eidolon/subspace",
+                      "@eidolon/subspace/**",
+                      "@eidolon/relay",
+                      "@eidolon/relay/**"
+                    ],
+                    "message": "The bot image skips builds for Subspace changes (docker.yml); only apps/bot/src/local, apps/cli, and apps/relay may import it."
+                  },
+                  {
+                    "group": [
                       "@laplace.live/eidolon-sdk",
                       "@laplace.live/eidolon-sdk/**",
                       "**/sdk/src/**"
@@ -234,8 +262,10 @@
         "apps/bot/test/local/**",
         "apps/cli/**",
         "apps/eidolon/**",
+        "apps/relay/**",
         "packages/ingest/**",
-        "packages/assistant/**"
+        "packages/assistant/**",
+        "packages/subspace/**"
       ],
       "linter": {
         "rules": {
@@ -260,6 +290,29 @@
                       "@eidolon/webrtc/**"
                     ],
                     "message": "Only packages/runtime may import the voice engine and its transport; reach calls through @eidolon/runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/subspace/src/protocol/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "Keep @eidolon/subspace/protocol pure WebCrypto so mobile apps can reuse it: no Node modules."
                   }
                 ]
               }
@@ -421,6 +474,7 @@
         "apps/cli/src/**",
         "apps/desktop/src/**",
         "apps/eidolon/src/**",
+        "apps/relay/src/**",
         "packages/*/src/**"
       ],
       "linter": {

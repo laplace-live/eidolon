@@ -2,7 +2,7 @@ import { MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquarePlusIcon } from "lucide-react";
+import { MessageSquarePlusIcon, OrbitIcon } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
@@ -25,6 +25,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar";
+import { activeSubspaceServer, subspaceQuery } from "@/features/subspace/queries";
 import { ApiError } from "@/lib/api";
 import type { LocalChatSummary } from "@/lib/chats";
 import { statusQuery } from "@/lib/query";
@@ -120,12 +121,14 @@ function ChatRow({
   now,
   lang,
   personaOf,
+  subspaceHost,
 }: {
   readonly chat: LocalChatSummary;
   readonly open: boolean;
   readonly now: number;
   readonly lang: Lang;
   readonly personaOf: (id: ParticipantId) => ChatPersona;
+  readonly subspaceHost: string | null;
 }) {
   const { t } = useLingui();
   const personas = chat.participants.map(personaOf);
@@ -133,19 +136,27 @@ function ChatRow({
   // An open chat is being marked read; suppress its badge immediately on selection.
   const unread = open ? 0 : chat.unread;
   const unreadLabel = unread > 0 ? t`, ${ph({ count: unread })} unread` : "";
+  const baseTooltip = unread > 0 ? `${name}${unreadLabel}` : name;
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         asChild
         size="lg"
         isActive={open}
-        tooltip={unread > 0 ? `${name}${unreadLabel}` : name}
+        tooltip={subspaceHost === null ? baseTooltip : `${baseTooltip} · ${subspaceHost}`}
         className="h-auto gap-2.5 py-1.5 data-active:font-normal"
       >
         <Link to={chatPath(chat.id)}>
           <ChatAvatar personas={personas} />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex items-baseline gap-2">
+              {subspaceHost !== null && (
+                <OrbitIcon
+                  data-subspace-chat
+                  aria-hidden
+                  className="size-3.5 shrink-0 self-center text-primary"
+                />
+              )}
               <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
               {/* Its time gives way to its menu, which a touch screen always shows. */}
               <time
@@ -203,6 +214,11 @@ export const SidebarChats = memo(function SidebarChats() {
   const personaOf = usePersonaOf();
   const now = useNow(true, CLOCK_MS);
   const chats = useQuery(chatsQuery);
+  const subspaceHost =
+    useQuery({
+      ...subspaceQuery,
+      select: (state) => activeSubspaceServer(state)?.name ?? null,
+    }).data ?? null;
   const [, match] = useRoute("/chats/:id");
   const current = match?.id;
 
@@ -241,6 +257,7 @@ export const SidebarChats = memo(function SidebarChats() {
               now={now}
               lang={lang}
               personaOf={personaOf}
+              subspaceHost={subspaceHost}
             />
           ))}
         </SidebarMenu>

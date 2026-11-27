@@ -4,7 +4,12 @@ import {
   type EidolonConnectOptions,
   fetchIceServers as fetchServers,
 } from "@laplace.live/eidolon-sdk";
-import type { ChatCallRequestData } from "@/lib/api";
+import {
+  type ChatCallRequestData,
+  expectedHostHeaders,
+  getExpectedSubspaceHost,
+  notifyExpectedHostConflict,
+} from "@/lib/api";
 import { proofHeaders } from "@/lib/proof";
 
 /** The page's own origin: the SDK joins it to root-relative paths. */
@@ -14,18 +19,31 @@ const OFFER_PATH = "/api/offer";
 const AUDIO_QUALITY = "medium";
 
 /** An empty list is a valid answer: without TURN the bot offers host candidates. */
-export function fetchIceServers(): Promise<RTCIceServer[]> {
-  return fetchServers(SAME_ORIGIN, { credentials: "same-origin", headers: proofHeaders() });
+export function fetchIceServers(
+  expectedHost: string | undefined = getExpectedSubspaceHost(),
+): Promise<RTCIceServer[]> {
+  return fetchServers(SAME_ORIGIN, {
+    credentials: "same-origin",
+    headers: { ...proofHeaders(), ...expectedHostHeaders(expectedHost) },
+    fetch: async (input, init) => {
+      const response = await globalThis.fetch(input, init);
+      if (response.status === 409) notifyExpectedHostConflict();
+      return response;
+    },
+  });
 }
 
 /**
  * The offer; its trickled ICE candidates go with the same headers. Without a target, it calls the
  * active persona with no chat.
  */
-export function offerOptions(target?: ChatCallRequestData): EidolonConnectOptions {
+export function offerOptions(
+  target?: ChatCallRequestData,
+  expectedHost: string | undefined = getExpectedSubspaceHost(),
+): EidolonConnectOptions {
   return {
     endpoint: OFFER_PATH,
-    headers: proofHeaders(),
+    headers: { ...proofHeaders(), ...expectedHostHeaders(expectedHost) },
     requestData:
       target === undefined
         ? { audioQuality: AUDIO_QUALITY }

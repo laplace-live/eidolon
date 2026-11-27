@@ -11,10 +11,12 @@ import { generateImageMain } from "./generate_image.ts";
 import { ingestFactsMain } from "./ingest_facts.ts";
 import { ingestStreamsMain } from "./ingest_streams.ts";
 import { type CommandDeps, resolveIo } from "./io.ts";
+import { pairMain } from "./pair.ts";
 import { pipelineMain } from "./pipeline.ts";
 import { prepareBatchMain } from "./prepare_batch.ts";
 import { refineMain } from "./refine.ts";
 import { searchMain } from "./search.ts";
+import { subspaceMain } from "./subspace.ts";
 import { taskMain } from "./task.ts";
 import { transcribeMain } from "./transcribe.ts";
 
@@ -36,6 +38,8 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   "prepare-batch": prepareBatchMain,
   discover: discoverMain,
   task: taskMain,
+  pair: pairMain,
+  subspace: subspaceMain,
 };
 
 // These never read deps.signal, so the first Ctrl-C quits them at once instead of leaving them
@@ -77,6 +81,8 @@ positional arguments:
     prepare-batch       laplace-prepare-batch
     discover            laplace-discover
     task                laplace-task
+    pair                laplace-pair
+    subspace            laplace-subspace
 
 options:
   -h, --help            show this help message and exit

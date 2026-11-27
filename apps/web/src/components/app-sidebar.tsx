@@ -20,6 +20,7 @@ import { Link, matchRoute, useLocation, useRouter } from "wouter";
 import { AppMark } from "@/components/app-mark";
 import { PersonaSwitcher } from "@/components/persona-switcher";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
+import { SubspaceSwitcher } from "@/components/subspace-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -183,6 +184,7 @@ export function AppSidebar() {
     >
       <SidebarHeader>
         <Brand />
+        <SubspaceSwitcher side={side} />
         <PersonaSwitcher side={side} />
       </SidebarHeader>
       <nav aria-label={t`Main`} className="flex min-h-0 flex-1 flex-col">

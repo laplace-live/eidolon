@@ -10,6 +10,7 @@ import {
   DatabaseIcon,
   DownloadIcon,
   MonitorIcon,
+  OrbitIcon,
   PlugIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -21,6 +22,7 @@ import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { SectionLayout } from "@/components/section-layout";
 import { SettingsCard } from "@/components/settings-form/settings-card";
+import { SubspaceSection } from "@/features/subspace/subspace-section";
 import { desktop } from "@/lib/desktop";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
@@ -48,6 +50,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   downloads: <DownloadIcon />,
   assistant: <BriefcaseIcon />,
   skills: <WandSparklesIcon />,
+  subspace: <OrbitIcon />,
   desktop: <MonitorIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
@@ -59,6 +62,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   downloads: msg`Downloads`,
   assistant: msg`Assistant Mode`,
   skills: msg`Skills`,
+  subspace: msg`Subspace`,
   desktop: msg`Desktop`,
   advanced: msg`Advanced`,
 };
@@ -91,6 +95,10 @@ const CARD_LABELS: Readonly<
     title: msg`Models by Kind`,
     body: msg`She marks each task she starts as quick, coding or research. A kind runs on the account and model chosen for it here, and on Assistant Mode's own while none is chosen; anything else runs on Assistant Mode's own.`,
   },
+  subspaceRelay: {
+    title: msg`Subspace Relay`,
+    body: msg`The relay server used for account-based Subspace pairing and connections.`,
+  },
 };
 
 function Section({ section }: { readonly section: SectionId }) {
@@ -109,6 +117,7 @@ function Section({ section }: { readonly section: SectionId }) {
       return (
         <>
           {section === "providers" && <AccountsCard />}
+          {section === "subspace" && <SubspaceSection />}
           {CARDS[section].map((card) => {
             const labels = {
               paths: card.paths,

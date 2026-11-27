@@ -45,6 +45,8 @@ export const CLI_COMMANDS: readonly string[] = [
   "prepare-batch",
   "discover",
   "task",
+  "pair",
+  "subspace",
 ];
 
 /** Each entry's bundle, relative to the package. */

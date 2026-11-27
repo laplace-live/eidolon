@@ -150,6 +150,7 @@ describe("offers", () => {
     expect(admission?.token).toBeNull();
     expect(admission?.opusBitrateBps).toBe(64000);
     expect(admission?.clientIp).toBe("127.0.0.1");
+    expect(admission?.allowHostCandidates).toBe(false);
     expect(booted.fakes.admitted).toEqual([]);
   });
 

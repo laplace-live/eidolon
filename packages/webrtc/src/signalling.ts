@@ -149,15 +149,16 @@ export function createSignallingServerWith<B = never>(
         if (!plan.relayOnly && turn !== undefined && !(turn.username && turn.credential)) {
           logger.warning("[WebRTC] TURN server has no credentials; relay-only gathering is off");
         }
+        const relayOnly = plan.relayOnly && !admission.allowHostCandidates;
         const peer = new Peer({
           iceServers: plan.iceServers,
           opusCodec: opusCodecAtBitrate(
             deps.opusCodec ?? libopusWasmCodec,
             admission.opusBitrateBps,
           ),
-          relayOnly: plan.relayOnly,
+          relayOnly,
         });
-        await peer.initialize(plan.relayOnly ? withoutUnreachable(sdp) : sdp, type);
+        await peer.initialize(relayOnly ? withoutUnreachable(sdp) : sdp, type);
         peer.on("closed", () => {
           logger.info(`Discarding peer connection for pc_id: ${peer.pcId}`);
           forget(peer);

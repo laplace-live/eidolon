@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { PROOF_HEADER } from "../../../bot/src/local/api.ts";
-import { ApiError, bytes, call, errorDetail, errorFrom, stream, url } from "./api";
+import {
+  ApiError,
+  bytes,
+  call,
+  errorDetail,
+  errorFrom,
+  setExpectedSubspaceHost,
+  stream,
+  url,
+} from "./api";
 import { keepProof } from "./proof";
 
 afterEach(() => {
@@ -229,3 +238,44 @@ export function typeChecks() {
   // @ts-expect-error not a route
   void call("GET /api/local/nope");
 }
+
+describe("expected Subspace host", () => {
+  test("sends X-Eidolon-Expected-Host on unsafe non-session/non-subspace requests once set", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({}));
+    await call("PUT /api/local/personas/:id/prompt", {
+      params: { id: "mine" },
+      body: { text: "before" },
+    });
+    expect(
+      new Headers(fetch.mock.calls[0]?.[1]?.headers).get("X-Eidolon-Expected-Host"),
+    ).toBeNull();
+
+    setExpectedSubspaceHost("srv_remote_1");
+    await call("GET /api/local/status");
+    await call("POST /api/local/session", { body: { code: "1.abc" } });
+    await call("POST /api/local/subspace/active", { body: { hostId: null } });
+    await call("PUT /api/local/personas/:id/prompt", {
+      params: { id: "mine" },
+      body: { text: "remote" },
+    });
+
+    expect(
+      new Headers(fetch.mock.calls[1]?.[1]?.headers).get("X-Eidolon-Expected-Host"),
+    ).toBeNull();
+    expect(
+      new Headers(fetch.mock.calls[2]?.[1]?.headers).get("X-Eidolon-Expected-Host"),
+    ).toBeNull();
+    expect(
+      new Headers(fetch.mock.calls[3]?.[1]?.headers).get("X-Eidolon-Expected-Host"),
+    ).toBeNull();
+    expect(new Headers(fetch.mock.calls[4]?.[1]?.headers).get("X-Eidolon-Expected-Host")).toBe(
+      "srv_remote_1",
+    );
+
+    setExpectedSubspaceHost(null);
+    await call("DELETE /api/local/chats/:id", { params: { id: "c1" } });
+    expect(new Headers(fetch.mock.calls[5]?.[1]?.headers).get("X-Eidolon-Expected-Host")).toBe(
+      "local",
+    );
+  });
+});

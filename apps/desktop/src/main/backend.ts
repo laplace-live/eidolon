@@ -137,8 +137,14 @@ export class Backend {
    * A GET of main's own at `path` to the server ready now, ours or attached, with the Bearer;
    * rejects while none is.
    */
-  get(path: string, signal: AbortSignal): Promise<Response> {
-    return this.#forwarder?.get(path, signal) ?? Promise.reject(new Error("no server is ready"));
+  get(
+    path: string,
+    signal: AbortSignal,
+    options?: { readonly local?: boolean; readonly expectedHost?: string },
+  ): Promise<Response> {
+    return (
+      this.#forwarder?.get(path, signal, options) ?? Promise.reject(new Error("no server is ready"))
+    );
   }
 
   /** What a quit would stop, from our own ready backend; null while attached or not ready. */
@@ -146,7 +152,7 @@ export class Backend {
     const forwarder = this.#forwarder;
     const state = this.state;
     if (forwarder === null || state.phase !== "ready" || !state.owned) return null;
-    return checkQuit((path, { signal }) => forwarder.get(path, signal));
+    return checkQuit((path, { signal }) => forwarder.get(path, signal, { local: true }));
   }
 
   /** The stop of our own backend only, never an attached server. */
@@ -200,6 +206,7 @@ export class Backend {
       const response = await forwarder.get(
         "/api/local/status",
         AbortSignal.timeout(VERSION_TIMEOUT_MS),
+        { local: true },
       );
       if (!response.ok) throw new Error(`answered ${response.status}`);
       const { version } = (await response.json()) as { version?: unknown };

@@ -62,6 +62,7 @@ server at a time ([desktop.md](desktop.md#attaching-to-a-server-already-on-the-d
   skills.json           the names of the skills switched off in Settings, which only the app writes
   mcp.json              the MCP servers tasks may call; mcp/ (0700) is where one with no cwd runs
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
+  subspace/             Subspace host identity, paired servers, grants and relay login (0700; subspace.md)
 ```
 
 ## A persona's sources
@@ -375,6 +376,8 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `assistant.search.provider` | `ASSISTANT_SEARCH_PROVIDER` | string | Web search provider |
 | `assistant.search.model` | `ASSISTANT_SEARCH_MODEL` | string | Web search engine |
 | `chats.display` | `CHAT_DISPLAY` | string | Task display |
+| `subspace.relayUrl` | `EIDOLON_SUBSPACE_RELAY_URL` | string | Subspace relay URL |
+| `subspace.authUrl` | `EIDOLON_SUBSPACE_AUTH_URL` | string | Subspace auth URL |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
 `pnpm start` and the Docker image run never reads it.
@@ -429,6 +432,11 @@ default, shows each task as a card; `focus` hides the cards; `verbose` opens the
 newest running task, and on a call has her say how far a task's plan has got, a billed reply each
 time. Any other value reads as `normal`, with a warning. No mode hides a task that waits on you.
 Production's chat endpoint, which runs no tasks, never reads it.
+
+`subspace.relayUrl` sets the base URL of the Subspace Relay (`https://eidolon-relay.vrp.moe` by
+default) and `subspace.authUrl` sets the LAPLACE ID / auth server used for account-based remote
+pairing and connections (`https://id.laplace.live` for the default relay, or auto-discovered from a
+custom `subspace.relayUrl`'s `/healthz` when unset; [subspace.md](subspace.md)).
 
 ## Deploying a persona
 

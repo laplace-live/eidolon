@@ -20,11 +20,13 @@ import {
   ingestFactsMain,
   ingestStreamsMain,
   jobArgv,
+  pairMain,
   personaArg,
   pipelineMain,
   prepareBatchMain,
   refineMain,
   runCli,
+  subspaceMain,
   taskMain,
   transcribeMain,
 } from "../src/index.ts";
@@ -56,6 +58,8 @@ const NEW_COMMANDS = {
   "prepare-batch": prepareBatchMain,
   discover: discoverMain,
   task: taskMain,
+  pair: pairMain,
+  subspace: subspaceMain,
 };
 
 test("one command per Python CLI, laplace-discover and laplace-task, each run by its own module", () => {
@@ -150,6 +154,9 @@ test("a command's own -h and usage errors keep their exit codes", async () => {
   expect(usage.stderr()).toEndWith(
     "laplace-generate-image: error: argument -n: invalid int value: 'x'\n",
   );
+  const pairNoWait = captureIo();
+  expect(await runCli(["pair", "--no-wait"], pairNoWait.io)).toBe(2);
+  expect(pairNoWait.stderr()).toContain("--no-wait requires an already-running Eidolon server");
 });
 
 test("an uncaught error is the traceback's equivalent: its stack on stderr, exit 1", async () => {
