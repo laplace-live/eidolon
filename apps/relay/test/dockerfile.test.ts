@@ -54,18 +54,18 @@ function workflowPathList(
       continue;
     }
     if (!inOn) continue;
-    if (/^  [a-z_]+:/.test(line)) {
+    if (/^ {2}[a-z_]+:/.test(line)) {
       inEvent = line.trim() === `${event}:`;
       inKey = false;
       continue;
     }
     if (!inEvent) continue;
-    if (/^    [a-z-]+:/.test(line)) {
+    if (/^ {4}[a-z-]+:/.test(line)) {
       inKey = line.trim() === `${key}:`;
       continue;
     }
     if (!inKey) continue;
-    const item = /^      - ["']?([^"'\n#]+?)["']?(?:\s+#.*)?$/.exec(line);
+    const item = /^ {6}- ["']?([^"'\n#]+?)["']?(?:\s+#.*)?$/.exec(line);
     if (item?.[1]) items.push(item[1]);
   }
   return items;
