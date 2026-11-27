@@ -458,4 +458,131 @@ server.listen(0, "127.0.0.1", () => {
       rmSync(work, { recursive: true, force: true });
     }
   });
+
+  test("pair falls back to mode=direct when an older running local server rejects mode=auto with 400", async () => {
+    const infoPath = lockInfoPath("local-server");
+    const tokenPath = join(dataHome(), "local-token");
+    const token = "legacy-server-token-0123456789ab";
+    const { createHmac } = await import("node:crypto");
+    const seenModes: string[] = [];
+
+    const legacyServer = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      res.setHeader("content-type", "application/json");
+      if (url.pathname === "/api/local/session") {
+        const probe = url.searchParams.get("probe") ?? "";
+        const proof = createHmac("sha256", token)
+          .update(`probe:${probe}`, "utf8")
+          .digest("base64url");
+        res.writeHead(200).end(JSON.stringify({ proof }));
+        return;
+      }
+      if (url.pathname === "/api/local/subspace" && req.method === "GET") {
+        res.writeHead(200).end(
+          JSON.stringify({
+            activeHostId: null,
+            servers: [],
+            share: {
+              hostName: "Legacy",
+              shareMode: "direct",
+              directPort: 45123,
+              directAddress: null,
+              addresses: [],
+              listening: true,
+              listeningPort: 45123,
+              relayConnected: false,
+              relayError: null,
+              activeOffer: null,
+              grants: [],
+            },
+            relayAuth: {
+              authUrl: "https://id.laplace.live",
+              relayUrl: "https://eidolon-relay.vrp.moe",
+              status: "signed-out",
+              user: null,
+              deviceFlow: {
+                status: "idle",
+                userCode: null,
+                verificationUri: null,
+                verificationUriComplete: null,
+                expiresAt: null,
+                error: null,
+              },
+            },
+          }),
+        );
+        return;
+      }
+      if (url.pathname === "/api/local/subspace/share/offer" && req.method === "POST") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { mode: string };
+        seenModes.push(payload.mode);
+        if (payload.mode === "auto") {
+          res
+            .writeHead(400)
+            .end(JSON.stringify({ error: { code: "bad-request", message: "legacy" } }));
+          return;
+        }
+        res.writeHead(200).end(
+          JSON.stringify({
+            pairingUrl: "eidolon://pair?code=legacy-ok",
+            pairingCode: "legacy-ok",
+            qrSvg: "<svg/>",
+            expiresAt: Date.now() + 60_000,
+            hasRelayFallback: false,
+            state: {
+              activeHostId: null,
+              servers: [],
+              share: {
+                hostName: "Legacy",
+                shareMode: "direct",
+                directPort: 45123,
+                directAddress: null,
+                addresses: [],
+                listening: true,
+                listeningPort: 45123,
+                relayConnected: false,
+                relayError: null,
+                activeOffer: null,
+                grants: [],
+              },
+              relayAuth: {
+                authUrl: "https://id.laplace.live",
+                relayUrl: "https://eidolon-relay.vrp.moe",
+                status: "signed-out",
+                user: null,
+                deviceFlow: {
+                  status: "idle",
+                  userCode: null,
+                  verificationUri: null,
+                  verificationUriComplete: null,
+                  expiresAt: null,
+                  error: null,
+                },
+              },
+            },
+          }),
+        );
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    await new Promise<void>((resolve) => legacyServer.listen(0, "127.0.0.1", resolve));
+    const port = (legacyServer.address() as { port: number }).port;
+    mkdirSync(dirname(infoPath), { recursive: true });
+    writeFileSync(tokenPath, token);
+    writeFileSync(infoPath, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
+
+    const io = captureIo();
+    try {
+      expect(await pairMain(["--no-wait", "--json"], io.io)).toBe(0);
+      expect(seenModes).toEqual(["auto", "direct"]);
+      expect(io.stdout()).toContain('"mode":"direct"');
+      expect(io.stdout()).toContain('"pairingCode":"legacy-ok"');
+    } finally {
+      await new Promise<void>((resolve) => legacyServer.close(() => resolve()));
+    }
+  });
 });

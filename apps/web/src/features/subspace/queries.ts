@@ -50,7 +50,12 @@ export const subspaceQuery = queryOptions({
     if (!data) return false;
     const busy =
       data.relayAuth.status === "pending" ||
-      data.servers.some((s) => s.connectionState === "connecting");
+      data.servers.some((s) => s.connectionState === "connecting") ||
+      (data.share !== undefined &&
+        data.share.shareMode !== "off" &&
+        data.relayAuth.status === "signed-in" &&
+        !data.share.relayConnected &&
+        data.share.relayError === null);
     return busy ? PENDING_POLL_MS : IDLE_POLL_MS;
   },
 });
@@ -187,7 +192,10 @@ function useSubspaceMutation<TVariables = void, TData = SubspaceStateResponse>(
   return useMutation({
     mutationFn,
     onSuccess: (data) => queryClient.setQueryData(SUBSPACE_KEY, selectState(data)),
-    onError: toastError,
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: SUBSPACE_KEY });
+      toastError(error);
+    },
   });
 }
 

@@ -9,20 +9,8 @@ When a remote server is active, every conversation row in the sidebar shows an o
 
 ## Connection modes
 
-- **Direct Network (no account required):** Pairs over LAN, Tailscale, or a custom host using
-  `ws://<host>:<port>/v1/subspace`. Intended for single-network or mesh-VPN setups without logging
-  into a relay. In the macOS desktop app, LAN endpoints require **System Settings → Privacy & Security → Local
-  Network** permission for `LAPLACE Eidolon`.
-- **Subspace Relay:** Pairs across NATs and firewalls via `apps/relay` (`@eidolon/relay`), run
-  locally with `pnpm relay` or deployed as `ghcr.io/laplace-live/eidolon-relay` from
-  [`apps/relay/Dockerfile`](../apps/relay/Dockerfile) via [`.github/workflows/relay.yml`](../.github/workflows/relay.yml)
-  (default relay: `https://eidolon-relay.vrp.moe`, configured via `subspace.relayUrl` /
-  `EIDOLON_SUBSPACE_RELAY_URL`). Users authenticate via RFC 8628 device authorization against
-  `https://id.laplace.live` (`subspace.authUrl` / `EIDOLON_SUBSPACE_AUTH_URL`, or auto-discovered
-  from a custom relay's `/healthz`), exchange their session at `/api/auth/token` for short-lived
-  JWTs, and connect to the relay. The relay verifies JWTs statelessly against JWKS, checks host
-  ownership + X25519 challenge proofs, and splices opaque binary WebSocket frames (`SubspaceHost` ↔
-  Relay ↔ `SubspaceClient`), never storing accounts or seeing plaintext payloads.
+- **Unified Sharing & Automatic Relay Fallback:** Generating a pairing link in Desktop/Web or via `pnpm laplace-pair` listens on the Direct Network (`ws://<host>:<port>/v1/subspace`, suited for LAN or Tailscale) and, whenever signed in to a Subspace Relay account (`https://id.laplace.live` or a self-hosted relay), also connects to the Relay in the background and embeds both `endpoint` and `relay` in the pairing code. Already-paired Direct clients receive the host's Relay metadata in `e2ee_authenticated` once the host signs in. Clients try Direct first (~2.5 s open timeout) and fall back seamlessly to the Relay when off-network or blocked. In the macOS desktop app, LAN endpoints require **System Settings → Privacy & Security → Local Network** permission for `LAPLACE Eidolon`.
+- **Direct Only & Relay Only:** Headless/CLI pairing supports `--relay` for Relay-only links without advertising a local IP, and `@eidolon/subspace` continues to accept explicit `mode: "direct"` or `mode: "relay"`. Through `apps/relay` (`@eidolon/relay`), run locally with `pnpm relay` or deployed as `ghcr.io/laplace-live/eidolon-relay` from [`apps/relay/Dockerfile`](../apps/relay/Dockerfile) via [`.github/workflows/relay.yml`](../.github/workflows/relay.yml) (default relay: `https://eidolon-relay.vrp.moe`, configured via `subspace.relayUrl` / `EIDOLON_SUBSPACE_RELAY_URL`), users authenticate via RFC 8628 device authorization against `https://id.laplace.live` (`subspace.authUrl` / `EIDOLON_SUBSPACE_AUTH_URL`, or auto-discovered from a custom relay's `/healthz`), exchange their session at `/api/auth/token` for short-lived JWTs, and splice opaque binary WebSocket frames (`SubspaceHost` ↔ Relay ↔ `SubspaceClient`) without storing accounts or seeing plaintext payloads.
 
 ## End-to-end encryption & multiplexing (`packages/subspace`)
 

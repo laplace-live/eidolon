@@ -200,6 +200,7 @@ const { ServersCard } = await import("./servers-card");
 const {
   resetHostCacheAndRoute,
   subspaceQuery,
+  useCreateShareOffer,
   usePairSubspaceServer,
   useRemoveSubspaceServer,
   useSubspaceHostEpoch,
@@ -665,7 +666,7 @@ describe("Subspace web UI regressions", () => {
       body: { directAddress: "100.64.0.99" },
     });
     expect(mockCall).toHaveBeenNthCalledWith(2, "POST /api/local/subspace/share/offer", {
-      body: { mode: "direct", address: "100.64.0.99" },
+      body: { mode: "auto", address: "100.64.0.99" },
     });
 
     mockCall.mockClear();
@@ -678,7 +679,7 @@ describe("Subspace web UI regressions", () => {
       body: { directAddress: "192.168.1.10" },
     });
     expect(mockCall).toHaveBeenNthCalledWith(2, "POST /api/local/subspace/share/offer", {
-      body: { mode: "direct", address: "192.168.1.10" },
+      body: { mode: "auto", address: "192.168.1.10" },
     });
   });
 
@@ -1306,5 +1307,315 @@ describe("Subspace web UI regressions", () => {
     } finally {
       globalThis.eidolonDesktop = originalDesktop;
     }
+  });
+
+  test("useCreateShareOffer invalidates subspaceQuery on error so relayError surfaces promptly", async () => {
+    const client = new QueryClient();
+    client.setQueryData(subspaceQuery.queryKey, makeState());
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    mockCall.mockRejectedValueOnce(new Error("Relay unreachable"));
+
+    let trigger: (() => Promise<void>) | undefined;
+    function Probe() {
+      const offer = useCreateShareOffer();
+      trigger = async () => {
+        await offer.mutateAsync({ mode: "relay" }).catch(() => {});
+      };
+      return null;
+    }
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    const history = createBrowserHistory(null);
+    try {
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(Probe),
+            ),
+          ),
+        ),
+      );
+      await mounted.act(async () => {
+        await trigger?.();
+        // Flush TanStack Query's batched notifyManager timer before unmount clears window.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["subspace"] });
+      expect(toastErrorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      client.clear();
+      history.dispose();
+    }
+  });
+
+  test("ShareCard uses unified mode=auto pairing and Stop Sharing without mode picker, and ServersCard shows live transport", async () => {
+    const client = new QueryClient();
+    const offState = makeState({
+      share: {
+        ...makeState().share,
+        shareMode: "off",
+      },
+    });
+    client.setQueryData(subspaceQuery.queryKey, offState);
+    mockCall.mockResolvedValue(offState);
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+
+    expect(mounted.container.innerHTML).not.toContain("Sharing Mode");
+    expect(mounted.container.innerHTML).toContain("Generate Pairing Code");
+    expect(mounted.container.innerHTML).not.toContain("Stop Sharing");
+
+    const genBtn = buttonProps.findLast((b) => b.text === "Generate Pairing Code");
+    expect(genBtn?.onClick).toBeDefined();
+    await mounted.act(async () => {
+      genBtn!.onClick!();
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/offer", {
+      body: { mode: "auto", address: "192.0.2.50", rotate: false },
+    });
+
+    const onState = makeState({
+      share: {
+        ...makeState().share,
+        shareMode: "direct",
+        listening: true,
+        listeningPort: 45123,
+        relayConnected: true,
+      },
+      relayAuth: { ...offState.relayAuth, status: "signed-in" },
+    });
+    mockCall.mockClear();
+    mockCall.mockResolvedValue(onState);
+    await mounted.act(async () => {
+      client.setQueryData(subspaceQuery.queryKey, onState);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mounted.container.innerHTML).toContain("Stop Sharing");
+    expect(mounted.container.innerHTML).toContain("Subspace Relay fallback is active.");
+
+    const stopBtn = buttonProps.findLast((b) => b.text === "Stop Sharing");
+    expect(stopBtn?.onClick).toBeDefined();
+    await mounted.act(async () => {
+      stopBtn!.onClick!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/settings", {
+      body: { shareMode: "off" },
+    });
+    client.clear();
+
+    const history = createBrowserHistory(null);
+    try {
+      const serverClient = new QueryClient();
+      serverClient.setQueryData(
+        subspaceQuery.queryKey,
+        makeState({
+          servers: [
+            {
+              id: "srv-hybrid",
+              name: "Workstation",
+              mode: "direct",
+              activeTransport: "relay",
+              endpoint: { host: "10.0.1.5", port: 63427 },
+              relay: { url: "https://eidolon-relay.vrp.moe", relayHostId: "host_1234" },
+              addedAt: 1,
+              lastConnectedAt: 1,
+              lastVersion: "0.22.0",
+              connectionState: "connected",
+              lastError: null,
+              latencyMs: 25,
+            },
+            {
+              id: "srv-offline-hybrid",
+              name: "Dorm",
+              mode: "direct",
+              activeTransport: null,
+              endpoint: { host: "192.168.1.9", port: 63427 },
+              relay: { url: "https://eidolon-relay.vrp.moe", relayHostId: "host_5678" },
+              addedAt: 1,
+              lastConnectedAt: null,
+              lastVersion: null,
+              connectionState: "connecting",
+              lastError: null,
+              latencyMs: null,
+            },
+          ],
+        }),
+      );
+      const html = renderToStaticMarkup(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client: serverClient },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(ServersCard),
+            ),
+          ),
+        ),
+      );
+      expect(html).toContain(">Relay<");
+      expect(html).toContain("https://eidolon-relay.vrp.moe");
+      expect(html).toContain("Direct · Relay");
+    } finally {
+      history.dispose();
+    }
+  });
+
+  test("subspaceQuery.refetchInterval tolerates partial fixtures without share and ShareCard handles relay-only shareMode", async () => {
+    const interval = subspaceQuery.refetchInterval as (query: {
+      readonly state: { readonly data?: unknown };
+    }) => number | false;
+    expect(
+      interval({
+        state: {
+          data: {
+            activeHostId: null,
+            servers: [],
+            relayAuth: { status: "signed-in" },
+          },
+        },
+      }),
+    ).toBe(15_000);
+
+    const client = new QueryClient();
+    client.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "relay",
+          listening: false,
+          listeningPort: null,
+          relayConnected: true,
+        },
+        relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+      }),
+    );
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    const html = renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+    expect(html).toContain("Direct sharing is inactive in Relay-only mode.");
+    expect(html).not.toContain("Starting direct listener");
+
+    // 2. Editing Network Address in Relay-only mode preserves Relay mode (does not call createOffer auto)
+    // and allows Generate Pairing Code on IPv6-only/empty-IPv4 hosts when signed into Relay.
+    mockCall.mockReset();
+    mockCall.mockImplementation(async (route) => {
+      if (route === "POST /api/local/subspace/share/settings") {
+        return makeState({
+          share: {
+            ...makeState().share,
+            shareMode: "relay",
+            directAddress: "100.64.0.9",
+            addresses: [],
+            listening: false,
+            listeningPort: null,
+            relayConnected: true,
+          },
+          relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+        });
+      }
+      return makeState();
+    });
+    const relayTestClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+    });
+    relayTestClient.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "relay",
+          directAddress: null,
+          addresses: [],
+          listening: false,
+          listeningPort: null,
+          relayConnected: true,
+        },
+        relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+      }),
+    );
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client: relayTestClient }, createElement(ShareCard)),
+      ),
+    );
+    const relayGenBtn = buttonProps.findLast((b) => b.text === "Generate Pairing Code");
+    expect(relayGenBtn?.disabled).toBe(false);
+    await mounted.act(async () => {
+      relayGenBtn!.onClick!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/offer", {
+      body: { mode: "relay", rotate: false },
+    });
+
+    mockCall.mockClear();
+    await mounted.act(async () => {
+      selectValueHandler?.("100.64.0.9");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledTimes(1);
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/settings", {
+      body: { directAddress: "100.64.0.9" },
+    });
+    expect(mockCall).not.toHaveBeenCalledWith(
+      "POST /api/local/subspace/share/offer",
+      expect.anything(),
+    );
+    relayTestClient.clear();
+    const currentMount = mounted;
+    mounted = null;
+    await currentMount.unmount();
+
+    // 3. shareMode === "off" with paired grants informs user that existing grants remain active.
+    client.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "off",
+          grants: [
+            { id: "g1", clientName: "Phone", mode: "direct", createdAt: 1, lastSeenAt: null },
+          ],
+        },
+      }),
+    );
+    const offWithGrantsHtml = renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+    expect(offWithGrantsHtml).toContain(
+      "Already paired devices stay connected until you revoke them.",
+    );
+    client.clear();
   });
 });

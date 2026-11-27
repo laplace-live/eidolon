@@ -1247,6 +1247,10 @@ msgctxt "reply mode"
 msgid "Auto"
 msgstr "自动"
 
+#: src/features/subspace/share-card.tsx
+msgid "Automatic Subspace Relay fallback will activate as soon as you generate a link."
+msgstr "生成配对链接后，将自动启用亚空间中继回落。"
+
 #: src/features/settings/desktop-notes.ts
 msgid "Available in the installed app only."
 msgstr "仅在安装好的应用中可用。"
@@ -1463,6 +1467,10 @@ msgstr "连不上局域网里的这台服务器。请确认它正在运行，或
 #: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "无法连接该亚空间服务器。请检查它是否正在运行并保持连接。"
+
+#: src/lib/labels.ts
+msgid "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
+msgstr "无法连接亚空间中继服务器。请确认中继服务正在运行且可访问。"
 
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
@@ -1741,12 +1749,8 @@ msgid "Connected"
 msgstr "已连接"
 
 #: src/features/subspace/share-card.tsx
-msgid "Connected to Subspace Relay with end-to-end encryption."
-msgstr "已通过端到端加密连接到亚空间中继。"
-
-#: src/features/subspace/share-card.tsx
-msgid "Connecting to Subspace Relay…"
-msgstr "正在连接到亚空间中继…"
+msgid "Connecting to Subspace Relay for fallback…"
+msgstr "正在连接亚空间中继以准备自动回落…"
 
 #: src/features/subspace/servers-card.tsx
 msgid "Connecting…"
@@ -2012,13 +2016,13 @@ msgstr "详情"
 msgid "Direct"
 msgstr "直连"
 
-#: src/features/subspace/share-card.tsx
-msgid "Direct and Relay Subspace access is turned off for new pairings."
-msgstr "直连与中继亚空间新配对已关闭。"
+#: src/features/subspace/servers-card.tsx
+msgid "Direct · Relay"
+msgstr "直连 · 中继"
 
 #: src/features/subspace/share-card.tsx
-msgid "Direct Network"
-msgstr "直接网络"
+msgid "Direct sharing is inactive in Relay-only mode."
+msgstr "仅中继模式下直连共享未开启。"
 
 #: src/features/settings/permissions-notes.ts
 msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
@@ -3604,8 +3608,8 @@ msgid "Links to"
 msgstr "链接到"
 
 #: src/features/subspace/share-card.tsx
-msgid "Listening directly on port {port} without a Relay account."
-msgstr "正在端口 {port} 上直接监听，无需中继账号。"
+msgid "Listening directly on port {port}."
+msgstr "正在端口 {port} 上直连监听。"
 
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
@@ -4030,6 +4034,10 @@ msgstr "新建文件"
 msgid "New Pairing Code"
 msgstr "重新生成配对码"
 
+#: src/features/subspace/share-card.tsx
+msgid "New pairing links are off. Already paired devices stay connected until you revoke them."
+msgstr "新配对链接已关闭。已配对的设备在撤销前仍可继续连接。"
+
 #: src/components/persona-switcher.tsx
 #: src/features/home/persona-grid.tsx
 #: src/features/setup/new-persona.tsx
@@ -4359,7 +4367,6 @@ msgstr "通知"
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
 #: src/features/setup/keys-step.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "关"
 
@@ -5128,8 +5135,8 @@ msgid "Relay"
 msgstr "中继"
 
 #: src/features/subspace/share-card.tsx
-msgid "Relay error: {error}"
-msgstr "中继错误：{error}"
+msgid "Relay fallback unavailable: {error}"
+msgstr "中继回落不可用：{error}"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Relay sign-in failed."
@@ -5772,8 +5779,8 @@ msgid "Shared folder:"
 msgstr "共享文件夹："
 
 #: src/features/subspace/share-card.tsx
-msgid "Sharing Mode"
-msgstr "共享模式"
+msgid "Sharing is off. Generating a pairing link starts Direct sharing on your local network."
+msgstr "当前未开启共享。生成配对链接即可在局域网开启直连共享。"
 
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
@@ -5979,8 +5986,8 @@ msgid "Sidebar"
 msgstr "侧边栏"
 
 #: src/features/subspace/share-card.tsx
-msgid "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
-msgstr "在下方登录你的亚空间中继账号，即可在局域网和 Tailscale 之外共享此电脑。"
+msgid "Sign in to your Subspace Relay account below to add automatic Relay fallback."
+msgstr "在下方登录你的亚空间中继账号，即可添加自动中继回落。"
 
 #: src/lib/labels.ts
 msgid "Sign in to your Subspace Relay account first."
@@ -6258,6 +6265,10 @@ msgstr "停止这个聊天里的任务"
 msgid "Stop Always Allowing {tool}"
 msgstr "不再始终允许 {tool}"
 
+#: src/features/subspace/share-card.tsx
+msgid "Stop Sharing"
+msgstr "停止共享"
+
 #: src/features/tasks/task-card.tsx
 msgid "Stop Task"
 msgstr "停止任务"
@@ -6362,13 +6373,16 @@ msgstr "亚空间配对二维码"
 
 #: src/features/settings/route.tsx
 #: src/features/subspace/servers-card.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Subspace Relay"
 msgstr "亚空间中继"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Subspace Relay Account"
 msgstr "亚空间中继账号"
+
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Relay fallback is active."
+msgstr "亚空间中继自动回落已启用。"
 
 #: src/components/settings-form/labels.ts
 msgid "Subspace Relay URL"
@@ -6997,6 +7011,10 @@ msgstr "网站拒绝了 yt-dlp 的请求，通常是因为 yt-dlp 版本过旧�
 #: src/components/settings-form/labels.ts
 msgid "The smallest allowed value is {min}."
 msgstr "最小值为 {min}。"
+
+#: src/lib/labels.ts
+msgid "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
+msgstr "亚空间中继拒绝了你的会话，请退出后重新登录，或检查中继服务器的认证配置。"
 
 #: src/components/settings-form/labels.ts
 msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
@@ -8168,6 +8186,10 @@ msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1
 #: src/features/setup/done-step.tsx
 msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
 msgstr "设置已保存。你可以立即开始文字聊天，也可以随时再配置语音通话。"
+
+#: src/lib/labels.ts
+msgid "Your Subspace Relay session has expired. Sign out and sign in again."
+msgstr "你的亚空间中继登录已过期，请退出后重新登录。"
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"

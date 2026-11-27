@@ -67,6 +67,7 @@ const MODE_LABELS: Readonly<Record<SubspaceServerView["mode"], MessageDescriptor
   direct: msg`Direct`,
   relay: msg`Relay`,
 };
+const HYBRID_MODE_LABEL = msg`Direct · Relay`;
 
 const CONNECTION_LABELS: Readonly<
   Record<SubspaceConnectionState, { readonly label: MessageDescriptor; readonly dot: string }>
@@ -162,22 +163,22 @@ function EditServerForm({
   const [host, setHost] = useState(server.endpoint?.host ?? "");
   const [port, setPort] = useState(server.endpoint ? String(server.endpoint.port) : "");
 
+  const hasEndpoint = server.endpoint !== null;
   const parsedPort = port.trim() === "" ? undefined : Number(port.trim());
   const portValid =
-    server.mode !== "direct" ||
+    !hasEndpoint ||
     (parsedPort !== undefined &&
       Number.isInteger(parsedPort) &&
       parsedPort >= 1 &&
       parsedPort <= 65535);
-  const valid =
-    name.trim().length > 0 && (server.mode !== "direct" || (host.trim().length > 0 && portValid));
+  const valid = name.trim().length > 0 && (!hasEndpoint || (host.trim().length > 0 && portValid));
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
     if (!valid || pending) return;
     onSave({
       name: name.trim(),
-      ...(server.mode === "direct" ? { host: host.trim(), port: parsedPort } : {}),
+      ...(hasEndpoint ? { host: host.trim(), port: parsedPort } : {}),
     });
   }
 
@@ -186,7 +187,7 @@ function EditServerForm({
       <DialogHeader>
         <DialogTitle>{t`Edit Subspace Server`}</DialogTitle>
         <DialogDescription>
-          {server.mode === "direct"
+          {hasEndpoint
             ? t`Update the display name or direct network endpoint for this server.`
             : t`Update the display name for this Relay server.`}
         </DialogDescription>
@@ -201,7 +202,7 @@ function EditServerForm({
           autoFocus
         />
       </Field>
-      {server.mode === "direct" && (
+      {hasEndpoint && (
         <div className="grid gap-4 sm:grid-cols-[1fr_7rem]">
           <Field>
             <FieldLabel htmlFor={hostId}>{t`Host`}</FieldLabel>
@@ -311,10 +312,16 @@ export function ServersCard() {
         {state.servers.map((server) => {
           const active = server.id === state.activeHostId;
           const conn = CONNECTION_LABELS[server.connectionState];
+          const modeLabel =
+            server.connectionState === "connected" && server.activeTransport
+              ? MODE_LABELS[server.activeTransport]
+              : server.endpoint && server.relay
+                ? HYBRID_MODE_LABEL
+                : MODE_LABELS[server.mode];
           const address =
-            server.mode === "direct" && server.endpoint
-              ? `${server.endpoint.host}:${server.endpoint.port}`
-              : (server.relay?.url ?? t`Subspace Relay`);
+            server.activeTransport === "relay" || !server.endpoint
+              ? (server.relay?.url ?? t`Subspace Relay`)
+              : `${server.endpoint.host}:${server.endpoint.port}`;
           const details = [
             address,
             server.connectionState === "connected" && server.latencyMs !== null
@@ -326,7 +333,7 @@ export function ServersCard() {
             .join(" · ");
           const showPermissionsLink =
             macDesktop &&
-            server.mode === "direct" &&
+            server.endpoint !== null &&
             server.connectionState === "error" &&
             server.lastErrorCode === "local-network-blocked";
 
@@ -343,7 +350,7 @@ export function ServersCard() {
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="wrap-anywhere">{server.name}</span>
                   {active && <Badge>{t`Active`}</Badge>}
-                  <QuietBadge>{t(MODE_LABELS[server.mode])}</QuietBadge>
+                  <QuietBadge>{t(modeLabel)}</QuietBadge>
                   <QuietBadge dot={conn.dot}>{t(conn.label)}</QuietBadge>
                 </span>
               }

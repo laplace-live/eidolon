@@ -240,7 +240,11 @@ export async function mintRelayJwt(
     headers: { authorization: `Bearer ${sessionToken}` },
     signal,
   });
-  if (response.status === 401 || response.status === 403) {
+  const isAntiBotHtml403 =
+    response.status === 403 &&
+    (response.headers.get("cf-mitigated") !== null ||
+      (response.headers.get("content-type") ?? "").toLowerCase().includes("text/html"));
+  if (response.status === 401 || (response.status === 403 && !isAntiBotHtml403)) {
     throw new RelayAuthExpiredError();
   }
   if (!response.ok) {

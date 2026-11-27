@@ -37,6 +37,7 @@ const HEARTBEAT_MS = 25_000;
 
 export interface RelayHubOptions {
   readonly heartbeatMs?: number;
+  readonly syncTimeoutMs?: number;
 }
 
 interface OnlineHost {
@@ -44,6 +45,8 @@ interface OnlineHost {
   readonly userId: string;
   readonly ws: WebSocket;
   alive: boolean;
+  superseded?: boolean;
+  syncDeadlineAt?: number;
 }
 
 interface BufferedFrame {
@@ -241,22 +244,31 @@ export class RelayHub {
   readonly #store: RelayStore;
   readonly #wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
   readonly #hosts = new Map<string, OnlineHost>();
+  readonly #pendingHosts = new Map<string, OnlineHost>();
+  readonly #pendingSyncCleanups = new Set<() => void>();
   readonly #pending = new Map<string, PendingSession>();
+  readonly #syncTimeoutMs: number;
   readonly #heartbeatTimer: ReturnType<typeof setInterval>;
 
   constructor(verifyToken: RelayTokenVerifier, store: RelayStore, options: RelayHubOptions = {}) {
     this.#verifyToken = verifyToken;
     this.#store = store;
-    this.#heartbeatTimer = setInterval(() => {
-      for (const [relayHostId, host] of this.#hosts) {
-        if (!host.alive) {
-          this.#hosts.delete(relayHostId);
+    this.#syncTimeoutMs = options.syncTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+    const sweepHosts = (hosts: Map<string, OnlineHost>, nowMs: number) => {
+      for (const [relayHostId, host] of hosts) {
+        if (!host.alive || (host.syncDeadlineAt !== undefined && nowMs >= host.syncDeadlineAt)) {
+          hosts.delete(relayHostId);
           host.ws.terminate();
           continue;
         }
         host.alive = false;
         if (host.ws.readyState === WebSocket.OPEN) host.ws.ping();
       }
+    };
+    this.#heartbeatTimer = setInterval(() => {
+      const nowMs = Date.now();
+      sweepHosts(this.#hosts, nowMs);
+      sweepHosts(this.#pendingHosts, nowMs);
     }, options.heartbeatMs ?? HEARTBEAT_MS);
     this.#heartbeatTimer.unref?.();
   }
@@ -293,6 +305,9 @@ export class RelayHub {
 
   async close(): Promise<void> {
     clearInterval(this.#heartbeatTimer);
+    for (const cleanup of [...this.#pendingSyncCleanups]) cleanup();
+    this.#pendingSyncCleanups.clear();
+    this.#pendingHosts.clear();
     for (const pending of this.#pending.values()) {
       clearTimeout(pending.timer);
       pending.clientQueue.drainRaw();
@@ -398,19 +413,80 @@ export class RelayHub {
       }
 
       relayHostId = hello.relayHostId;
-      const previous = this.#hosts.get(relayHostId);
-      if (previous !== undefined && previous.ws !== ws) {
-        safeClose(previous.ws, 1000, "Replaced by newer host connection");
+      for (const grantId of hello.revokedGrantIds ?? []) {
+        this.#store.revokeDevice(relayHostId, grantId);
+      }
+      for (const device of hello.devices ?? []) {
+        this.#store.installDevice({
+          relayHostId,
+          grantId: device.grantId,
+          tokenSha256: device.tokenHash,
+          clientName: device.clientName,
+        });
+      }
+      const prevOnline = this.#hosts.get(relayHostId);
+      if (prevOnline !== undefined && prevOnline.ws !== ws) {
+        prevOnline.superseded = true;
+        this.#hosts.delete(relayHostId);
+        safeClose(prevOnline.ws, 1000, "Replaced by newer host connection");
+      }
+      const prevPending = this.#pendingHosts.get(relayHostId);
+      if (prevPending !== undefined && prevPending.ws !== ws) {
+        prevPending.superseded = true;
+        this.#pendingHosts.delete(relayHostId);
+        safeClose(prevPending.ws, 1000, "Replaced by newer host connection");
       }
       const entry: OnlineHost = { relayHostId, userId, ws, alive: true };
-      this.#hosts.set(relayHostId, entry);
+      let syncTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearSyncTimer = () => {
+        if (syncTimer !== null) {
+          clearTimeout(syncTimer);
+          syncTimer = null;
+        }
+        this.#pendingSyncCleanups.delete(clearSyncTimer);
+      };
+      let registered = false;
+      const registerHost = () => {
+        clearSyncTimer();
+        if (this.#pendingHosts.get(relayHostId) === entry) {
+          this.#pendingHosts.delete(relayHostId);
+        }
+        if (registered || entry.superseded || ws.readyState !== WebSocket.OPEN) return;
+        const currentOnline = this.#hosts.get(relayHostId);
+        if (currentOnline !== undefined && currentOnline !== entry) return;
+        registered = true;
+        entry.syncDeadlineAt = undefined;
+        this.#hosts.set(relayHostId, entry);
+      };
       const dropHost = () => {
+        clearSyncTimer();
+        if (this.#pendingHosts.get(relayHostId) === entry) {
+          this.#pendingHosts.delete(relayHostId);
+        }
         if (this.#hosts.get(relayHostId) === entry) {
           this.#hosts.delete(relayHostId);
         }
       };
+      if (hello.hasMoreDevices !== true) {
+        registerHost();
+      } else {
+        entry.syncDeadlineAt = Date.now() + this.#syncTimeoutMs;
+        this.#pendingHosts.set(relayHostId, entry);
+        syncTimer = setTimeout(() => {
+          dropHost();
+          safeClose(ws, RELAY_CLOSE_CODE.TIMEOUT, "Device sync timed out");
+        }, this.#syncTimeoutMs);
+        syncTimer.unref?.();
+        this.#pendingSyncCleanups.add(clearSyncTimer);
+      }
 
       const handleControl = (raw: WebSocket.RawData) => {
+        if (
+          entry.superseded ||
+          (this.#hosts.get(relayHostId) !== entry && this.#pendingHosts.get(relayHostId) !== entry)
+        ) {
+          return;
+        }
         try {
           const msg = RelayHostControlInboundSchema.parse(JSON.parse(rawDataToText(raw)));
           switch (msg.type) {
@@ -422,6 +498,10 @@ export class RelayHub {
                 expiresAt: msg.expiresAt,
               });
               ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+              return;
+            case "invite_revoke":
+              this.#store.revokeInvite(relayHostId, msg.inviteId);
+              ws.send(JSON.stringify({ type: "invite_revoked", inviteId: msg.inviteId }));
               return;
             case "device_install":
               this.#store.installDevice({
@@ -435,6 +515,9 @@ export class RelayHub {
             case "device_revoke":
               this.#store.revokeDevice(relayHostId, msg.grantId);
               ws.send(JSON.stringify({ type: "device_revoked", grantId: msg.grantId }));
+              return;
+            case "host_sync_ready":
+              registerHost();
               return;
             default:
               return;

@@ -48,6 +48,9 @@ describe("Python object helpers", () => {
       new Error("connect ECONNREFUSED ::1:9"),
       new Error("connect ECONNREFUSED 127.0.0.1:9"),
     ]);
+    expect(errorText(everyAddress)).toBe(
+      "connect ECONNREFUSED ::1:9; connect ECONNREFUSED 127.0.0.1:9",
+    );
     expect(errorText(new TypeError("fetch failed", { cause: everyAddress }))).toBe(
       "fetch failed: connect ECONNREFUSED ::1:9; connect ECONNREFUSED 127.0.0.1:9",
     );

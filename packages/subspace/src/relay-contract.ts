@@ -24,6 +24,18 @@ export const HostHelloSchema = z.object({
   relayHostId: RelayHostIdSchema,
   hostPublicKeyB64: z.string().min(1).max(256),
   hostName: z.string().trim().min(1).max(120),
+  devices: z
+    .array(
+      z.object({
+        grantId: z.string().min(1).max(64),
+        tokenHash: Sha256HexSchema,
+        clientName: z.string().trim().min(1).max(120),
+      }),
+    )
+    .max(512)
+    .optional(),
+  revokedGrantIds: z.array(z.string().min(1).max(64)).max(512).optional(),
+  hasMoreDevices: z.boolean().optional(),
 });
 
 export const HostChallengeSchema = z.object({
@@ -56,6 +68,16 @@ export const InviteCreatedSchema = z.object({
   inviteId: z.string().min(1).max(64),
 });
 
+export const InviteRevokeSchema = z.object({
+  type: z.literal("invite_revoke"),
+  inviteId: z.string().min(1).max(64),
+});
+
+export const InviteRevokedSchema = z.object({
+  type: z.literal("invite_revoked"),
+  inviteId: z.string().min(1).max(64),
+});
+
 export const DeviceInstallSchema = z.object({
   type: z.literal("device_install"),
   grantId: z.string().min(1).max(64),
@@ -78,6 +100,10 @@ export const DeviceRevokedSchema = z.object({
   grantId: z.string().min(1).max(64),
 });
 
+export const HostSyncReadySchema = z.object({
+  type: z.literal("host_sync_ready"),
+});
+
 export const ConnectionOpenSchema = z.object({
   type: z.literal("connection_open"),
   sessionId: z.string().min(1).max(64),
@@ -88,14 +114,17 @@ export const RelayHostControlInboundSchema = z.discriminatedUnion("type", [
   HostHelloSchema,
   HostChallengeAckSchema,
   InviteCreateSchema,
+  InviteRevokeSchema,
   DeviceInstallSchema,
   DeviceRevokeSchema,
+  HostSyncReadySchema,
 ]);
 
 export const RelayHostControlOutboundSchema = z.discriminatedUnion("type", [
   HostChallengeSchema,
   HostHelloAckSchema,
   InviteCreatedSchema,
+  InviteRevokedSchema,
   DeviceInstalledSchema,
   DeviceRevokedSchema,
   ConnectionOpenSchema,

@@ -17,8 +17,10 @@ import {
   type E2eeAuthResponse,
   type E2eeSession,
   importX25519PrivateKey,
+  isAllowedRelayUrl,
   isValidDirectHost,
   MuxEndpoint,
+  type RelayEndpoint,
   randomBytes,
   type SubspacePairingOffer,
   sha256Hex,
@@ -32,15 +34,23 @@ import {
   RelayHostControlOutboundSchema,
 } from "./relay-contract.ts";
 import { httpToWsUrl, resolveEffectiveRelayUrl } from "./settings.ts";
-import type { SubspaceHostIdentity, SubspaceRelayAuthRecord, SubspaceStore } from "./store.ts";
+import type {
+  SubspaceGrantRecord,
+  SubspaceHostIdentity,
+  SubspaceRelayAuthRecord,
+  SubspaceShareMode,
+  SubspaceStore,
+} from "./store.ts";
 import { extractHostUdpCandidates, openHostUdpBridge } from "./webrtc-bridge.ts";
 import {
+  createWsFramePump,
   guardWsErrors,
   nextWsMessage,
   rawDataToText,
   rawDataToUint8Array,
   safeCloseWs,
   sendWs,
+  type WsFramePump,
 } from "./ws.ts";
 
 export const DIRECT_WS_PATH = "/v1/subspace";
@@ -49,17 +59,70 @@ const HANDSHAKE_TIMEOUT_MS = 15_000;
 const ALLOWED_CALL_PORT_TTL_MS = 5 * 60 * 1000;
 const HOST_HOP_BY_HOP = new Set(["transfer-encoding", "connection", "keep-alive"]);
 
+type RelayHostErrorCode =
+  | "bad-request"
+  | "relay-auth-required"
+  | "relay-auth-expired"
+  | "relay-auth-rejected"
+  | "pairing-failed"
+  | "upstream-failed"
+  | "relay-unreachable"
+  | "subspace-unreachable";
+
+function relayHostError(code: RelayHostErrorCode, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+export function grantSupportsDirect(
+  grant: Pick<SubspaceGrantRecord, "mode" | "supportsDirect">,
+): boolean {
+  return grant.mode === "direct" || grant.supportsDirect === true;
+}
+
+export function grantSupportsRelay(
+  grant: Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256">,
+): boolean {
+  return grant.mode === "relay" || grant.relayTokenSha256 !== undefined;
+}
+
+export function hostTransportNeeds(
+  shareMode: SubspaceShareMode,
+  grants: readonly Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256" | "supportsDirect">[],
+): { readonly needsDirect: boolean; readonly needsRelay: boolean } {
+  return {
+    needsDirect: shareMode === "direct" || grants.some(grantSupportsDirect),
+    needsRelay: shareMode !== "off" || grants.some(grantSupportsRelay),
+  };
+}
+
+export function readRelayAuthSafe(store: SubspaceStore): {
+  readonly auth: SubspaceRelayAuthRecord | null;
+  readonly error: string | null;
+} {
+  try {
+    return { auth: store.readRelayAuth(), error: null };
+  } catch (error) {
+    return {
+      auth: null,
+      error:
+        error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
+    };
+  }
+}
+
 interface ActiveInvite {
   readonly id: string;
-  readonly mode: "direct" | "relay";
+  readonly allowDirect: boolean;
+  readonly allowRelay: boolean;
   readonly ticket: string;
-  readonly ticketSha256: string;
+  readonly relayTicketSha256: string;
   readonly expiresAt: number;
   readonly offer: SubspacePairingOffer;
 }
 
 interface HostSessionHandle {
   grantId: string | null;
+  mux: MuxEndpoint | null;
   close(code?: number, reason?: string): void;
 }
 
@@ -140,6 +203,7 @@ export class SubspaceHost {
   #relayAttemptId = 0;
   #relayConnected = false;
   #relayError: string | null = null;
+  #relayErrorCode: RelayHostErrorCode | null = null;
   #relayTimer: ReturnType<typeof setTimeout> | null = null;
   #cachedRelayJwt: {
     readonly authUrl: string;
@@ -152,7 +216,8 @@ export class SubspaceHost {
     readonly resolve: () => void;
     readonly reject: (err: Error) => void;
   }>();
-  readonly #inviteAckWaiters = new Map<string, () => void>();
+  readonly #inviteAckWaiters: { readonly inviteId: string; readonly resolve: () => void }[] = [];
+  readonly #pendingRelayInviteRevokes = new Map<string, number>();
   #shareEpoch = 0;
   #stopped = false;
 
@@ -186,7 +251,7 @@ export class SubspaceHost {
       if (invite.expiresAt <= now) this.#invites.delete(key);
     }
     const candidates = [...this.#invites.values()].filter((inv) =>
-      mode === undefined ? true : inv.mode === mode,
+      mode === undefined ? true : mode === "direct" ? inv.allowDirect : inv.allowRelay,
     );
     return candidates.at(-1)?.offer ?? null;
   }
@@ -194,15 +259,14 @@ export class SubspaceHost {
   async ensureStartedFromDisk(): Promise<void> {
     if (this.#stopped) return;
     const identity = await this.#ensureIdentity();
-    const grants = this.#deps.store.readGrants();
-    const needsDirect = identity.shareMode === "direct" || grants.some((g) => g.mode === "direct");
-    const needsRelay =
-      (identity.shareMode === "relay" || grants.some((g) => g.mode === "relay")) &&
-      this.#readRelayAuthSafe().auth !== null;
+    const { needsDirect, needsRelay } = hostTransportNeeds(
+      identity.shareMode,
+      this.#deps.store.readGrants(),
+    );
     if (needsDirect && !this.listening) {
       await this.startDirect(identity.directPort);
     }
-    if (needsRelay) {
+    if (needsRelay && this.#readRelayAuthSafe().auth !== null) {
       this.startRelay();
     }
   }
@@ -319,24 +383,22 @@ export class SubspaceHost {
     }
   }
 
+  #hasActiveRelayConnection(): boolean {
+    return (
+      this.#relayConnectTask !== null ||
+      (this.#relayWs !== null &&
+        (this.#relayWs.readyState === WebSocket.OPEN ||
+          this.#relayWs.readyState === WebSocket.CONNECTING))
+    );
+  }
+
   startRelay(): void {
     if (this.#stopped) return;
     this.#relayWanted = true;
     const { auth, error: authErr } = this.#readRelayAuthSafe();
-    let desiredUrl: string | null = null;
-    if (authErr === null) {
-      try {
-        desiredUrl = withoutTrailingSlashes(this.#resolveRelayUrl(auth));
-      } catch {
-        desiredUrl = null;
-      }
-    }
-    const hasActive =
-      this.#relayConnectTask !== null ||
-      (this.#relayWs !== null &&
-        (this.#relayWs.readyState === WebSocket.OPEN ||
-          this.#relayWs.readyState === WebSocket.CONNECTING));
-    if (hasActive) {
+    const desiredUrl = authErr === null ? this.#tryResolveRelayUrl(auth) : null;
+    let replacedWs: WebSocket | null = null;
+    if (this.#hasActiveRelayConnection()) {
       const sameTarget =
         authErr === null &&
         auth !== null &&
@@ -345,23 +407,30 @@ export class SubspaceHost {
         this.#relayControlToken === auth.token &&
         this.#relayControlAuthUrl === auth.authUrl;
       if (sameTarget) return;
+      if (
+        this.#relayControlUrl !== null &&
+        desiredUrl !== null &&
+        desiredUrl !== this.#relayControlUrl
+      ) {
+        this.#pendingRelayInviteRevokes.clear();
+      }
       this.#relayAttemptId += 1;
       this.clearRelayInvites();
       this.#cachedRelayJwt = null;
-      this.#relayBackoffMs = 1_000;
       this.#relayConnectTask = null;
-      const ws = this.#relayWs;
+      replacedWs = this.#relayWs;
       this.#relayWs = null;
       this.#relayControlUrl = null;
       this.#relayControlToken = null;
       this.#relayControlAuthUrl = null;
-      this.#setRelayState(false, null);
-      if (ws !== null) safeCloseWs(ws, 1000, "Relay changed");
     }
     if (this.#relayTimer !== null) {
       clearTimeout(this.#relayTimer);
       this.#relayTimer = null;
     }
+    this.#relayBackoffMs = 1_000;
+    this.#setRelayState(false, null);
+    if (replacedWs !== null) safeCloseWs(replacedWs, 1000, "Relay changed");
     const attemptId = ++this.#relayAttemptId;
     const task = this.#connectRelayControl(attemptId).finally(() => {
       if (this.#relayConnectTask === task) this.#relayConnectTask = null;
@@ -374,19 +443,68 @@ export class SubspaceHost {
     this.#deleteInvites(mode);
   }
 
-  #deleteInvites(mode?: "direct" | "relay"): void {
-    for (const [key, invite] of this.#invites) {
-      if (mode === undefined || invite.mode === mode) {
-        this.#invites.delete(key);
-        const notify = this.#inviteAckWaiters.get(key);
-        this.#inviteAckWaiters.delete(key);
-        if (typeof notify === "function") notify();
+  #revokeRelayInvites(
+    invites: readonly { readonly id: string; readonly expiresAt: number }[],
+  ): void {
+    const now = Date.now();
+    for (const [inviteId, expiresAt] of this.#pendingRelayInviteRevokes) {
+      if (expiresAt <= now) this.#pendingRelayInviteRevokes.delete(inviteId);
+    }
+    const valid = invites.filter((inv) => inv.expiresAt > now);
+    if (valid.length === 0) return;
+    for (const inv of valid) {
+      this.#pendingRelayInviteRevokes.set(inv.id, inv.expiresAt);
+    }
+    const ws = this.#relayWs;
+    if (ws === null || ws.readyState !== WebSocket.OPEN || !this.#relayConnected) return;
+    for (const inv of valid) {
+      void sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId: inv.id })).catch(() => {});
+    }
+  }
+
+  #resolveInviteAck(inviteId: string): void {
+    for (let i = this.#inviteAckWaiters.length - 1; i >= 0; i -= 1) {
+      const waiter = this.#inviteAckWaiters[i]!;
+      if (waiter.inviteId === inviteId) {
+        this.#inviteAckWaiters.splice(i, 1);
+        waiter.resolve();
       }
     }
   }
 
+  #deleteInvites(mode?: "direct" | "relay"): void {
+    const revokedRelay: { readonly id: string; readonly expiresAt: number }[] = [];
+    for (const [key, invite] of this.#invites) {
+      const matches =
+        mode === undefined ? true : mode === "direct" ? invite.allowDirect : invite.allowRelay;
+      if (matches) {
+        if (invite.allowRelay) revokedRelay.push({ id: key, expiresAt: invite.expiresAt });
+        this.#invites.delete(key);
+        this.#resolveInviteAck(key);
+      }
+    }
+    this.#revokeRelayInvites(revokedRelay);
+  }
+
   clearRelayInvites(): void {
-    this.clearInvites("relay");
+    this.#shareEpoch += 1;
+    const revokedRelay: { readonly id: string; readonly expiresAt: number }[] = [];
+    for (const [key, invite] of this.#invites) {
+      if (!invite.allowRelay) continue;
+      revokedRelay.push({ id: key, expiresAt: invite.expiresAt });
+      if (!invite.allowDirect) {
+        this.#invites.delete(key);
+        this.#resolveInviteAck(key);
+      } else {
+        const { relay: _relay, ...offerWithoutRelay } = invite.offer;
+        this.#invites.set(key, {
+          ...invite,
+          allowRelay: false,
+          offer: { ...offerWithoutRelay, mode: "direct" },
+        });
+      }
+    }
+    this.#revokeRelayInvites(revokedRelay);
   }
 
   stopRelay(): void {
@@ -408,53 +526,113 @@ export class SubspaceHost {
     if (ws !== null) safeCloseWs(ws, 1000, "Relay stopped");
   }
 
-  async createPairingOffer(options: {
-    readonly mode: "direct" | "relay";
-    readonly address?: string;
-    readonly port?: number;
-    readonly rotate?: boolean;
-  }): Promise<SubspacePairingOffer> {
-    if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
-      throw Object.assign(new Error("Invalid direct endpoint host"), { code: "bad-request" });
+  #hasRejectedRelayAuth(): boolean {
+    return (
+      this.#relayErrorCode === "relay-auth-expired" ||
+      this.#relayErrorCode === "relay-auth-rejected" ||
+      this.#relayErrorCode === "pairing-failed" ||
+      this.#relayErrorCode === "bad-request"
+    );
+  }
+
+  #tryResolveRelayUrl(auth?: SubspaceRelayAuthRecord | null): string | null {
+    try {
+      return withoutTrailingSlashes(this.#resolveRelayUrl(auth));
+    } catch {
+      return null;
     }
-    if (options.mode === "relay") {
-      if (this.#readRelayAuthOrBadRequest() === null) {
-        throw Object.assign(
-          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
-          { code: "relay-auth-required" },
-        );
-      }
+  }
+
+  #requireRelayAuth(): SubspaceRelayAuthRecord {
+    const auth = this.#readRelayAuthOrBadRequest();
+    if (auth === null) {
+      throw relayHostError(
+        "relay-auth-required",
+        "Sign in to the Subspace Relay before creating a relay pairing link",
+      );
+    }
+    return auth;
+  }
+
+  async #currentRelayEndpoint(publicKeyB64: string): Promise<RelayEndpoint | undefined> {
+    const { auth, error } = this.#readRelayAuthSafe();
+    if (error !== null || auth === null) return undefined;
+    const relayUrl = this.#tryResolveRelayUrl(auth);
+    if (relayUrl === null || !isAllowedRelayUrl(relayUrl)) return undefined;
+    const relayHostId = await deriveRelayHostId(base64ToBytes(publicKeyB64));
+    return { url: relayUrl, relayHostId };
+  }
+
+  async #activeRelayEndpoint(publicKeyB64: string): Promise<RelayEndpoint | undefined> {
+    if (this.#hasRejectedRelayAuth()) return undefined;
+    const endpoint = await this.#currentRelayEndpoint(publicKeyB64);
+    return endpoint !== undefined && !this.#hasRejectedRelayAuth() ? endpoint : undefined;
+  }
+
+  async createPairingOffer(
+    options: {
+      readonly mode?: "auto" | "direct" | "relay";
+      readonly address?: string;
+      readonly port?: number;
+      readonly rotate?: boolean;
+    } = {},
+  ): Promise<SubspacePairingOffer> {
+    const requestedMode = options.mode ?? "auto";
+    if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
+      throw relayHostError("bad-request", "Invalid direct endpoint host");
+    }
+    let hasRelayAuth = false;
+    if (requestedMode === "relay") {
+      this.#requireRelayAuth();
+      hasRelayAuth = true;
       // Reconnect before capturing offerEpoch so switching relays doesn't self-cancel the new offer.
       this.startRelay();
+    } else if (requestedMode === "auto") {
+      const { auth, error } = this.#readRelayAuthSafe();
+      if (error !== null) {
+        this.#setRelayState(false, error, "bad-request");
+      } else if (auth !== null) {
+        hasRelayAuth = true;
+        this.startRelay();
+      }
     }
     const offerEpoch = this.#shareEpoch;
     const identity = await this.#ensureIdentity();
     if (!options.rotate) {
-      const existing = this.activeOffer(options.mode);
+      const lookupMode = requestedMode === "relay" ? "relay" : "direct";
+      const existing = this.activeOffer(lookupMode);
+      const expectedShareMode = requestedMode === "relay" ? "relay" : "direct";
       if (
         existing !== null &&
         existing.hostName === identity.hostName &&
-        identity.shareMode === options.mode
+        identity.shareMode === expectedShareMode
       ) {
         if (
-          options.mode === "direct" &&
+          requestedMode !== "relay" &&
           options.address === undefined &&
           options.port === undefined &&
           (identity.directAddress === null || existing.endpoint?.host === identity.directAddress) &&
           (this.#directPort === null || existing.endpoint?.port === this.#directPort)
         ) {
-          return existing;
-        }
-        if (options.mode === "relay") {
-          const { auth: existingAuth, error: existingErr } = this.#readRelayAuthSafe();
-          let currentRelayUrl: string | null = null;
-          if (existingErr === null && existingAuth !== null) {
-            try {
-              currentRelayUrl = withoutTrailingSlashes(this.#resolveRelayUrl(existingAuth));
-            } catch {
-              currentRelayUrl = null;
-            }
+          const expectedRelay =
+            requestedMode === "auto" && hasRelayAuth
+              ? await this.#activeRelayEndpoint(identity.publicKeyB64)
+              : undefined;
+          if (
+            expectedRelay === undefined
+              ? existing.relay === undefined
+              : existing.relay?.url === expectedRelay.url &&
+                existing.relay?.relayHostId === expectedRelay.relayHostId
+          ) {
+            return existing;
           }
+        }
+        if (requestedMode === "relay") {
+          const { auth: existingAuth, error: existingErr } = this.#readRelayAuthSafe();
+          const currentRelayUrl =
+            existingErr === null && existingAuth !== null
+              ? this.#tryResolveRelayUrl(existingAuth)
+              : null;
           if (
             currentRelayUrl !== null &&
             existing.relay?.url === currentRelayUrl &&
@@ -469,18 +647,31 @@ export class SubspaceHost {
     }
 
     const ticket = bytesToBase64Url(randomBytes(24));
-    const ticketSha256 =
-      options.mode === "relay"
-        ? await sha256Hex(utf8Encode(await deriveRelayInviteToken(ticket)))
-        : await sha256Hex(utf8Encode(ticket));
+    const relayTicketSha256 = await sha256Hex(utf8Encode(await deriveRelayInviteToken(ticket)));
     const expiresAt = Date.now() + OFFER_TTL_MS;
     const inviteId = newId();
 
     let offer: SubspacePairingOffer;
-    if (options.mode === "direct") {
+    if (requestedMode === "direct" || requestedMode === "auto") {
       const hostAddress = (options.address ?? identity.directAddress ?? "127.0.0.1").trim();
       const port = await this.startDirect(options.port);
       const refreshed = await this.#ensureIdentity();
+      let attachedRelay: RelayEndpoint | undefined;
+      if (requestedMode === "auto" && hasRelayAuth) {
+        const candidateRelay = await this.#currentRelayEndpoint(refreshed.publicKeyB64);
+        if (candidateRelay !== undefined) {
+          if (
+            !this.#relayConnected &&
+            !this.#hasRejectedRelayAuth() &&
+            this.#hasActiveRelayConnection()
+          ) {
+            await this.#waitForRelayConnected(2_500).catch(() => {});
+          }
+          if (!this.#hasRejectedRelayAuth()) {
+            attachedRelay = candidateRelay;
+          }
+        }
+      }
       offer = {
         v: 1,
         mode: "direct",
@@ -489,17 +680,12 @@ export class SubspaceHost {
         ticket,
         expiresAt,
         endpoint: { host: hostAddress, port },
+        ...(attachedRelay !== undefined ? { relay: attachedRelay } : {}),
       };
     } else {
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
-      await this.#ensureRelayConnected();
-      const currentAuth = this.#readRelayAuthOrBadRequest();
-      if (currentAuth === null) {
-        throw Object.assign(
-          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
-          { code: "relay-auth-required" },
-        );
-      }
+      await this.#waitForRelayConnected();
+      const currentAuth = this.#requireRelayAuth();
       const relayUrl =
         this.#relayControlUrl ?? withoutTrailingSlashes(this.#resolveRelayUrl(currentAuth));
       offer = {
@@ -513,52 +699,59 @@ export class SubspaceHost {
       };
     }
 
-    this.#assertOfferActive(offerEpoch, options.mode);
+    const targetShareMode = requestedMode === "relay" ? "relay" : "direct";
+    this.#assertOfferActive(offerEpoch, targetShareMode);
 
     const currentIdentity = await this.#ensureIdentity();
-    if (currentIdentity.shareMode !== options.mode) {
-      this.#identity = { ...currentIdentity, shareMode: options.mode };
+    if (currentIdentity.shareMode !== targetShareMode) {
+      this.#identity = { ...currentIdentity, shareMode: targetShareMode };
       this.#deps.store.saveIdentity(this.#identity);
     }
 
-    this.#deleteInvites(options.mode);
+    const allowDirect = requestedMode !== "relay";
+    const allowRelay = requestedMode === "relay" || offer.relay !== undefined;
+    this.#deleteInvites();
     this.#invites.set(inviteId, {
       id: inviteId,
-      mode: options.mode,
+      allowDirect,
+      allowRelay,
       ticket,
-      ticketSha256,
+      relayTicketSha256,
       expiresAt,
       offer,
     });
-    if (options.mode === "relay") {
+    if (allowRelay) {
       const ws = this.#relayWs;
-      if (ws !== null && ws.readyState === WebSocket.OPEN) {
+      if (ws !== null && ws.readyState === WebSocket.OPEN && this.#relayConnected) {
         await new Promise<void>((resolve) => {
+          const entry = {
+            inviteId,
+            resolve: () => {
+              clearTimeout(timer);
+              resolve();
+            },
+          };
           const timer = setTimeout(() => {
-            this.#inviteAckWaiters.delete(inviteId);
+            const idx = this.#inviteAckWaiters.indexOf(entry);
+            if (idx >= 0) this.#inviteAckWaiters.splice(idx, 1);
             resolve();
           }, 3_000);
-          this.#inviteAckWaiters.set(inviteId, () => {
-            clearTimeout(timer);
-            resolve();
-          });
+          this.#inviteAckWaiters.push(entry);
           void sendWs(
             ws,
             JSON.stringify({
               type: "invite_create",
               inviteId,
-              ticketHash: ticketSha256,
+              ticketHash: relayTicketSha256,
               expiresAt,
             }),
           ).catch(() => {
-            clearTimeout(timer);
-            this.#inviteAckWaiters.delete(inviteId);
-            resolve();
+            this.#resolveInviteAck(inviteId);
           });
         });
       }
     }
-    this.#assertOfferActive(offerEpoch, options.mode, inviteId);
+    this.#assertOfferActive(offerEpoch, targetShareMode, inviteId);
     return offer;
   }
 
@@ -570,7 +763,7 @@ export class SubspaceHost {
     ) {
       if (inviteId !== undefined) {
         this.#invites.delete(inviteId);
-        this.#inviteAckWaiters.delete(inviteId);
+        this.#resolveInviteAck(inviteId);
       }
       throw new SubspaceConnectError(
         "pairing-failed",
@@ -609,11 +802,12 @@ export class SubspaceHost {
   async stop(): Promise<void> {
     this.#stopped = true;
     for (const waiter of [...this.#relayReadyWaiters]) {
-      waiter.reject(new Error("Subspace host stopped"));
+      waiter.reject(relayHostError("subspace-unreachable", "Subspace host stopped"));
     }
     this.#relayReadyWaiters.clear();
-    for (const resolve of this.#inviteAckWaiters.values()) resolve();
-    this.#inviteAckWaiters.clear();
+    for (const waiter of [...this.#inviteAckWaiters]) waiter.resolve();
+    this.#inviteAckWaiters.length = 0;
+    this.#pendingRelayInviteRevokes.clear();
     this.stopRelay();
     for (const session of [...this.#sessions]) session.close(1000, "Host stopped");
     this.#sessions.clear();
@@ -628,9 +822,11 @@ export class SubspaceHost {
     return identity;
   }
 
-  async #ensureRelayConnected(timeoutMs = 10_000): Promise<void> {
-    this.startRelay();
+  async #waitForRelayConnected(timeoutMs = 10_000): Promise<void> {
     if (this.#relayConnected && this.#relayWs?.readyState === WebSocket.OPEN) return;
+    if (!this.#hasActiveRelayConnection() && !this.#relayTimer && this.#relayError !== null) {
+      throw relayHostError(this.#relayErrorCode ?? "relay-unreachable", this.#relayError);
+    }
     await new Promise<void>((resolve, reject) => {
       const waiter = {
         resolve: () => {
@@ -646,30 +842,51 @@ export class SubspaceHost {
       };
       const timer = setTimeout(
         () =>
-          waiter.reject(new Error(this.#relayError || "Timed out connecting to Subspace Relay")),
+          waiter.reject(
+            relayHostError(
+              this.#relayErrorCode ?? "relay-unreachable",
+              this.#relayError || "Timed out connecting to Subspace Relay",
+            ),
+          ),
         timeoutMs,
       );
       this.#relayReadyWaiters.add(waiter);
     });
   }
 
-  #setRelayState(connected: boolean, error: string | null): void {
+  #setRelayState(
+    connected: boolean,
+    error: string | null,
+    errorCode: RelayHostErrorCode | null = null,
+  ): void {
+    const nextCode = connected || error === null ? null : (errorCode ?? "relay-unreachable");
     if (connected) {
       for (const waiter of [...this.#relayReadyWaiters]) waiter.resolve();
     } else if (error !== null && !this.#relayTimer) {
-      for (const waiter of [...this.#relayReadyWaiters]) waiter.reject(new Error(error));
+      for (const waiter of [...this.#relayReadyWaiters]) {
+        waiter.reject(relayHostError(nextCode!, error));
+      }
     }
-    if (this.#relayConnected === connected && this.#relayError === error) return;
+    if (
+      this.#relayConnected === connected &&
+      this.#relayError === error &&
+      this.#relayErrorCode === nextCode
+    ) {
+      return;
+    }
     this.#relayConnected = connected;
     this.#relayError = error;
+    this.#relayErrorCode = nextCode;
     this.#deps.onEvent?.({ type: "relay-state", connected, error });
   }
 
-  #scheduleRelayReconnect(): void {
+  #scheduleRelayReconnect(delayMs?: number): void {
     if (this.#stopped || !this.#relayWanted) return;
     if (this.#relayTimer !== null) return;
-    const delay = this.#relayBackoffMs;
-    this.#relayBackoffMs = Math.min(15_000, Math.round(this.#relayBackoffMs * 1.8));
+    const delay = delayMs ?? this.#relayBackoffMs;
+    if (delayMs === undefined) {
+      this.#relayBackoffMs = Math.min(15_000, Math.round(this.#relayBackoffMs * 1.8));
+    }
     this.#relayTimer = setTimeout(() => {
       this.#relayTimer = null;
       if (!this.#stopped && this.#relayWanted && this.#relayConnectTask === null) {
@@ -683,14 +900,16 @@ export class SubspaceHost {
     this.#relayTimer.unref?.();
   }
 
-  async #resolveRelayJwt(auth: SubspaceRelayAuthRecord): Promise<string> {
+  async #resolveRelayJwt(
+    auth: SubspaceRelayAuthRecord,
+  ): Promise<{ readonly jwt: string; readonly fromCache: boolean }> {
     if (
       this.#cachedRelayJwt !== null &&
       this.#cachedRelayJwt.authUrl === auth.authUrl &&
       this.#cachedRelayJwt.sessionToken === auth.token &&
       Date.now() < this.#cachedRelayJwt.expiresAt - 60_000
     ) {
-      return this.#cachedRelayJwt.jwt;
+      return { jwt: this.#cachedRelayJwt.jwt, fromCache: true };
     }
     const minted = await mintRelayJwt(auth.authUrl, auth.token);
     this.#cachedRelayJwt = {
@@ -699,35 +918,20 @@ export class SubspaceHost {
       jwt: minted.token,
       expiresAt: minted.expiresAt,
     };
-    return minted.token;
+    return { jwt: minted.token, fromCache: false };
   }
 
   #readRelayAuthSafe(): {
     readonly auth: SubspaceRelayAuthRecord | null;
     readonly error: string | null;
   } {
-    try {
-      return { auth: this.#deps.store.readRelayAuth(), error: null };
-    } catch (error) {
-      return {
-        auth: null,
-        error:
-          error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
-      };
-    }
+    return readRelayAuthSafe(this.#deps.store);
   }
 
   #readRelayAuthOrBadRequest(): SubspaceRelayAuthRecord | null {
-    try {
-      return this.#deps.store.readRelayAuth();
-    } catch (error) {
-      throw Object.assign(
-        new Error(
-          error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
-        ),
-        { code: "bad-request" },
-      );
-    }
+    const { auth, error } = this.#readRelayAuthSafe();
+    if (error !== null) throw relayHostError("bad-request", error);
+    return auth;
   }
 
   #resolveRelayUrl(auth?: SubspaceRelayAuthRecord | null): string {
@@ -741,11 +945,11 @@ export class SubspaceHost {
     if (this.#stopped || !this.#relayWanted || attemptId !== this.#relayAttemptId) return;
     const { auth, error: authErr } = this.#readRelayAuthSafe();
     if (authErr !== null) {
-      this.#setRelayState(false, authErr);
+      this.#setRelayState(false, authErr, "bad-request");
       return;
     }
     if (auth === null) {
-      this.#setRelayState(false, "Sign in required");
+      this.#setRelayState(false, "Sign in required", "relay-auth-required");
       return;
     }
     let relayUrl: string;
@@ -754,7 +958,7 @@ export class SubspaceHost {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
       logger.warning(`[subspace] Relay control URL error: ${message}`);
-      this.#setRelayState(false, message);
+      this.#setRelayState(false, message, "bad-request");
       return;
     }
     this.#relayControlUrl = relayUrl;
@@ -762,18 +966,27 @@ export class SubspaceHost {
     this.#relayControlAuthUrl = auth.authUrl;
 
     let jwt: string;
+    let usedCachedJwt: boolean;
     try {
-      jwt = await this.#resolveRelayJwt(auth);
+      ({ jwt, fromCache: usedCachedJwt } = await this.#resolveRelayJwt(auth));
     } catch (error) {
       if (attemptId !== this.#relayAttemptId) return;
       if (error instanceof RelayAuthExpiredError) {
         this.#cachedRelayJwt = null;
-        this.#setRelayState(false, "Relay sign-in expired");
+        this.#setRelayState(
+          false,
+          "Relay sign-in expired — sign out and sign in again",
+          "relay-auth-expired",
+        );
         return;
       }
       logger.warning(`[subspace] Could not mint Relay JWT: ${errorText(error)}`);
       this.#scheduleRelayReconnect();
-      this.#setRelayState(false, "Could not reach Relay auth server");
+      this.#setRelayState(
+        false,
+        `Could not reach Relay auth server (${auth.authUrl})`,
+        "upstream-failed",
+      );
       return;
     }
     if (this.#stopped || !this.#relayWanted || attemptId !== this.#relayAttemptId) return;
@@ -790,24 +1003,76 @@ export class SubspaceHost {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
       logger.warning(`[subspace] Relay control URL error: ${message}`);
-      this.#scheduleRelayReconnect();
-      this.#setRelayState(false, message);
+      this.#setRelayState(false, message, "bad-request");
       return;
     }
     guardWsErrors(ws);
     this.#relayWs = ws;
-    const controlBinding = { ws, relayUrl, auth } as const;
+    const controlBinding = { ws, relayUrl, auth, hasMoreDevices: false };
+    let wsFailed = false;
 
     ws.on("open", () => {
       if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
+      // Keep host_hello safely under Relay's 64 KiB handshake frame limit; host_hello_ack handles overflow.
+      const helloBudgetBytes = 48 * 1024;
+      const baseHello = {
+        type: "host_hello" as const,
+        v: 1 as const,
+        relayHostId,
+        hostPublicKeyB64: identity.publicKeyB64,
+        hostName: identity.hostName,
+      };
+      let usedBytes = Buffer.byteLength(
+        JSON.stringify({ ...baseHello, devices: [], revokedGrantIds: [], hasMoreDevices: true }),
+        "utf8",
+      );
+      let hasMoreDevices = false;
+      const revokedGrantIds: string[] = [];
+      for (const id of this.#deps.store.readRevokedRelayGrantIds()) {
+        if (revokedGrantIds.length >= 512) {
+          hasMoreDevices = true;
+          break;
+        }
+        const itemBytes = Buffer.byteLength(JSON.stringify(id), "utf8") + 1;
+        if (usedBytes + itemBytes > helloBudgetBytes) {
+          hasMoreDevices = true;
+          break;
+        }
+        usedBytes += itemBytes;
+        revokedGrantIds.push(id);
+      }
+      const initialDevices: {
+        readonly grantId: string;
+        readonly tokenHash: string;
+        readonly clientName: string;
+      }[] = [];
+      for (const grant of this.#deps.store.readGrants()) {
+        if (!grantSupportsRelay(grant)) continue;
+        if (initialDevices.length >= 512) {
+          hasMoreDevices = true;
+          break;
+        }
+        const entry = {
+          grantId: grant.id,
+          tokenHash: grant.relayTokenSha256 ?? grant.tokenSha256,
+          clientName: grant.clientName,
+        };
+        const itemBytes = Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
+        if (usedBytes + itemBytes > helloBudgetBytes) {
+          hasMoreDevices = true;
+          break;
+        }
+        usedBytes += itemBytes;
+        initialDevices.push(entry);
+      }
+      controlBinding.hasMoreDevices = hasMoreDevices;
       void sendWs(
         ws,
         JSON.stringify({
-          type: "host_hello",
-          v: 1,
-          relayHostId,
-          hostPublicKeyB64: identity.publicKeyB64,
-          hostName: identity.hostName,
+          ...baseHello,
+          ...(revokedGrantIds.length > 0 ? { revokedGrantIds } : {}),
+          ...(initialDevices.length > 0 ? { devices: initialDevices } : {}),
+          ...(hasMoreDevices ? { hasMoreDevices: true } : {}),
         }),
       ).catch(() => {});
     });
@@ -822,7 +1087,7 @@ export class SubspaceHost {
     });
 
     ws.on("close", (code, reason) => {
-      if (this.#relayWs !== ws) return;
+      if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
       this.#relayWs = null;
       this.#relayControlUrl = null;
       this.#relayControlToken = null;
@@ -830,21 +1095,43 @@ export class SubspaceHost {
       const text = reason.toString("utf8");
       if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
         this.#cachedRelayJwt = null;
-        this.#setRelayState(false, "Relay sign-in expired");
+        if (usedCachedJwt && this.#relayWanted && !this.#stopped) {
+          this.#scheduleRelayReconnect(0);
+          this.#setRelayState(false, null);
+          return;
+        }
+        logger.warning(
+          `[subspace] Relay rejected freshly minted JWT (${relayUrl}): ${text || "4401"}`,
+        );
+        const detail = text ? `: ${text}` : "";
+        this.#setRelayState(
+          false,
+          `Relay rejected authentication (${relayUrl})${detail}`,
+          "relay-auth-rejected",
+        );
         return;
       }
       if (code === RELAY_CLOSE_CODE.HOST_OWNED_BY_OTHER) {
-        this.#setRelayState(false, text || "Host identity belongs to another Relay account");
+        this.#setRelayState(
+          false,
+          text || "Host identity belongs to another Relay account",
+          "pairing-failed",
+        );
         return;
       }
       if (this.#relayWanted && !this.#stopped) this.#scheduleRelayReconnect();
-      this.#setRelayState(false, text || (code === 1000 ? null : `Disconnected (${code})`));
+      const closeError =
+        text ||
+        (wsFailed ? this.#relayError : null) ||
+        (code === 1000 ? null : `Disconnected (${code})`);
+      this.#setRelayState(false, closeError, closeError === null ? null : "relay-unreachable");
     });
 
     ws.on("error", (err) => {
-      if (this.#relayWs !== ws) return;
+      if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
+      wsFailed = true;
       logger.warning(`[subspace] Relay control connection error: ${errorText(err)}`);
-      this.#setRelayState(false, "Relay connection failed");
+      this.#setRelayState(false, `Relay connection failed (${relayUrl})`, "relay-unreachable");
     });
   }
 
@@ -857,6 +1144,7 @@ export class SubspaceHost {
       readonly ws: WebSocket;
       readonly relayUrl: string;
       readonly auth: SubspaceRelayAuthRecord;
+      readonly hasMoreDevices: boolean;
     },
   ): Promise<void> {
     let parsed: RelayHostControlOutbound;
@@ -878,25 +1166,46 @@ export class SubspaceHost {
       }
       case "host_hello_ack": {
         const installedGrantIds = new Set<string>();
-        let restoredInvites = false;
+        const sentRevokedGrantIds = new Set<string>();
+        const restoredInviteIds = new Set<string>();
+        const sentRevokeIds = new Set<string>();
         while (
           this.#relayWs === ws &&
           ws.readyState === WebSocket.OPEN &&
           !this.#stopped &&
           this.#relayWanted
         ) {
-          const pendingGrants = this.#deps.store
-            .readGrants()
-            .filter((grant) => grant.mode === "relay" && !installedGrantIds.has(grant.id));
+          const allGrants = this.#deps.store.readGrants().filter(grantSupportsRelay);
+          const pendingGrants = allGrants.filter((grant) => !installedGrantIds.has(grant.id));
+          const pendingRevokedGrants = this.#deps.store
+            .readRevokedRelayGrantIds()
+            .filter((id) => !sentRevokedGrantIds.has(id));
           const now = Date.now();
-          const pendingInvites = restoredInvites
-            ? []
-            : [...this.#invites.values()].filter(
-                (invite) => invite.mode === "relay" && invite.expiresAt > now,
-              );
-          restoredInvites = true;
-          if (pendingGrants.length === 0 && pendingInvites.length === 0) break;
+          for (const [id, expiresAt] of this.#pendingRelayInviteRevokes) {
+            if (expiresAt <= now || this.#invites.has(id)) {
+              this.#pendingRelayInviteRevokes.delete(id);
+            }
+          }
+          const pendingRevokes = [...this.#pendingRelayInviteRevokes.keys()].filter(
+            (id) => !sentRevokeIds.has(id),
+          );
+          const pendingInvites = [...this.#invites.values()].filter(
+            (invite) =>
+              invite.allowRelay && invite.expiresAt > now && !restoredInviteIds.has(invite.id),
+          );
+          if (
+            pendingGrants.length === 0 &&
+            pendingRevokedGrants.length === 0 &&
+            pendingRevokes.length === 0 &&
+            pendingInvites.length === 0
+          ) {
+            break;
+          }
           await Promise.all([
+            ...pendingRevokedGrants.map((grantId) => {
+              sentRevokedGrantIds.add(grantId);
+              return sendWs(ws, JSON.stringify({ type: "device_revoke", grantId })).catch(() => {});
+            }),
             ...pendingGrants.map((grant) => {
               installedGrantIds.add(grant.id);
               return sendWs(
@@ -909,14 +1218,21 @@ export class SubspaceHost {
                 }),
               ).catch(() => {});
             }),
+            ...pendingRevokes.map((inviteId) => {
+              sentRevokeIds.add(inviteId);
+              return sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId })).catch(
+                () => {},
+              );
+            }),
             ...pendingInvites.map(async (invite) => {
+              restoredInviteIds.add(invite.id);
               if (!this.#invites.has(invite.id) || this.#relayWs !== ws) return;
               await sendWs(
                 ws,
                 JSON.stringify({
                   type: "invite_create",
                   inviteId: invite.id,
-                  ticketHash: invite.ticketSha256,
+                  ticketHash: invite.relayTicketSha256,
                   expiresAt: invite.expiresAt,
                 }),
               ).catch(() => {});
@@ -931,8 +1247,37 @@ export class SubspaceHost {
         ) {
           return;
         }
+        if (binding.hasMoreDevices) {
+          await sendWs(ws, JSON.stringify({ type: "host_sync_ready" })).catch(() => {});
+          if (
+            this.#relayWs !== ws ||
+            ws.readyState !== WebSocket.OPEN ||
+            this.#stopped ||
+            !this.#relayWanted
+          ) {
+            return;
+          }
+        }
         this.#relayBackoffMs = 1_000;
         this.#setRelayState(true, null);
+        // Push Relay endpoint to already-connected Direct clients whose grant already supports Relay.
+        const relayEndpoint: RelayEndpoint = { url: binding.relayUrl, relayHostId };
+        const relayGrantIds = new Set(
+          this.#deps.store
+            .readGrants()
+            .filter(grantSupportsRelay)
+            .map((g) => g.id),
+        );
+        for (const session of this.#sessions) {
+          if (
+            session.grantId !== null &&
+            session.mux !== null &&
+            !session.mux.closed &&
+            relayGrantIds.has(session.grantId)
+          ) {
+            void session.mux.sendRelayUpdate(relayEndpoint);
+          }
+        }
         return;
       }
       case "connection_open": {
@@ -940,13 +1285,16 @@ export class SubspaceHost {
         return;
       }
       case "invite_created": {
-        const notify = this.#inviteAckWaiters.get(parsed.inviteId);
-        this.#inviteAckWaiters.delete(parsed.inviteId);
-        if (typeof notify === "function") notify();
+        this.#resolveInviteAck(parsed.inviteId);
         return;
       }
+      case "invite_revoked":
+        this.#pendingRelayInviteRevokes.delete(parsed.inviteId);
+        return;
       case "device_installed":
+        return;
       case "device_revoked":
+        this.#deps.store.ackRevokedRelayGrants([parsed.grantId]);
         return;
     }
   }
@@ -961,12 +1309,12 @@ export class SubspaceHost {
     },
   ): Promise<void> {
     if (this.#stopped || this.#relayWs !== binding.ws) return;
-    const jwt = await this.#resolveRelayJwt(binding.auth).catch(() => null);
-    if (jwt === null || this.#stopped || this.#relayWs !== binding.ws) return;
+    const resolved = await this.#resolveRelayJwt(binding.auth).catch(() => null);
+    if (resolved === null || this.#stopped || this.#relayWs !== binding.ws) return;
     let ws: WebSocket;
     try {
       const url = httpToWsUrl(binding.relayUrl, RELAY_PATHS.HOST_DATA);
-      ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+      ws = new WebSocket(url, { headers: { authorization: `Bearer ${resolved.jwt}` } });
     } catch {
       return;
     }
@@ -988,12 +1336,39 @@ export class SubspaceHost {
         this.#invites.delete(id);
         continue;
       }
-      if (invite.mode === mode && constantTimeEqual(utf8Encode(invite.ticket), ticketBytes)) {
+      const allowed = mode === "direct" ? invite.allowDirect : invite.allowRelay;
+      if (allowed && constantTimeEqual(utf8Encode(invite.ticket), ticketBytes)) {
         this.#invites.delete(id);
+        if (mode === "direct" && invite.allowRelay) {
+          this.#revokeRelayInvites([{ id, expiresAt: invite.expiresAt }]);
+        }
         return invite;
       }
     }
     return null;
+  }
+
+  async #installDeviceOnRelay(
+    grantId: string,
+    tokenHash: string,
+    clientName: string,
+  ): Promise<void> {
+    if (
+      this.#relayWs === null ||
+      this.#relayWs.readyState !== WebSocket.OPEN ||
+      !this.#relayConnected
+    ) {
+      return;
+    }
+    await sendWs(
+      this.#relayWs,
+      JSON.stringify({
+        type: "device_install",
+        grantId,
+        tokenHash,
+        clientName,
+      }),
+    ).catch(() => {});
   }
 
   async #serveTunnelSocket(ws: WebSocket, mode: "direct" | "relay"): Promise<void> {
@@ -1013,12 +1388,23 @@ export class SubspaceHost {
     };
     const sessionHandle: HostSessionHandle = {
       grantId: null,
+      mux: null,
       close: (code = 1000, reason = "Closed") => closeSocket(code, reason),
+    };
+
+    let framePump: WsFramePump | null = null;
+    const sendAuthenticated = async (response: E2eeAuthResponse) => {
+      // Buffer client Mux frames arriving immediately after e2ee_authenticated under frame + byte limits.
+      framePump = createWsFramePump(ws, {
+        onOverflow: () => closeSocket(RELAY_CLOSE_CODE.RATE_LIMITED, "Too many buffered frames"),
+      });
+      await session.sendJson(response, (sealed) => sendWs(ws, sealed));
     };
 
     const closeSocket = (code = 1000, reason = "Closed") => {
       if (closed) return;
       closed = true;
+      framePump?.clear();
       this.#sessions.delete(sessionHandle);
       allowedCallTargets.length = 0;
       mux?.close(reason);
@@ -1064,11 +1450,16 @@ export class SubspaceHost {
       }
 
       let grantId: string;
+      let relayCapable = auth.kind === "pair";
+      const relayInfo = await this.#activeRelayEndpoint(identity.publicKeyB64);
       if (auth.kind === "pair") {
         const currentIdentity = await this.#ensureIdentity();
-        const invite =
-          currentIdentity.shareMode === mode ? this.#consumeTicket(auth.ticket, mode) : null;
-        if (invite === null || currentIdentity.shareMode !== mode || invite.mode !== mode) {
+        const modeAllowed =
+          mode === "direct"
+            ? currentIdentity.shareMode === "direct"
+            : currentIdentity.shareMode !== "off";
+        const invite = modeAllowed ? this.#consumeTicket(auth.ticket, mode) : null;
+        if (invite === null) {
           await rejectAuth(
             "invalid-ticket",
             "Pairing ticket is invalid or expired",
@@ -1090,36 +1481,20 @@ export class SubspaceHost {
           tokenSha256,
           relayTokenSha256,
           mode,
+          ...(mode === "relay" && invite.allowDirect ? { supportsDirect: true } : {}),
           createdAt: Date.now(),
           lastSeenAt: Date.now(),
         });
-        if (
-          mode === "relay" &&
-          this.#relayWs !== null &&
-          this.#relayWs.readyState === WebSocket.OPEN &&
-          this.#relayConnected
-        ) {
-          await sendWs(
-            this.#relayWs,
-            JSON.stringify({
-              type: "device_install",
-              grantId,
-              tokenHash: relayTokenSha256,
-              clientName,
-            }),
-          ).catch(() => {});
-        }
-        await session.sendJson(
-          {
-            type: "e2ee_authenticated",
-            ok: true,
-            grantId,
-            hostName: currentIdentity.hostName,
-            serverVersion: this.#deps.serverVersion(),
-            deviceToken,
-          } satisfies E2eeAuthResponse,
-          (sealed) => sendWs(ws, sealed),
-        );
+        await this.#installDeviceOnRelay(grantId, relayTokenSha256, clientName);
+        await sendAuthenticated({
+          type: "e2ee_authenticated",
+          ok: true,
+          grantId,
+          hostName: currentIdentity.hostName,
+          serverVersion: this.#deps.serverVersion(),
+          deviceToken,
+          ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
+        });
         if (
           closed ||
           this.#stopped ||
@@ -1137,17 +1512,37 @@ export class SubspaceHost {
           await rejectAuth("invalid-token", "Device token revoked or invalid", "Revoked");
           return;
         }
-        this.#deps.store.touchGrant(grantId);
-        await session.sendJson(
-          {
-            type: "e2ee_authenticated",
-            ok: true,
-            grantId,
-            hostName: identity.hostName,
-            serverVersion: this.#deps.serverVersion(),
-          } satisfies E2eeAuthResponse,
-          (sealed) => sendWs(ws, sealed),
-        );
+        let missingRelayHash: string | undefined;
+        relayCapable = grant.relayTokenSha256 !== undefined;
+        if (grant.relayTokenSha256 === undefined) {
+          relayCapable = true;
+          missingRelayHash = await sha256Hex(
+            utf8Encode(await deriveRelayDeviceToken(auth.deviceToken)),
+          );
+          if (
+            closed ||
+            this.#stopped ||
+            !this.#deps.store.readGrants().some((g) => g.id === grantId)
+          ) {
+            closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Device revoked");
+            return;
+          }
+        }
+        this.#deps.store.touchGrant(grantId, missingRelayHash);
+        if (missingRelayHash !== undefined) {
+          if (!this.#relayWanted && this.#readRelayAuthSafe().auth !== null) {
+            this.startRelay();
+          }
+          await this.#installDeviceOnRelay(grantId, missingRelayHash, grant.clientName);
+        }
+        await sendAuthenticated({
+          type: "e2ee_authenticated",
+          ok: true,
+          grantId,
+          hostName: identity.hostName,
+          serverVersion: this.#deps.serverVersion(),
+          ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
+        });
         if (
           closed ||
           this.#stopped ||
@@ -1249,18 +1644,44 @@ export class SubspaceHost {
         closeSocket(1001, "Server stopping");
         return;
       }
-
-      ws.on("message", (raw) => {
+      const endpoint = mux;
+      sessionHandle.mux = endpoint;
+      const handleMuxMessage = (raw: WebSocket.RawData) => {
         void (async () => {
           try {
             const plain = await session.open(rawDataToUint8Array(raw));
-            await mux?.handleFrame(plain);
+            await endpoint.handleFrame(plain);
           } catch (error) {
             logger.warning(`[subspace] Host session error for ${grantId}: ${errorText(error)}`);
             closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Decryption error");
           }
         })();
-      });
+      };
+      const activePump = framePump as WsFramePump | null;
+      if (activePump !== null) {
+        activePump.attach(handleMuxMessage);
+      } else {
+        ws.on("message", handleMuxMessage);
+      }
+
+      // Push the latest Relay endpoint asynchronously so #activeRelayEndpoint never delays message handling.
+      if (mode === "direct" && this.#relayConnected && relayCapable) {
+        void this.#activeRelayEndpoint(identity.publicKeyB64)
+          .then((latestRelay) => {
+            if (
+              !closed &&
+              !this.#stopped &&
+              !endpoint.closed &&
+              latestRelay !== undefined &&
+              (relayInfo === undefined ||
+                relayInfo.url !== latestRelay.url ||
+                relayInfo.relayHostId !== latestRelay.relayHostId)
+            ) {
+              void endpoint.sendRelayUpdate(latestRelay);
+            }
+          })
+          .catch(() => {});
+      }
     } catch {
       closeSocket(1011, "Handshake failed");
     }

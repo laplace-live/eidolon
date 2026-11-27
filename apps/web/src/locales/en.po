@@ -1247,6 +1247,10 @@ msgctxt "reply mode"
 msgid "Auto"
 msgstr "Auto"
 
+#: src/features/subspace/share-card.tsx
+msgid "Automatic Subspace Relay fallback will activate as soon as you generate a link."
+msgstr "Automatic Subspace Relay fallback will activate as soon as you generate a link."
+
 #: src/features/settings/desktop-notes.ts
 msgid "Available in the installed app only."
 msgstr "Available in the installed app only."
@@ -1463,6 +1467,10 @@ msgstr "Can't reach that server on your local network. Check that it's running, 
 #: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "Can't reach that Subspace server. Check that it's running and connected."
+
+#: src/lib/labels.ts
+msgid "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
+msgstr "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
 
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
@@ -1741,12 +1749,8 @@ msgid "Connected"
 msgstr "Connected"
 
 #: src/features/subspace/share-card.tsx
-msgid "Connected to Subspace Relay with end-to-end encryption."
-msgstr "Connected to Subspace Relay with end-to-end encryption."
-
-#: src/features/subspace/share-card.tsx
-msgid "Connecting to Subspace Relay…"
-msgstr "Connecting to Subspace Relay…"
+msgid "Connecting to Subspace Relay for fallback…"
+msgstr "Connecting to Subspace Relay for fallback…"
 
 #: src/features/subspace/servers-card.tsx
 msgid "Connecting…"
@@ -2012,13 +2016,13 @@ msgstr "Details"
 msgid "Direct"
 msgstr "Direct"
 
-#: src/features/subspace/share-card.tsx
-msgid "Direct and Relay Subspace access is turned off for new pairings."
-msgstr "Direct and Relay Subspace access is turned off for new pairings."
+#: src/features/subspace/servers-card.tsx
+msgid "Direct · Relay"
+msgstr "Direct · Relay"
 
 #: src/features/subspace/share-card.tsx
-msgid "Direct Network"
-msgstr "Direct Network"
+msgid "Direct sharing is inactive in Relay-only mode."
+msgstr "Direct sharing is inactive in Relay-only mode."
 
 #: src/features/settings/permissions-notes.ts
 msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
@@ -3604,8 +3608,8 @@ msgid "Links to"
 msgstr "Links to"
 
 #: src/features/subspace/share-card.tsx
-msgid "Listening directly on port {port} without a Relay account."
-msgstr "Listening directly on port {port} without a Relay account."
+msgid "Listening directly on port {port}."
+msgstr "Listening directly on port {port}."
 
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
@@ -4030,6 +4034,10 @@ msgstr "New File"
 msgid "New Pairing Code"
 msgstr "New Pairing Code"
 
+#: src/features/subspace/share-card.tsx
+msgid "New pairing links are off. Already paired devices stay connected until you revoke them."
+msgstr "New pairing links are off. Already paired devices stay connected until you revoke them."
+
 #: src/components/persona-switcher.tsx
 #: src/features/home/persona-grid.tsx
 #: src/features/setup/new-persona.tsx
@@ -4359,7 +4367,6 @@ msgstr "Notifications"
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
 #: src/features/setup/keys-step.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "Off"
 
@@ -5128,8 +5135,8 @@ msgid "Relay"
 msgstr "Relay"
 
 #: src/features/subspace/share-card.tsx
-msgid "Relay error: {error}"
-msgstr "Relay error: {error}"
+msgid "Relay fallback unavailable: {error}"
+msgstr "Relay fallback unavailable: {error}"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Relay sign-in failed."
@@ -5772,8 +5779,8 @@ msgid "Shared folder:"
 msgstr "Shared folder:"
 
 #: src/features/subspace/share-card.tsx
-msgid "Sharing Mode"
-msgstr "Sharing Mode"
+msgid "Sharing is off. Generating a pairing link starts Direct sharing on your local network."
+msgstr "Sharing is off. Generating a pairing link starts Direct sharing on your local network."
 
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
@@ -5979,8 +5986,8 @@ msgid "Sidebar"
 msgstr "Sidebar"
 
 #: src/features/subspace/share-card.tsx
-msgid "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
-msgstr "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
+msgid "Sign in to your Subspace Relay account below to add automatic Relay fallback."
+msgstr "Sign in to your Subspace Relay account below to add automatic Relay fallback."
 
 #: src/lib/labels.ts
 msgid "Sign in to your Subspace Relay account first."
@@ -6258,6 +6265,10 @@ msgstr "Stop a task in this chat"
 msgid "Stop Always Allowing {tool}"
 msgstr "Stop Always Allowing {tool}"
 
+#: src/features/subspace/share-card.tsx
+msgid "Stop Sharing"
+msgstr "Stop Sharing"
+
 #: src/features/tasks/task-card.tsx
 msgid "Stop Task"
 msgstr "Stop Task"
@@ -6362,13 +6373,16 @@ msgstr "Subspace Pairing QR Code"
 
 #: src/features/settings/route.tsx
 #: src/features/subspace/servers-card.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Subspace Relay"
 msgstr "Subspace Relay"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Subspace Relay Account"
 msgstr "Subspace Relay Account"
+
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Relay fallback is active."
+msgstr "Subspace Relay fallback is active."
 
 #: src/components/settings-form/labels.ts
 msgid "Subspace Relay URL"
@@ -6997,6 +7011,10 @@ msgstr "The site refused yt-dlp, usually because it is out of date."
 #: src/components/settings-form/labels.ts
 msgid "The smallest allowed value is {min}."
 msgstr "The smallest allowed value is {min}."
+
+#: src/lib/labels.ts
+msgid "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
+msgstr "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
 
 #: src/components/settings-form/labels.ts
 msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
@@ -8168,6 +8186,10 @@ msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 #: src/features/setup/done-step.tsx
 msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
 msgstr "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
+
+#: src/lib/labels.ts
+msgid "Your Subspace Relay session has expired. Sign out and sign in again."
+msgstr "Your Subspace Relay session has expired. Sign out and sign in again."
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"

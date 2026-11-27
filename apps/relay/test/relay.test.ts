@@ -10,9 +10,11 @@ import {
   deriveRelayInviteToken,
   generateX25519KeyPair,
   importX25519PrivateKey,
+  parsePairingInput,
   performPairingHandshake,
   SubspaceClient,
   SubspaceHost,
+  SubspaceManager,
   type SubspaceSavedServer,
   SubspaceStore,
   sha256Hex,
@@ -20,8 +22,9 @@ import {
 } from "@eidolon/subspace";
 import { RELAY_CLOSE_CODE, RELAY_PATHS } from "@eidolon/subspace/relay-contract";
 import { serve } from "srvx";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import WebSocket from "ws";
+import { loadRelayConfig } from "../src/config.ts";
 import { createRelayTokenVerifier, RelayJwksUnavailableError } from "../src/jwks-verifier.ts";
 import { openRelayDatabase, RelayStore } from "../src/relay-db.ts";
 import { startRelayServer } from "../src/server.ts";
@@ -150,7 +153,17 @@ function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> 
 async function connectRawRelayHost(
   relayUrl: string,
   jwt: string,
-  options: { readonly autoPong?: boolean; readonly hostName?: string } = {},
+  options: {
+    readonly autoPong?: boolean;
+    readonly hostName?: string;
+    readonly keys?: Awaited<ReturnType<typeof generateX25519KeyPair>>;
+    readonly devices?: readonly {
+      readonly grantId: string;
+      readonly tokenHash: string;
+      readonly clientName: string;
+    }[];
+    readonly revokedGrantIds?: readonly string[];
+  } = {},
 ): Promise<{
   readonly ws: WebSocket;
   readonly relayHostId: string;
@@ -159,7 +172,7 @@ async function connectRawRelayHost(
     predicate: (msg: Record<string, unknown>) => boolean,
   ): Promise<Record<string, unknown>>;
 }> {
-  const keys = await generateX25519KeyPair();
+  const keys = options.keys ?? (await generateX25519KeyPair());
   const privateKey = await importX25519PrivateKey(keys.privateKeyPkcs8B64);
   const relayHostId = await deriveRelayHostId(base64ToBytes(keys.publicKeyB64));
   const ws = new WebSocket(`${relayUrl.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`, {
@@ -212,6 +225,8 @@ async function connectRawRelayHost(
       relayHostId,
       hostPublicKeyB64: keys.publicKeyB64,
       hostName: options.hostName ?? "RawTestHost",
+      ...(options.devices ? { devices: options.devices } : {}),
+      ...(options.revokedGrantIds ? { revokedGrantIds: options.revokedGrantIds } : {}),
     }),
   );
 
@@ -910,5 +925,619 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       }),
     ]);
     expect(deviceOpen.grantId).toBe("grant-1");
+  });
+
+  test("loadRelayConfig trims surrounding spaces and rejects trailing backslashes or whitespace", () => {
+    const keys = [
+      "EIDOLON_RELAY_PUBLIC_URL",
+      "EIDOLON_RELAY_AUTH_ISSUER",
+      "EIDOLON_RELAY_AUTH_AUDIENCE",
+      "EIDOLON_RELAY_JWKS_URL",
+    ] as const;
+    const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    const restore = () => {
+      for (const k of keys) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    };
+    try {
+      process.env.EIDOLON_RELAY_PUBLIC_URL = " https://Relay.Example.com/ ";
+      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https://ID.Example.com:443/ ";
+      process.env.EIDOLON_RELAY_AUTH_AUDIENCE = " eidolon-relay ";
+      delete process.env.EIDOLON_RELAY_JWKS_URL;
+      expect(loadRelayConfig()).toMatchObject({
+        publicUrl: "https://relay.example.com",
+        authIssuer: "https://ID.Example.com:443",
+        authAudience: "eidolon-relay",
+        jwksUrl: "https://ID.Example.com:443/.well-known/jwks.json",
+      });
+
+      for (const [key, badValue] of [
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https://id.laplace.live \\"],
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https:/id.example.com"],
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https://user:secret-pass@example.com"],
+        ["EIDOLON_RELAY_PUBLIC_URL", "https://eidolon-relay.vrp.moe \\"],
+        ["EIDOLON_RELAY_PUBLIC_URL", "https://user:secret-pass@example.com"],
+        ["EIDOLON_RELAY_AUTH_AUDIENCE", "eidolon-relay \\"],
+        ["EIDOLON_RELAY_JWKS_URL", "https://id.laplace.live/.well-known/jwks.json \\"],
+      ] as const) {
+        for (const k of keys) delete process.env[k];
+        process.env[key] = badValue;
+        expect(() => loadRelayConfig()).toThrow(key);
+        try {
+          loadRelayConfig();
+        } catch (err) {
+          expect(String(err)).not.toContain("secret-pass");
+        }
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  test("unified mode=auto offer falls back to Relay during pairing and reconnect, and revokes Relay invite when redeemed directly", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-auto", "alice"]]));
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => relay.stop());
+
+    const hostDir = mkdtempSync(join(tmpdir(), "relay-unified-host-"));
+    const clientADir = mkdtempSync(join(tmpdir(), "relay-unified-client-a-"));
+    const clientBDir = mkdtempSync(join(tmpdir(), "relay-unified-client-b-"));
+    cleanups.push(() => rmSync(hostDir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(clientADir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(clientBDir, { recursive: true, force: true }));
+
+    const hostMgr = new SubspaceManager({
+      dataHome: hostDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async (req) => Response.json({ path: new URL(req.url).pathname }),
+      relayUrl: () => relay.url,
+    });
+    cleanups.push(() => hostMgr.stop());
+    hostMgr.store.saveRelayAuth({
+      authUrl: auth.url,
+      relayUrl: relay.url,
+      token: "sess-auto",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    // 1. Unified offer carries both direct endpoint and relay fallback.
+    const offer1 = await hostMgr.createShareOffer({ mode: "auto", address: "127.0.0.1", port: 0 });
+    expect(offer1.hasRelayFallback).toBe(true);
+    const parsed1 = parsePairingInput(offer1.pairingUrl);
+    expect(parsed1.ok).toBe(true);
+    if (!parsed1.ok) return;
+    expect(parsed1.offer.endpoint?.host).toBe("127.0.0.1");
+    expect(parsed1.offer.relay?.url).toBe(relay.url);
+
+    // 2. Client A pairs directly and single-use Relay invite is revoked so a Relay copy fails.
+    const clientAMgr = new SubspaceManager({
+      dataHome: clientADir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => clientAMgr.stop());
+    const pairedA = await clientAMgr.pairServer({ code: offer1.pairingUrl, activate: true });
+    expect(pairedA.servers[0]?.relay?.url).toBe(relay.url);
+    expect(pairedA.servers[0]?.activeTransport).toBe("direct");
+
+    await expect(
+      performPairingHandshake({
+        ...parsed1.offer,
+        mode: "relay",
+        endpoint: undefined,
+      }),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // 3. Roaming: stop Direct listener -> Client A reconnects automatically via Relay and proxies requests.
+    await hostMgr.host.stopDirect();
+    await vi.waitFor(
+      async () => {
+        expect((await clientAMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+      },
+      { timeout: 10_000 },
+    );
+    const resThroughRelay = await clientAMgr.proxyToActive(
+      new Request("http://local/ping"),
+      "/ping",
+    );
+    expect(resThroughRelay.status).toBe(200);
+    expect(await resThroughRelay.json()).toEqual({ path: "/ping" });
+    const afterRoam = await clientAMgr.getState();
+    expect(afterRoam.servers[0]?.activeTransport).toBe("relay");
+
+    // 4. Pairing fallback: restart Direct, create offer2, then point Client B at a dead Direct port -> falls back to Relay.
+    await hostMgr.host.startDirect(0);
+    const offer2 = await hostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      rotate: true,
+    });
+    const parsed2 = parsePairingInput(offer2.pairingUrl);
+    expect(parsed2.ok).toBe(true);
+    if (!parsed2.ok || !parsed2.offer.endpoint || !parsed2.offer.relay) return;
+
+    const deadDirect = await import("node:net").then((net) => {
+      const s = net.createServer();
+      return new Promise<number>((resolve) => {
+        s.listen(0, "127.0.0.1", () => {
+          const port = (s.address() as { port: number }).port;
+          s.close(() => resolve(port));
+        });
+      });
+    });
+    const fallbackHand = await performPairingHandshake(
+      {
+        ...parsed2.offer,
+        endpoint: { host: "127.0.0.1", port: deadDirect },
+      },
+      { clientName: "Fallback Client" },
+    );
+    expect(fallbackHand.transport).toBe("relay");
+    fallbackHand.tunnel.mux.close();
+    fallbackHand.tunnel.ws.close();
+  });
+
+  test("queued invite_revoke blocks copied Relay tickets after Relay reconnect and host_hello installs devices atomically", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-revoke", "alice"]]));
+    const dbFile = join(mkdtempSync(join(tmpdir(), "relay-revoke-db-")), "relay.sqlite");
+    cleanups.push(() => rmSync(join(dbFile, ".."), { recursive: true, force: true }));
+    const relayPort = await import("node:net").then((net) => {
+      const s = net.createServer();
+      return new Promise<number>((resolve) => {
+        s.listen(0, "127.0.0.1", () => {
+          const p = (s.address() as { port: number }).port;
+          s.close(() => resolve(p));
+        });
+      });
+    });
+
+    let currentRelay: Awaited<ReturnType<typeof startRelayServer>> | null = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
+    });
+    cleanups.push(async () => {
+      await currentRelay?.stop();
+      currentRelay = null;
+    });
+    const revokeHostDir = mkdtempSync(join(tmpdir(), "relay-revoke-host-"));
+    const revokeClientDir = mkdtempSync(join(tmpdir(), "relay-revoke-client-"));
+    cleanups.push(() => rmSync(revokeHostDir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(revokeClientDir, { recursive: true, force: true }));
+
+    const revokeHostMgr = new SubspaceManager({
+      dataHome: revokeHostDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+      relayUrl: () => `http://127.0.0.1:${relayPort}`,
+    });
+    cleanups.push(() => revokeHostMgr.stop());
+    revokeHostMgr.store.saveRelayAuth({
+      authUrl: auth.url,
+      relayUrl: `http://127.0.0.1:${relayPort}`,
+      token: "sess-revoke",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    const dualOffer = await revokeHostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    const dualParsed = parsePairingInput(dualOffer.pairingUrl);
+    expect(dualParsed.ok).toBe(true);
+    if (!dualParsed.ok) return;
+
+    // Stop Relay while Direct consumes the dual invite, then bring Relay back up (clean memory DB too).
+    await currentRelay.stop();
+    currentRelay = null;
+    const revokeClientMgr = new SubspaceManager({
+      dataHome: revokeClientDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => revokeClientMgr.stop());
+    await revokeClientMgr.pairServer({ code: dualOffer.pairingUrl, activate: true });
+
+    currentRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
+    });
+
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    // Copied Relay invite must fail even though Relay was offline when Direct consumed it.
+    await expect(
+      performPairingHandshake({
+        ...dualParsed.offer,
+        mode: "relay",
+        endpoint: undefined,
+      }),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // Paired device must authenticate immediately on fresh Relay even with brand-new ephemeral DB via host_hello.devices.
+    await currentRelay.stop();
+    currentRelay = null;
+    currentRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    await revokeHostMgr.host.stopDirect();
+    await vi.waitFor(
+      async () => {
+        expect((await revokeClientMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+      },
+      { timeout: 10_000 },
+    );
+    const revokePing = await revokeClientMgr.proxyToActive(
+      new Request("http://local/ping"),
+      "/ping",
+    );
+    expect(revokePing.status).toBe(200);
+
+    // Offline grant revocation stays persisted and revokes device on Relay before host registration.
+    await currentRelay.stop();
+    currentRelay = null;
+    const revokedGrantId = revokeHostMgr.store.readGrants()[0]!.id;
+    expect(revokeHostMgr.host.revokeGrant(revokedGrantId)).toBe(true);
+    expect(revokeHostMgr.store.readRevokedRelayGrantIds()).toContain(revokedGrantId);
+    currentRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
+    });
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(() => expect(revokeHostMgr.store.readRevokedRelayGrantIds()).toEqual([]), {
+      timeout: 5_000,
+    });
+    await expect(
+      revokeClientMgr.proxyToActive(new Request("http://local/after-revoke"), "/after-revoke"),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // Direct host_hello.revokedGrantIds check without device_revoke: Relay must close with 4401 before forwarding.
+    const rawHostKeys = await generateX25519KeyPair();
+    const rawNow = Math.floor(Date.now() / 1000);
+    const rawJwt = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: ["eidolon-relay"],
+      sub: "alice",
+      iat: rawNow,
+      exp: rawNow + 900,
+    });
+    const rawToken = "a".repeat(64);
+    const rawTokHash = await sha256Hex(utf8Encode(rawToken));
+    const rawHost1 = await connectRawRelayHost(`http://127.0.0.1:${relayPort}`, rawJwt, {
+      keys: rawHostKeys,
+      devices: [{ grantId: "raw-g1", tokenHash: rawTokHash, clientName: "RawClient" }],
+    });
+    rawHost1.ws.close();
+    await rawHost1.closed;
+
+    const rawHost2 = await connectRawRelayHost(`http://127.0.0.1:${relayPort}`, rawJwt, {
+      keys: rawHostKeys,
+      revokedGrantIds: ["raw-g1"],
+    });
+    const rawClientWs = new WebSocket(`ws://127.0.0.1:${relayPort}${RELAY_PATHS.CLIENT_CONNECT}`);
+    cleanups.push(() => {
+      if (rawClientWs.readyState !== WebSocket.CLOSED) rawClientWs.terminate();
+    });
+    await new Promise<void>((resolve, reject) => {
+      rawClientWs.once("open", () => resolve());
+      rawClientWs.once("error", reject);
+    });
+    const rawClientClosed = waitForClose(rawClientWs);
+    rawClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: rawHost2.relayHostId,
+        credential: { kind: "device", grantId: "raw-g1", relayToken: rawToken },
+      }),
+    );
+    const rawOutcome = await Promise.race([
+      rawClientClosed,
+      rawHost2
+        .waitMessage((m) => m.type === "connection_open")
+        .then(
+          () => ({ code: -1, reason: "unexpected connection_open" }),
+          (err) => ({ code: -2, reason: String(err) }),
+        ),
+    ]);
+    expect(rawOutcome).toEqual({
+      code: RELAY_CLOSE_CODE.UNAUTHORIZED,
+      reason: "Revoked or invalid device token",
+    });
+  });
+
+  test("host_hello hasMoreDevices holds client connections at retryable 4404 until host_sync_ready installs overflow devices", async () => {
+    const syncAuth = await startMockAuthServer(new Map([["sess-sync", "alice"]]));
+    const syncRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => syncRelay.stop());
+
+    const syncNow = Math.floor(Date.now() / 1000);
+    const syncJwt = signEdDsaJwt(syncAuth.ed.privateKey, "ed-1", {
+      iss: syncAuth.issuer,
+      aud: ["eidolon-relay"],
+      sub: "alice",
+      iat: syncNow,
+      exp: syncNow + 900,
+    });
+    const syncHostKeys = await generateX25519KeyPair();
+    const syncPrivKey = await importX25519PrivateKey(syncHostKeys.privateKeyPkcs8B64);
+    const syncHostId = await deriveRelayHostId(base64ToBytes(syncHostKeys.publicKeyB64));
+    const syncToken = "b".repeat(64);
+    const syncTokenHash = await sha256Hex(utf8Encode(syncToken));
+
+    const syncHostWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      {
+        headers: { authorization: `Bearer ${syncJwt}` },
+      },
+    );
+    cleanups.push(() => {
+      if (syncHostWs.readyState !== WebSocket.CLOSED) syncHostWs.terminate();
+    });
+    const syncMessages: Record<string, unknown>[] = [];
+    syncHostWs.on("message", (raw) => {
+      syncMessages.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await new Promise<void>((resolve, reject) => {
+      syncHostWs.once("open", () => resolve());
+      syncHostWs.once("error", reject);
+    });
+    syncHostWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "OverflowHost",
+        hasMoreDevices: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "host_challenge")).toBe(true),
+    );
+    const syncChallenge = syncMessages.find((m) => m.type === "host_challenge")!;
+    const syncProof = await computeRelayControlProof(
+      syncPrivKey,
+      String(syncChallenge.relayEphPubB64),
+      String(syncChallenge.challengeB64),
+      String(syncChallenge.userId),
+    );
+    syncHostWs.send(JSON.stringify({ type: "host_challenge_ack", proofB64: syncProof }));
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "host_hello_ack")).toBe(true),
+    );
+
+    // Client connecting during overflow sync must get retryable 4404 HOST_NOT_FOUND, never fatal 4401.
+    const earlyClientWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`,
+    );
+    cleanups.push(() => {
+      if (earlyClientWs.readyState !== WebSocket.CLOSED) earlyClientWs.terminate();
+    });
+    const earlyClosed = waitForClose(earlyClientWs);
+    await new Promise<void>((resolve, reject) => {
+      earlyClientWs.once("open", () => resolve());
+      earlyClientWs.once("error", reject);
+    });
+    earlyClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: syncHostId,
+        credential: { kind: "device", grantId: "overflow-g1", relayToken: syncToken },
+      }),
+    );
+    expect((await earlyClosed).code).toBe(RELAY_CLOSE_CODE.HOST_NOT_FOUND);
+
+    // After installing the overflow device and signaling host_sync_ready, the same client reaches the host.
+    syncHostWs.send(
+      JSON.stringify({
+        type: "device_install",
+        grantId: "overflow-g1",
+        tokenHash: syncTokenHash,
+        clientName: "OverflowClient",
+      }),
+    );
+    syncHostWs.send(JSON.stringify({ type: "host_sync_ready" }));
+    await vi.waitFor(() =>
+      expect(syncMessages.some((m) => m.type === "device_installed")).toBe(true),
+    );
+
+    const readyClientWs = new WebSocket(
+      `${syncRelay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`,
+    );
+    cleanups.push(() => {
+      if (readyClientWs.readyState !== WebSocket.CLOSED) readyClientWs.terminate();
+    });
+    const readyClosed = waitForClose(readyClientWs);
+    await new Promise<void>((resolve, reject) => {
+      readyClientWs.once("open", () => resolve());
+      readyClientWs.once("error", reject);
+    });
+    readyClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: syncHostId,
+        credential: { kind: "device", grantId: "overflow-g1", relayToken: syncToken },
+      }),
+    );
+    const opened = await Promise.race([
+      vi
+        .waitFor(() => {
+          const msg = syncMessages.find((m) => m.type === "connection_open");
+          if (!msg) throw new Error("waiting");
+          return msg;
+        })
+        .then(() => "connection_open"),
+      readyClosed.then((c) => `closed:${c.code}`),
+    ]);
+    expect(opened).toBe("connection_open");
+
+    // A newer host connection replaces an older pending overflow connection, and stalled sync times out separately.
+    const replaceRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      syncTimeoutMs: 10_000,
+    });
+    cleanups.push(() => replaceRelay.stop());
+    const staleHostWs = await connectRawRelayHost(replaceRelay.url, syncJwt, {
+      keys: syncHostKeys,
+      hostName: "StaleSync",
+    });
+    staleHostWs.ws.close();
+    await staleHostWs.closed;
+
+    const pendingSlowWs = new WebSocket(
+      `${replaceRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      { headers: { authorization: `Bearer ${syncJwt}` } },
+    );
+    cleanups.push(() => {
+      if (pendingSlowWs.readyState !== WebSocket.CLOSED) pendingSlowWs.terminate();
+    });
+    const pendingSlowClosed = waitForClose(pendingSlowWs);
+    await new Promise<void>((resolve, reject) => {
+      pendingSlowWs.once("open", () => resolve());
+      pendingSlowWs.once("error", reject);
+    });
+    pendingSlowWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "StalePending",
+        hasMoreDevices: true,
+      }),
+    );
+    const pendingMsgs: Record<string, unknown>[] = [];
+    pendingSlowWs.on("message", (raw) => {
+      pendingMsgs.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await vi.waitFor(() => expect(pendingMsgs.some((m) => m.type === "host_challenge")).toBe(true));
+    const slowCh = pendingMsgs.find((m) => m.type === "host_challenge")!;
+    pendingSlowWs.send(
+      JSON.stringify({
+        type: "host_challenge_ack",
+        proofB64: await computeRelayControlProof(
+          syncPrivKey,
+          String(slowCh.relayEphPubB64),
+          String(slowCh.challengeB64),
+          String(slowCh.userId),
+        ),
+      }),
+    );
+    await vi.waitFor(() => expect(pendingMsgs.some((m) => m.type === "host_hello_ack")).toBe(true));
+
+    // Connecting a newer host for the same relayHostId closes the stale pending socket (code 1000).
+    const replacementHost = await connectRawRelayHost(replaceRelay.url, syncJwt, {
+      keys: syncHostKeys,
+      hostName: "NewHost",
+    });
+    expect((await pendingSlowClosed).code).toBe(1000);
+    expect(replaceRelay.hub.onlineHostCount).toBe(1);
+    replacementHost.ws.close();
+    await replacementHost.closed;
+
+    // Stalling before host_sync_ready terminates the socket on syncTimeoutMs.
+    const stallRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      syncTimeoutMs: 120,
+    });
+    cleanups.push(() => stallRelay.stop());
+    const stallPendingWs = new WebSocket(
+      `${stallRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      { headers: { authorization: `Bearer ${syncJwt}` } },
+    );
+    cleanups.push(() => {
+      if (stallPendingWs.readyState !== WebSocket.CLOSED) stallPendingWs.terminate();
+    });
+    const stallClosed = waitForClose(stallPendingWs);
+    await new Promise<void>((resolve, reject) => {
+      stallPendingWs.once("open", () => resolve());
+      stallPendingWs.once("error", reject);
+    });
+    stallPendingWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "StalledSync",
+        hasMoreDevices: true,
+      }),
+    );
+    const stallMsgs: Record<string, unknown>[] = [];
+    stallPendingWs.on("message", (raw) => {
+      stallMsgs.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await vi.waitFor(() => expect(stallMsgs.some((m) => m.type === "host_challenge")).toBe(true));
+    const stCh = stallMsgs.find((m) => m.type === "host_challenge")!;
+    stallPendingWs.send(
+      JSON.stringify({
+        type: "host_challenge_ack",
+        proofB64: await computeRelayControlProof(
+          syncPrivKey,
+          String(stCh.relayEphPubB64),
+          String(stCh.challengeB64),
+          String(stCh.userId),
+        ),
+      }),
+    );
+    expect((await stallClosed).code).toBe(RELAY_CLOSE_CODE.TIMEOUT);
   });
 });

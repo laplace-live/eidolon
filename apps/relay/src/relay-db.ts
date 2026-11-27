@@ -35,6 +35,7 @@ export class RelayStore {
   readonly #insertInvite: PreparedStatement;
   readonly #pruneHostExpiredInvites: PreparedStatement;
   readonly #selectHostInvites: PreparedStatement;
+  readonly #deleteHostInvite: PreparedStatement;
   readonly #deleteInviteIfValid: PreparedStatement;
   readonly #insertDevice: PreparedStatement;
   readonly #selectDevice: PreparedStatement;
@@ -85,6 +86,9 @@ export class RelayStore {
     );
     this.#selectHostInvites = db.prepare(
       "SELECT invite_id, ticket_sha256 FROM subspace_invites WHERE relay_host_id = ?",
+    );
+    this.#deleteHostInvite = db.prepare(
+      "DELETE FROM subspace_invites WHERE relay_host_id = ? AND invite_id = ?",
     );
     this.#deleteInviteIfValid = db.prepare(
       "DELETE FROM subspace_invites WHERE invite_id = ? AND expires_at > ?",
@@ -148,6 +152,10 @@ export class RelayStore {
       }
     }
     return false;
+  }
+
+  revokeInvite(relayHostId: string, inviteId: string): void {
+    this.#deleteHostInvite.run(relayHostId, inviteId);
   }
 
   installDevice(input: {

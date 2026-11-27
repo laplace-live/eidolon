@@ -301,18 +301,16 @@ export function pyError(name: string, message: string): Error {
   return error;
 }
 
-/** Python `str(e)` for a caught error: the message alone, but for a fetch that failed on Node. */
+/** Python `str(e)` for a caught error: the message alone, unwrapping blank AggregateErrors and fetch causes. */
 export function errorText(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
-  // Node's fetch says only "fetch failed" and keeps why in `cause`; a name with several addresses
-  // fails with an AggregateError that holds each one's error and no message of its own.
+  if (error instanceof AggregateError && error.message === "") {
+    return error.errors.map(errorText).join("; ");
+  }
+  // Node's fetch says only "fetch failed" and keeps why in `cause`.
   const { cause } = error;
   if (error.message !== "fetch failed" || !(cause instanceof Error)) return error.message;
-  const why =
-    cause instanceof AggregateError && cause.message === ""
-      ? cause.errors.map(errorText).join("; ")
-      : cause.message;
-  return `fetch failed: ${why}`;
+  return `fetch failed: ${errorText(cause)}`;
 }
 
 /** `value.get(key, fallback)`, raising Python's AttributeError when `value` is not a dict. */

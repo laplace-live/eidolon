@@ -13,19 +13,93 @@ export interface RelayConfig {
 export const DEFAULT_RELAY_AUTH_ISSUER = "https://id.laplace.live";
 export const DEFAULT_RELAY_AUTH_AUDIENCE = "eidolon-relay";
 
+function redactUrlUserinfo(raw: string): string {
+  return raw.replace(/(\/\/)[^\r\n/]+@/g, "$1[redacted]@");
+}
+
+function readCleanEnvValue(name: string, raw: string, expectation: string, isUrl = false): string {
+  const value = raw.trim();
+  if (value === "" || /[\s\\]/.test(value)) {
+    const shown = isUrl ? redactUrlUserinfo(raw) : raw;
+    throw new Error(`${name} ${expectation} (got ${JSON.stringify(shown)})`);
+  }
+  return value;
+}
+
+function readNormalizedUrl(
+  name: string,
+  raw: string,
+  options: { readonly stripTrailingSlashes: boolean; readonly preserveRawValue?: boolean },
+): string {
+  // Reject shell line-continuation characters and single-slash typos before URL parsing.
+  const value = readCleanEnvValue(
+    name,
+    raw,
+    "must be a valid http(s) URL without whitespace or backslashes",
+    true,
+  );
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(
+      `${name} must be a valid http(s) URL (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
+  }
+  const parsed = URL.parse(value);
+  if (parsed === null) {
+    throw new Error(
+      `${name} must be a valid http(s) URL (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(
+      `${name} must use http or https (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new Error(`${name} must not include URL credentials`);
+  }
+  if (options.preserveRawValue) {
+    return options.stripTrailingSlashes ? withoutTrailingSlashes(value) : value;
+  }
+  // Preserve explicit default port (e.g. :443) while canonicalizing scheme/host case.
+  const explicitPortMatch = /^https?:\/\/(?:\[[^\]]+\]|[^/:]+):(\d+)/i.exec(value);
+  const authority =
+    explicitPortMatch !== null && parsed.port === ""
+      ? `${parsed.hostname}:${explicitPortMatch[1]}`
+      : parsed.host;
+  const canonical = `${parsed.protocol}//${authority}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return options.stripTrailingSlashes ? withoutTrailingSlashes(canonical) : canonical;
+}
+
+function readNormalizedToken(name: string, raw: string): string {
+  return readCleanEnvValue(name, raw, "must not be empty or contain whitespace or backslashes");
+}
+
 export function loadRelayConfig(): RelayConfig {
-  const host = envStr("EIDOLON_RELAY_HOST", "0.0.0.0");
+  const host = envStr("EIDOLON_RELAY_HOST", "0.0.0.0").trim() || "0.0.0.0";
   const port = envInt("EIDOLON_RELAY_PORT", 8788);
-  const publicUrl = withoutTrailingSlashes(
+  const publicUrl = readNormalizedUrl(
+    "EIDOLON_RELAY_PUBLIC_URL",
     envStr("EIDOLON_RELAY_PUBLIC_URL", `http://localhost:${port}`),
+    { stripTrailingSlashes: true },
   );
   const dbPath = envStr("EIDOLON_RELAY_DB_PATH", "./data/relay.sqlite");
-  const authIssuer = withoutTrailingSlashes(
+  // Keep authIssuer's configured string intact (aside from trailing slashes) for exact JWT `iss` checks.
+  const authIssuer = readNormalizedUrl(
+    "EIDOLON_RELAY_AUTH_ISSUER",
     envStr("EIDOLON_RELAY_AUTH_ISSUER", DEFAULT_RELAY_AUTH_ISSUER),
+    { stripTrailingSlashes: true, preserveRawValue: true },
   );
-  const authAudience = envStr("EIDOLON_RELAY_AUTH_AUDIENCE", DEFAULT_RELAY_AUTH_AUDIENCE);
+  const authAudience = readNormalizedToken(
+    "EIDOLON_RELAY_AUTH_AUDIENCE",
+    envStr("EIDOLON_RELAY_AUTH_AUDIENCE", DEFAULT_RELAY_AUTH_AUDIENCE),
+  );
   const explicitJwks = envOptional("EIDOLON_RELAY_JWKS_URL");
-  const jwksUrl = explicitJwks ?? `${authIssuer}/.well-known/jwks.json`;
+  const jwksUrl =
+    explicitJwks === undefined
+      ? `${authIssuer}/.well-known/jwks.json`
+      : readNormalizedUrl("EIDOLON_RELAY_JWKS_URL", explicitJwks, {
+          stripTrailingSlashes: false,
+        });
 
   return {
     host,
