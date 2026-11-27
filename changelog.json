@@ -2,6 +2,32 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-27T06:25:36.621Z",
+      "versions": {
+        "laplace-eidolon": "0.21.0",
+        "@laplace.live/eidolon": "0.21.0",
+        "laplace-eidolon-desktop": "0.9.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Enable Assistant Mode and viewer memory by default"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Replace native updater prompts with a title-bar badge and in-app dialog"
+        }
+      ]
+    },
+    {
       "date": "2026-11-27T02:27:37.948Z",
       "versions": {
         "laplace-eidolon": "0.20.0",
