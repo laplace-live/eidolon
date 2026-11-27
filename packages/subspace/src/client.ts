@@ -20,12 +20,14 @@ import { httpToWsUrl } from "./settings.ts";
 import type { SubspaceSavedServer } from "./store.ts";
 import { ClientCallBridgePool } from "./webrtc-bridge.ts";
 import {
+  createWsFramePump,
   guardWsErrors,
   nextWsMessage,
   rawDataToText,
   rawDataToUint8Array,
   safeCloseWs,
   sendWs,
+  type WsFramePump,
 } from "./ws.ts";
 
 export type SubspaceConnectionState = "disconnected" | "connecting" | "connected" | "error";
@@ -221,6 +223,7 @@ interface ActiveTunnel {
   readonly ws: WebSocket;
   readonly session: E2eeSession;
   readonly mux: MuxEndpoint;
+  readonly attachMessages?: (handler: (raw: WebSocket.RawData) => void) => void;
 }
 
 async function dialAuthenticatedTunnel(input: {
@@ -256,6 +259,7 @@ async function dialAuthenticatedTunnel(input: {
       : undefined;
   const ws = new WebSocket(targetWsUrl(input.target));
   guardWsErrors(ws);
+  let framePump: WsFramePump | null = null;
   const onAbort = () => ws.terminate();
   input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
@@ -287,25 +291,45 @@ async function dialAuthenticatedTunnel(input: {
       await nextMessage(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError),
     );
     const session = await hs.finish(e2eeReady);
+    // Start a bounded frame pump before sending e2ee_auth so frames sent behind authRes aren't lost.
+    framePump = createWsFramePump(ws, { onOverflow: () => ws.terminate() });
     await session.sendJson(input.buildE2eeAuth(session.authBinding), (sealed) =>
       sendWs(ws, sealed),
     );
     const authRes = await session.openJson<E2eeAuthResponse>(
       rawDataToUint8Array(
-        await nextMessage(
-          ws,
+        await framePump.nextMessage(
           // Keep the short fallback timeout before sending a single-use invite; once submitted, wait for the host's response so pairing doesn't burn the ticket.
           input.relayCredential.kind === "invite" ? CONNECT_TIMEOUT_MS : remainingTimeoutMs(),
-          input.relayCredential.kind,
-          mapConnectError,
+          {
+            onTimeout: () =>
+              new SubspaceConnectError("subspace-unreachable", "Handshake timed out"),
+            onClose: (code, msg) =>
+              closeCodeToError(code, msg, "Connection closed", input.relayCredential.kind),
+            onError: (err) => {
+              logger.warning(`[subspace] Client WebSocket handshake error: ${errorText(err)}`);
+              return toWsConnectError(err, mapConnectError);
+            },
+          },
         ),
       ),
     );
     const mux = new MuxEndpoint({
       sendFrame: (frame) => session.send(frame, (sealed) => sendWs(ws, sealed)),
     });
-    return { tunnel: { transport: input.target.mode, ws, session, mux }, authRes };
+    const activePump = framePump;
+    return {
+      tunnel: {
+        transport: input.target.mode,
+        ws,
+        session,
+        mux,
+        attachMessages: (handler) => activePump.attach(handler),
+      },
+      authRes,
+    };
   } catch (error) {
+    framePump?.clear();
     ws.terminate();
     throw error;
   } finally {
@@ -871,7 +895,7 @@ export class SubspaceClient {
     }, PING_INTERVAL_MS);
     this.#pingTimer.unref?.();
 
-    tunnel.ws.on("message", (raw) => {
+    const handleTunnelMessage = (raw: WebSocket.RawData) => {
       void (async () => {
         try {
           const plain = await tunnel.session.open(rawDataToUint8Array(raw));
@@ -883,7 +907,7 @@ export class SubspaceClient {
           this.#failActiveTunnel(tunnel, "Tunnel error", "Could not connect to remote server");
         }
       })();
-    });
+    };
     tunnel.ws.on("close", (code, reason) => {
       if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
         this.#revoked = true;
@@ -902,6 +926,15 @@ export class SubspaceClient {
       logger.warning(`[subspace] Client socket error for ${this.#server.id}: ${errorText(err)}`);
       this.#failActiveTunnel(tunnel, "Socket error", "Could not connect to remote server");
     });
+    if (tunnel.attachMessages !== undefined) {
+      tunnel.attachMessages(handleTunnelMessage);
+    } else {
+      tunnel.ws.on("message", handleTunnelMessage);
+    }
+    if (tunnel.ws.readyState !== WebSocket.OPEN) {
+      this.#failActiveTunnel(tunnel, "Disconnected");
+      return;
+    }
 
     if (this.#hasDirectActiveCalls()) {
       this.#ensureCallProbeTimer();

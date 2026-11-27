@@ -956,15 +956,20 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       for (const [key, badValue] of [
         ["EIDOLON_RELAY_AUTH_ISSUER", "https://id.laplace.live \\"],
         ["EIDOLON_RELAY_AUTH_ISSUER", "https:/id.example.com"],
-        ["EIDOLON_RELAY_AUTH_ISSUER", "https://user:123@example.com"],
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https://user:secret-pass@example.com"],
         ["EIDOLON_RELAY_PUBLIC_URL", "https://eidolon-relay.vrp.moe \\"],
-        ["EIDOLON_RELAY_PUBLIC_URL", "https://user:123@example.com"],
+        ["EIDOLON_RELAY_PUBLIC_URL", "https://user:secret-pass@example.com"],
         ["EIDOLON_RELAY_AUTH_AUDIENCE", "eidolon-relay \\"],
         ["EIDOLON_RELAY_JWKS_URL", "https://id.laplace.live/.well-known/jwks.json \\"],
       ] as const) {
         for (const k of keys) delete process.env[k];
         process.env[key] = badValue;
         expect(() => loadRelayConfig()).toThrow(key);
+        try {
+          loadRelayConfig();
+        } catch (err) {
+          expect(String(err)).not.toContain("secret-pass");
+        }
       }
     } finally {
       restore();
@@ -1413,5 +1418,116 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       readyClosed.then((c) => `closed:${c.code}`),
     ]);
     expect(opened).toBe("connection_open");
+
+    // A newer host connection replaces an older pending overflow connection, and stalled sync times out.
+    const stallRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      syncTimeoutMs: 120,
+    });
+    cleanups.push(() => stallRelay.stop());
+    const staleHostWs = await connectRawRelayHost(stallRelay.url, syncJwt, {
+      keys: syncHostKeys,
+      hostName: "StaleSync",
+    });
+    staleHostWs.ws.close();
+    await staleHostWs.closed;
+
+    const pendingSlowWs = new WebSocket(
+      `${stallRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      { headers: { authorization: `Bearer ${syncJwt}` } },
+    );
+    cleanups.push(() => {
+      if (pendingSlowWs.readyState !== WebSocket.CLOSED) pendingSlowWs.terminate();
+    });
+    const pendingSlowClosed = waitForClose(pendingSlowWs);
+    await new Promise<void>((resolve, reject) => {
+      pendingSlowWs.once("open", () => resolve());
+      pendingSlowWs.once("error", reject);
+    });
+    pendingSlowWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "StalePending",
+        hasMoreDevices: true,
+      }),
+    );
+    const pendingMsgs: Record<string, unknown>[] = [];
+    pendingSlowWs.on("message", (raw) => {
+      pendingMsgs.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await vi.waitFor(() => expect(pendingMsgs.some((m) => m.type === "host_challenge")).toBe(true));
+    const slowCh = pendingMsgs.find((m) => m.type === "host_challenge")!;
+    pendingSlowWs.send(
+      JSON.stringify({
+        type: "host_challenge_ack",
+        proofB64: await computeRelayControlProof(
+          syncPrivKey,
+          String(slowCh.relayEphPubB64),
+          String(slowCh.challengeB64),
+          String(slowCh.userId),
+        ),
+      }),
+    );
+    await vi.waitFor(() => expect(pendingMsgs.some((m) => m.type === "host_hello_ack")).toBe(true));
+
+    // Connecting a newer host for the same relayHostId closes the stale pending socket (code 1000).
+    const replacementHost = await connectRawRelayHost(stallRelay.url, syncJwt, {
+      keys: syncHostKeys,
+      hostName: "NewHost",
+    });
+    expect((await pendingSlowClosed).code).toBe(1000);
+    expect(stallRelay.hub.onlineHostCount).toBe(1);
+    replacementHost.ws.close();
+    await replacementHost.closed;
+
+    // Stalling before host_sync_ready terminates the socket on syncTimeoutMs.
+    const stallPendingWs = new WebSocket(
+      `${stallRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      { headers: { authorization: `Bearer ${syncJwt}` } },
+    );
+    cleanups.push(() => {
+      if (stallPendingWs.readyState !== WebSocket.CLOSED) stallPendingWs.terminate();
+    });
+    const stallClosed = waitForClose(stallPendingWs);
+    await new Promise<void>((resolve, reject) => {
+      stallPendingWs.once("open", () => resolve());
+      stallPendingWs.once("error", reject);
+    });
+    stallPendingWs.send(
+      JSON.stringify({
+        type: "host_hello",
+        v: 1,
+        relayHostId: syncHostId,
+        hostPublicKeyB64: syncHostKeys.publicKeyB64,
+        hostName: "StalledSync",
+        hasMoreDevices: true,
+      }),
+    );
+    const stallMsgs: Record<string, unknown>[] = [];
+    stallPendingWs.on("message", (raw) => {
+      stallMsgs.push(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
+    });
+    await vi.waitFor(() => expect(stallMsgs.some((m) => m.type === "host_challenge")).toBe(true));
+    const stCh = stallMsgs.find((m) => m.type === "host_challenge")!;
+    stallPendingWs.send(
+      JSON.stringify({
+        type: "host_challenge_ack",
+        proofB64: await computeRelayControlProof(
+          syncPrivKey,
+          String(stCh.relayEphPubB64),
+          String(stCh.challengeB64),
+          String(stCh.userId),
+        ),
+      }),
+    );
+    expect((await stallClosed).code).toBe(RELAY_CLOSE_CODE.TIMEOUT);
   });
 });

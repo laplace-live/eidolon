@@ -43,12 +43,14 @@ import type {
 } from "./store.ts";
 import { extractHostUdpCandidates, openHostUdpBridge } from "./webrtc-bridge.ts";
 import {
+  createWsFramePump,
   guardWsErrors,
   nextWsMessage,
   rawDataToText,
   rawDataToUint8Array,
   safeCloseWs,
   sendWs,
+  type WsFramePump,
 } from "./ws.ts";
 
 export const DIRECT_WS_PATH = "/v1/subspace";
@@ -1390,25 +1392,19 @@ export class SubspaceHost {
       close: (code = 1000, reason = "Closed") => closeSocket(code, reason),
     };
 
-    const bufferedFrames: WebSocket.RawData[] = [];
-    const bufferMessage = (raw: WebSocket.RawData) => {
-      if (bufferedFrames.length >= 256) {
-        closeSocket(RELAY_CLOSE_CODE.RATE_LIMITED, "Too many buffered frames");
-        return;
-      }
-      bufferedFrames.push(raw);
-    };
+    let framePump: WsFramePump | null = null;
     const sendAuthenticated = async (response: E2eeAuthResponse) => {
-      // Buffer client Mux frames arriving immediately after e2ee_authenticated until mux attaches.
-      ws.on("message", bufferMessage);
+      // Buffer client Mux frames arriving immediately after e2ee_authenticated under frame + byte limits.
+      framePump = createWsFramePump(ws, {
+        onOverflow: () => closeSocket(RELAY_CLOSE_CODE.RATE_LIMITED, "Too many buffered frames"),
+      });
       await session.sendJson(response, (sealed) => sendWs(ws, sealed));
     };
 
     const closeSocket = (code = 1000, reason = "Closed") => {
       if (closed) return;
       closed = true;
-      ws.off("message", bufferMessage);
-      bufferedFrames.length = 0;
+      framePump?.clear();
       this.#sessions.delete(sessionHandle);
       allowedCallTargets.length = 0;
       mux?.close(reason);
@@ -1661,10 +1657,11 @@ export class SubspaceHost {
           }
         })();
       };
-      ws.off("message", bufferMessage);
-      ws.on("message", handleMuxMessage);
-      for (const frame of bufferedFrames.splice(0)) {
-        handleMuxMessage(frame);
+      const activePump = framePump as WsFramePump | null;
+      if (activePump !== null) {
+        activePump.attach(handleMuxMessage);
+      } else {
+        ws.on("message", handleMuxMessage);
       }
 
       // Push the latest Relay endpoint asynchronously so #activeRelayEndpoint never delays message handling.

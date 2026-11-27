@@ -40,6 +40,7 @@ import {
   subspaceRelayUrl,
   utf8Encode,
 } from "../src/index.ts";
+import { createWsFramePump } from "../src/ws.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
 
@@ -3596,5 +3597,141 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(helloDeviceCount).toBeLessThan(350);
     await vi.waitFor(() => expect(totalInstalled.size).toBe(350), { timeout: 10_000 });
     await vi.waitFor(() => expect(seenSyncReady).toBe(true), { timeout: 10_000 });
+  });
+
+  test("client frame pump preserves E2EE RELAY_UPDATE sent immediately after authRes across async handoff and enforces byte limits", async () => {
+    const hostKp = await generateX25519KeyPair();
+    const fastServer = createServer();
+    const fastWss = new WebSocketServer({ server: fastServer, path: "/v1/subspace" });
+    const pushedRelay = { url: "https://relay.example.test", relayHostId: "host_fast1234" };
+    fastWss.on("connection", (ws) => {
+      let e2ee: Awaited<ReturnType<typeof acceptHostHandshake>>["session"] | null = null;
+      let hostMux: MuxEndpoint | null = null;
+      ws.on("message", async (raw) => {
+        if (e2ee === null) {
+          const accepted = await acceptHostHandshake(
+            {
+              publicKeyB64: hostKp.publicKeyB64,
+              privateKey: await importX25519PrivateKey(hostKp.privateKeyPkcs8B64),
+            },
+            raw.toString("utf8"),
+          );
+          e2ee = accepted.session;
+          ws.send(accepted.readyRaw);
+        } else if (hostMux === null) {
+          const sessionRef = e2ee;
+          await sessionRef.openJson(new Uint8Array(raw as Buffer));
+          hostMux = new MuxEndpoint({
+            sendFrame: (frame) => sessionRef.send(frame, (sealed) => ws.send(sealed)),
+            host: {
+              onHttpRequest: async (head) => ({
+                status: 200,
+                statusText: "OK",
+                headers: [["content-type", "application/json"]],
+                body: new Response(JSON.stringify({ path: head.path })).body,
+              }),
+              onCallOpen: () => null,
+            },
+          });
+          // Send e2ee_authenticated and immediately follow with RELAY_UPDATE before client attaches SubspaceClient.
+          await sessionRef.sendJson(
+            {
+              type: "e2ee_authenticated",
+              ok: true,
+              grantId: "g-fast-1",
+              hostName: "Fast Server",
+              serverVersion: "0.22.0",
+              deviceToken: "fast-dev-tok",
+            },
+            (sealed) => ws.send(sealed),
+          );
+          await hostMux.sendRelayUpdate(pushedRelay);
+        } else {
+          const plain = await e2ee.open(new Uint8Array(raw as Buffer));
+          await hostMux.handleFrame(plain);
+        }
+      });
+    });
+    await new Promise<void>((resolve) => fastServer.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of fastWss.clients) ws.terminate();
+          fastWss.close(() => fastServer.close(() => resolve()));
+        }),
+    );
+    const port = (fastServer.address() as { port: number }).port;
+
+    const hand = await performPairingHandshake({
+      v: 1,
+      mode: "direct",
+      hostName: "Fast Server",
+      hostPublicKeyB64: hostKp.publicKeyB64,
+      ticket: "ticket-fast-1234567890",
+      expiresAt: Date.now() + 60_000,
+      endpoint: { host: "127.0.0.1", port },
+    });
+    // Simulate pairServer awaiting remote call probes before constructing SubspaceClient with the tunnel.
+    await new Promise((r) => setTimeout(r, 80));
+
+    let receivedRelay: unknown = null;
+    const fastClient = new SubspaceClient(
+      {
+        id: "srv-fast",
+        name: "Fast Server",
+        hostPublicKeyB64: hostKp.publicKeyB64,
+        grantId: hand.grantId,
+        deviceToken: hand.deviceToken,
+        mode: "direct",
+        endpoint: { host: "127.0.0.1", port },
+        addedAt: Date.now(),
+        lastConnectedAt: null,
+        lastVersion: null,
+      },
+      {
+        onRelayUpdated: (relay) => {
+          receivedRelay = relay;
+        },
+      },
+      hand.tunnel,
+    );
+    cleanups.push(() => fastClient.stop());
+
+    await vi.waitFor(() => expect(receivedRelay).toEqual(pushedRelay));
+    const okRes = await fastClient.proxyFetch(
+      new Request("http://local/after-early-update"),
+      "/after-early-update",
+    );
+    expect(okRes.status).toBe(200);
+    await expect(okRes.json()).resolves.toEqual({ path: "/after-early-update" });
+
+    // Pre-attach frame pump closes via onOverflow once buffered bytes exceed maxBytes.
+    const { WebSocket: WsClient } = await import("ws");
+    const overflowSrv = createServer();
+    const overflowWss = new WebSocketServer({ server: overflowSrv });
+    overflowWss.on("connection", (ws) => {
+      ws.send(Buffer.alloc(300));
+      ws.send(Buffer.alloc(300));
+    });
+    await new Promise<void>((resolve) => overflowSrv.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of overflowWss.clients) ws.terminate();
+          overflowWss.close(() => overflowSrv.close(() => resolve()));
+        }),
+    );
+    const oPort = (overflowSrv.address() as { port: number }).port;
+    const ws = new WsClient(`ws://127.0.0.1:${oPort}`);
+    cleanups.push(() => ws.terminate());
+    let overflowed = false;
+    createWsFramePump(ws, {
+      maxFrames: 16,
+      maxBytes: 512,
+      onOverflow: () => {
+        overflowed = true;
+      },
+    });
+    await vi.waitFor(() => expect(overflowed).toBe(true));
   });
 });

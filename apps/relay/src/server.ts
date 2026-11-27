@@ -18,14 +18,15 @@ export async function startRelayServer(
   overrides: Partial<RelayConfig> & {
     readonly fetch?: typeof fetch;
     readonly heartbeatMs?: number;
+    readonly syncTimeoutMs?: number;
   } = {},
 ): Promise<RelayServerHandle> {
-  const { fetch: fetchImpl, heartbeatMs, ...configOverrides } = overrides;
+  const { fetch: fetchImpl, heartbeatMs, syncTimeoutMs, ...configOverrides } = overrides;
   const config: RelayConfig = { ...loadRelayConfig(), ...configOverrides };
   const db = openRelayDatabase(config.dbPath);
   const store = new RelayStore(db);
   const verifyToken = createRelayTokenVerifier(config, { fetch: fetchImpl });
-  const hub = new RelayHub(verifyToken, store, { heartbeatMs });
+  const hub = new RelayHub(verifyToken, store, { heartbeatMs, syncTimeoutMs });
 
   const srvx = serve({
     hostname: config.host,

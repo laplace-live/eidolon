@@ -13,10 +13,15 @@ export interface RelayConfig {
 export const DEFAULT_RELAY_AUTH_ISSUER = "https://id.laplace.live";
 export const DEFAULT_RELAY_AUTH_AUDIENCE = "eidolon-relay";
 
-function readCleanEnvValue(name: string, raw: string, expectation: string): string {
+function redactUrlUserinfo(raw: string): string {
+  return raw.replace(/(\/\/)[^\r\n/]+@/g, "$1[redacted]@");
+}
+
+function readCleanEnvValue(name: string, raw: string, expectation: string, isUrl = false): string {
   const value = raw.trim();
   if (value === "" || /[\s\\]/.test(value)) {
-    throw new Error(`${name} ${expectation} (got ${JSON.stringify(raw)})`);
+    const shown = isUrl ? redactUrlUserinfo(raw) : raw;
+    throw new Error(`${name} ${expectation} (got ${JSON.stringify(shown)})`);
   }
   return value;
 }
@@ -31,19 +36,26 @@ function readNormalizedUrl(
     name,
     raw,
     "must be a valid http(s) URL without whitespace or backslashes",
+    true,
   );
   if (!/^https?:\/\//i.test(value)) {
-    throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
+    throw new Error(
+      `${name} must be a valid http(s) URL (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
   }
   const parsed = URL.parse(value);
   if (parsed === null) {
-    throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
+    throw new Error(
+      `${name} must be a valid http(s) URL (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${name} must use http or https (got ${JSON.stringify(raw)})`);
+    throw new Error(
+      `${name} must use http or https (got ${JSON.stringify(redactUrlUserinfo(raw))})`,
+    );
   }
   if (parsed.username !== "" || parsed.password !== "") {
-    throw new Error(`${name} must not include URL credentials (got ${JSON.stringify(raw)})`);
+    throw new Error(`${name} must not include URL credentials`);
   }
   if (options.preserveRawValue) {
     return options.stripTrailingSlashes ? withoutTrailingSlashes(value) : value;
