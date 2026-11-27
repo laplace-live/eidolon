@@ -1066,10 +1066,14 @@ const writeResults = (passed: boolean): string => {
 };
 
 let watchdogFired = false;
-const marked = planned.setup === null ? null : markDefaultHome();
+let marked: MarkedHome | null = null;
+const clearMarker = (): void => {
+  marked?.marker.remove();
+};
 const runBody = async (): Promise<void> => {
   if (planned.setup === null) await walk(smoke, appLayout(planned.binary), numbers);
   else {
+    marked = markDefaultHome();
     try {
       const installed = await install(smoke, planned.setup, planned.binary, numbers);
       if (!watchdogFired && installed && existsSync(planned.binary)) {
@@ -1079,7 +1083,7 @@ const runBody = async (): Promise<void> => {
       if (existsSync(dirname(planned.binary))) {
         await uninstall(smoke, planned.binary, numbers, marked);
       }
-      marked?.marker.remove();
+      clearMarker();
     }
   }
 };
@@ -1102,7 +1106,7 @@ const watchdog = new Promise<void>((done) => {
 });
 const hardExit = setTimeout(
   () => {
-    marked?.marker.remove();
+    clearMarker();
     smoke.abortSync();
     const results = writeResults(false);
     console.error(`${LABEL}: cleanup timed out; the results are in ${results}`);
@@ -1119,7 +1123,7 @@ const bodyPromise = runBody().catch((error: unknown) => {
 await Promise.race([bodyPromise, watchdog]);
 clearTimeout(watchdogTimer);
 if (watchdogFired) await within(bodyPromise, UNINSTALL_MS + 15_000);
-marked?.marker.remove();
+clearMarker();
 const finished = await within(smoke.finish(), 30_000);
 if (finished === null) smoke.abortSync();
 const code = finished !== null && !watchdogFired ? finished : 1;
