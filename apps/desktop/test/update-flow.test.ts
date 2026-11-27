@@ -11,6 +11,7 @@ import { QuitConfirmation } from "../src/main/quit-check.ts";
 import { QuitFlow } from "../src/main/quit-flow.ts";
 import { STRINGS, type Stopping } from "../src/main/strings.ts";
 import {
+  FallbackUpdateBoxes,
   INSTALL_FOLDER,
   isUpdatableInstall,
   LAUNCH_CHECK_DELAY_MS,
@@ -942,5 +943,131 @@ describe("mock and headless update test", () => {
         .filter((line) => line.includes("background mode answered"))
         .map((line) => /"(.*?)"/.exec(line)?.[1]),
     ).toEqual(["Restart"]);
+  });
+});
+
+describe("FallbackUpdateBoxes", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  test("handles manual checks (up to date, error, read-only) and drives available -> download -> downloaded -> restart -> error retry", async () => {
+    const s = scripted();
+    const calls: { message: string; detail?: string; buttons: readonly string[] }[] = [];
+    const responses: number[] = [];
+    let isQuitting = false;
+    let boxes: FallbackUpdateBoxes;
+    const f = new UpdateFlow({
+      driver: s.driver,
+      version: "0.1.0",
+      log: { info: () => {}, warn: () => {} },
+      changed: (state) => {
+        void boxes?.stateChanged(state);
+      },
+      restart: (install) => {
+        install();
+        return Promise.resolve(true);
+      },
+      relaunch: () => {},
+      progress: () => {},
+    });
+    boxes = new FallbackUpdateBoxes({
+      flow: f,
+      version: "0.1.0",
+      strings: () => en,
+      quitting: () => isQuitting,
+      showBox: async (opts) => {
+        calls.push({
+          message: opts.message,
+          detail: opts.detail,
+          buttons: opts.buttons ?? [],
+        });
+        return responses.shift() ?? 0;
+      },
+    });
+
+    // Up to date check.
+    responses.push(0);
+    const upToDate = boxes.checkByHand();
+    s.checks[0]?.resolve(null);
+    await upToDate;
+    expect(calls.at(-1)).toMatchObject({
+      message: "LAPLACE Eidolon is up to date",
+      buttons: ["OK"],
+    });
+
+    // Check error.
+    responses.push(0);
+    const checkErr = boxes.checkByHand();
+    s.checks[1]?.reject(new Error("dns failure"));
+    await checkErr;
+    expect(calls.at(-1)).toMatchObject({
+      message: "LAPLACE Eidolon couldn't check for updates",
+      detail: "dns failure",
+    });
+
+    // Available -> click Download -> Download fails (Retry) -> Download succeeds -> click Restart.
+    responses.push(0); // Click Download
+    const avail = boxes.checkByHand();
+    s.checks[2]?.resolve(release("0.2.0"));
+    await avail;
+    await settle();
+    expect(calls.at(-1)).toMatchObject({
+      message: "LAPLACE Eidolon 0.2.0 is available",
+      buttons: ["Download", "Later"],
+    });
+    expect(s.downloads).toHaveLength(1);
+
+    responses.push(0); // Click Try Again on download error
+    s.downloads[0]?.done.reject(new Error("timeout"));
+    await settle();
+    expect(calls.at(-1)).toMatchObject({
+      message: "LAPLACE Eidolon couldn't update",
+      detail: "timeout",
+      buttons: ["Try Again", "Later"],
+    });
+    expect(s.downloads).toHaveLength(2);
+
+    responses.push(0); // Click Restart on downloaded
+    s.downloads[1]?.done.resolve();
+    await settle();
+    expect(calls.at(-1)).toMatchObject({
+      message: "Restart to finish updating",
+      buttons: ["Restart", "Later"],
+    });
+    expect(s.installs).toEqual(["quitAndInstall"]);
+
+    // Suppresses boxes once quitting.
+    isQuitting = true;
+    const beforeCount = calls.length;
+    await boxes.stateChanged({ phase: "available", version: "0.3.0", notes: [] });
+    await boxes.checkByHand();
+    expect(calls).toHaveLength(beforeCount);
+
+    // Read-only mode shows move-to-Applications prompt on manual check.
+    isQuitting = false;
+    const readOnlyFlow = new UpdateFlow({
+      driver: null,
+      readOnly: true,
+      version: "0.1.0",
+      log: { info: () => {}, warn: () => {} },
+      restart: () => Promise.resolve(false),
+      relaunch: () => {},
+      progress: () => {},
+    });
+    const roBoxes = new FallbackUpdateBoxes({
+      flow: readOnlyFlow,
+      version: "0.1.0",
+      strings: () => en,
+      quitting: () => false,
+      showBox: async (opts) => {
+        calls.push({ message: opts.message, detail: opts.detail, buttons: opts.buttons ?? [] });
+        return 0;
+      },
+    });
+    await roBoxes.checkByHand();
+    expect(calls.at(-1)).toMatchObject({
+      message: "LAPLACE Eidolon can't update itself here",
+      buttons: ["OK"],
+    });
   });
 });

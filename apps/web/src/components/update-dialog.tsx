@@ -60,7 +60,7 @@ function ReleaseNotes({ notes }: { readonly notes: readonly ReleaseNoteEntry[] }
 
   if (notes.length === 0) return null;
   return (
-    <ScrollArea className="-mx-4 [&>[data-slot=scroll-area-viewport]]:max-h-80 [&>[data-slot=scroll-area-viewport]]:px-4">
+    <ScrollArea className="-mx-4 [&>[data-slot=scroll-area-viewport]]:max-h-[min(20rem,calc(100svh-var(--strip,0px)-14rem))] [&>[data-slot=scroll-area-viewport]]:px-4">
       <div className="flex flex-col gap-3">
         {notes.map((entry) => {
           const version = entry.versions[DESKTOP_PACKAGE];
@@ -88,7 +88,7 @@ function ReleaseNotes({ notes }: { readonly notes: readonly ReleaseNoteEntry[] }
                         {t(KIND_BADGE[item.kind].label)}
                       </Badge>
                     </div>
-                    <div className="min-w-0">{item.text}</div>
+                    <div className="min-w-0 whitespace-pre-line">{item.text}</div>
                   </li>
                 ))}
               </ul>
@@ -117,7 +117,7 @@ export function UpdateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100svh-var(--strip,0px)-2rem)] grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto sm:max-w-lg">
         {update.phase === "available" && (
           <>
             <DialogHeader>
@@ -198,7 +198,7 @@ export function UpdateDialog({
         {update.phase === "error" && (
           <>
             <DialogHeader>
-              <DialogTitle>{t`Download Failed`}</DialogTitle>
+              <DialogTitle>{t`Update Failed`}</DialogTitle>
               <DialogDescription className="wrap-break-word">{update.message}</DialogDescription>
             </DialogHeader>
             <DialogFooter>

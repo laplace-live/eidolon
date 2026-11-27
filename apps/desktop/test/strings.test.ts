@@ -112,8 +112,12 @@ describe("STRINGS", () => {
   test("the menu's Check for Updates… label is Title Case, and matches Chinese", () => {
     expect(en.label.checkForUpdates).toBe("Check for Updates…");
     expect(zh.label.checkForUpdates).toBe("检查更新…");
+    expect(en.label.download).toBe("Download");
+    expect(en.label.later).toBe("Later");
     expect(en.label.restart).toBe("Restart");
     expect(webChinese("Restart")).toBe(zh.label.restart);
+    expect(en.text.updateAvailableTitle("1.0.0")).toBe("LAPLACE Eidolon 1.0.0 is available");
+    expect(zh.text.updateAvailableTitle("1.0.0")).toBe("LAPLACE Eidolon 1.0.0 已发布");
   });
 
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {

@@ -142,7 +142,8 @@ describe("UpdateDialog", () => {
     expect(markup).toContain("Show updates in app");
     expect(markup).toContain("Skip This Version");
     expect(markup).toContain("Later");
-    expect(markup).toContain("Update");
+    expect(markup).toContain(">Update<");
+    expect(markup).toContain("whitespace-pre-line");
   });
 
   test("downloading shows progress percentage and keeps the app usable", () => {
@@ -165,7 +166,7 @@ describe("UpdateDialog", () => {
 
   test("error, read-only, and idle render their respective prompts", () => {
     const err = renderDialog({ phase: "error", version: "0.7.0", message: "HTTP 502" });
-    expect(err).toContain("Download Failed");
+    expect(err).toContain("Update Failed");
     expect(err).toContain("HTTP 502");
     expect(err).toContain("Retry");
 

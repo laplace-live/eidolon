@@ -1316,14 +1316,18 @@ runs it on electron-updater's `autoUpdater`.
 - **Checking, badge, and toast:** once, quietly, 10 s after the backend is first ready (after a
   [launch at login](#open-at-login), once the window has also shown), and from Check for Updates…
   (in macOS's app menu after About, in Windows' tray menu after Settings…), which opens the window
-  and sends `check-updates` to the page. A quiet check only logs up-to-date, errors, or skipped
-  versions (`userData/updates.json`), surfacing a compact `v<version>` badge (`UpdateVersion`) in
-  `TitleStrip` and Setup's header whenever `UpdateState` carries a `version` (`available`,
-  `downloading`, `downloaded`, `installing`, or `error`). Selecting Check for Updates… runs
-  `checkForUpdates()`: if an update, download, error, or read-only state is already active it opens
-  `UpdateDialog` directly; otherwise it shows a Sonner toast (`Checking for updates…`) resolving to
-  `You're up to date` or `Update check failed: …`, or dismissing and opening `UpdateDialog` when an
-  update is found (surfacing even a previously skipped version). A check asked while one runs joins it.
+  and sends `check-updates` to the page. A quiet check logs up-to-date, errors, skipped
+  versions (`userData/updates.json`), or available updates (`Eidolon: update available: X.Y.Z`),
+  surfacing a compact `v<version>` badge (`UpdateVersion`) in `TitleStrip` and Setup's header
+  whenever `UpdateState` carries a `version` (`available`, `downloading`, `downloaded`, `installing`,
+  or `error`). Selecting Check for Updates… runs `checkForUpdates()`: if an update, download, error,
+  or read-only state is already active it opens `UpdateDialog` directly; otherwise it shows a Sonner
+  toast (`Checking for updates…`) resolving to `You're up to date` or `Update check failed: …`, or
+  dismissing and opening `UpdateDialog` when an update is found (surfacing even a previously skipped
+  version). A check asked while one runs joins it. When the window shows an older attached terminal
+  server's web UI (which never calls `updateState`) or the shell failure page, `FallbackUpdateBoxes`
+  falls back to native message boxes so Check for Updates… and update downloads/restarts remain
+  usable.
 - **Downloading & skip:** nothing downloads unasked (`autoDownload` is off). `UpdateDialog` shows
   structured release `notes` grouped by version and date with kind badges (`New`, `Perf`, `Improved`,
   `Fixed`, `Other`), plus **Update**, **Skip This Version** (persisted in `userData/updates.json`),

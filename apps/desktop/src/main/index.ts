@@ -86,7 +86,7 @@ import {
 } from "./task-notices.ts";
 import { type CommandHost, changeCommand, commandState } from "./terminal-command.ts";
 import { AppTray, trayIconPath } from "./tray.ts";
-import { isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
+import { FallbackUpdateBoxes, isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
 import { installUpdater } from "./updater.ts";
 import {
   createWindow,
@@ -145,6 +145,7 @@ function run(): void {
   let tray: AppTray | null = null;
   let hideNotice: HideNotice | null = null;
   let updates: UpdateFlow | null = null;
+  let fallbackUpdates: FallbackUpdateBoxes | null = null;
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
   /** A login launch holds the updater's launch check until the window shows. */
@@ -163,7 +164,15 @@ function run(): void {
     },
     serverVersion: () => backend.serverVersion,
   });
-  const commands = new PageCommands((command) => sendCommand(command));
+  const commands = new PageCommands(
+    (command) => sendCommand(command),
+    () => void fallbackUpdates?.checkByHand(),
+  );
+  const useFallbackUpdater = (): boolean =>
+    !background &&
+    !flow.quitting &&
+    !commands.hasUpdater &&
+    (commands.isListening || pages.failure !== null);
   const backend = new Backend({
     app: paths,
     env: process.env,
@@ -385,7 +394,8 @@ function run(): void {
     },
     checkForUpdates: () => {
       openWindow();
-      commands.send("check-updates");
+      if (useFallbackUpdater()) void fallbackUpdates?.checkByHand();
+      else commands.send("check-updates");
     },
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
@@ -483,6 +493,7 @@ function run(): void {
             companion?.feeding(false);
             link.appGone();
           });
+          win.webContents.on("render-process-gone", () => commands.replaced());
           win.on("closed", () => link.appGone());
           unloads.follow(win.webContents);
           // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
@@ -558,7 +569,18 @@ function run(): void {
       updates = installUpdater({
         quit: flow,
         version,
-        changed: sendUpdateState,
+        changed: (state) => {
+          sendUpdateState(state);
+          if (useFallbackUpdater()) void fallbackUpdates?.stateChanged(state);
+        },
+      });
+      fallbackUpdates = new FallbackUpdateBoxes({
+        flow: updates,
+        version,
+        strings,
+        icon,
+        quitting: () => flow.quitting,
+        showBox: (opts) => native.messageBox(opts).then((result) => result.response),
       });
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
@@ -615,7 +637,12 @@ function run(): void {
       handleAppBridge({
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
-        takesCommands: () => commands.listening(),
+        takesCommands: () => {
+          commands.listening();
+          if (useFallbackUpdater() && updates !== null) {
+            void fallbackUpdates?.stateChanged(updates.state);
+          }
+        },
         unsaved: (held) => unloads.held(held),
         chooseFolder,
         loginItem: () => loginItemState(process.platform, unavailable, readLoginItem),
@@ -642,7 +669,10 @@ function run(): void {
         linkCompanion: () => link.appAsks(),
         feedingCompanion: (on) => companionFlow.feeding(on),
         windowShows,
-        updateState: () => updates?.state ?? { phase: "unsupported" },
+        updateState: () => {
+          commands.updaterListening();
+          return updates?.state ?? { phase: "unsupported" };
+        },
         updateCheck: () => updates?.check(true) ?? Promise.resolve({ outcome: "none" }),
         updateDownload: () => updates?.download(),
         updateInstall: () => updates?.install(),

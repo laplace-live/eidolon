@@ -2007,10 +2007,6 @@ msgid "Download"
 msgstr "下载"
 
 #: src/components/update-dialog.tsx
-msgid "Download Failed"
-msgstr "下载失败"
-
-#: src/components/update-dialog.tsx
 msgid "Downloading v{version}…"
 msgstr "正在下载 v{version}…"
 
@@ -7206,6 +7202,10 @@ msgstr "有可用更新"
 #: src/lib/update-check.ts
 msgid "Update check failed: {message}"
 msgstr "检查更新失败：{message}"
+
+#: src/components/update-dialog.tsx
+msgid "Update Failed"
+msgstr "更新失败"
 
 #: src/features/subspace/servers-card.tsx
 msgid "Update the display name for this Relay server."

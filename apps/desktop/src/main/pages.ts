@@ -263,11 +263,29 @@ export class PageUnloads {
  */
 export class PageCommands {
   readonly #send: (command: DesktopCommand) => void;
+  readonly #onUnsupportedCheckUpdates: (() => void) | undefined;
   #listening = false;
+  #hasUpdater = false;
   #held: DesktopCommand | null = null;
 
-  constructor(send: (command: DesktopCommand) => void) {
+  constructor(send: (command: DesktopCommand) => void, onUnsupportedCheckUpdates?: () => void) {
     this.#send = send;
+    this.#onUnsupportedCheckUpdates = onUnsupportedCheckUpdates;
+  }
+
+  /** Whether the current document registered `BRIDGE.updateState` before or when listening. */
+  get hasUpdater(): boolean {
+    return this.#hasUpdater;
+  }
+
+  /** Whether the current document called `BRIDGE.takesCommands`. */
+  get isListening(): boolean {
+    return this.#listening;
+  }
+
+  /** The app's page read/subscribed to updater state (`BRIDGE.updateState`). */
+  updaterListening(): void {
+    this.#hasUpdater = true;
   }
 
   /** To the page now if it listens, else once it does. */
@@ -276,16 +294,19 @@ export class PageCommands {
     else this.#held = command;
   }
 
-  /** The app's page listens: it gets the command held for it. */
+  /** The app's page listens: it gets the command held for it (falling back when `check-updates` lacks UI). */
   listening(): void {
     this.#listening = true;
     const held = this.#held;
     this.#held = null;
-    if (held !== null) this.#send(held);
+    if (held === null) return;
+    if (held === "check-updates" && !this.#hasUpdater) this.#onUnsupportedCheckUpdates?.();
+    else this.#send(held);
   }
 
   /** A new document in the window, or a new window: nothing listens until it says so. */
   replaced(): void {
     this.#listening = false;
+    this.#hasUpdater = false;
   }
 }

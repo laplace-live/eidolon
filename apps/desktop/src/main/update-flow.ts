@@ -4,11 +4,13 @@
 // updater.ts runs it on electron-updater and pushes each state change to the app page.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
+import type { MessageBoxOptions, NativeImage } from "electron";
 import type { UpdateInfo } from "electron-updater";
 import type { UpdateCheckOutcome, UpdateState } from "../shared/bridge.ts";
 import { DESKTOP_PACKAGE, type ReleaseNoteEntry } from "../shared/release-notes.ts";
 import { launchFlag } from "./environment.ts";
 import { loggedText } from "./policy.ts";
+import type { Strings } from "./strings.ts";
 
 /** How long after the backend is first ready the quiet check runs, clear of startup. */
 export const LAUNCH_CHECK_DELAY_MS = 10_000;
@@ -591,4 +593,146 @@ export function mockUpdates(log: { info(message: string): void }): {
       return false;
     },
   };
+}
+
+export interface FallbackUpdateBoxesOptions {
+  readonly flow: UpdateFlow;
+  readonly version: string;
+  readonly strings: () => Strings;
+  readonly showBox: (options: MessageBoxOptions) => Promise<number>;
+  readonly quitting: () => boolean;
+  readonly icon?: NativeImage;
+}
+
+/**
+ * Native dialog fallback used when the loaded document lacks the in-app updater UI (for example,
+ * when desktop attaches to an older terminal server or shows the shell failure page).
+ */
+export class FallbackUpdateBoxes {
+  readonly #options: FallbackUpdateBoxesOptions;
+  #open = false;
+  #prompted: string | null = null;
+
+  constructor(options: FallbackUpdateBoxesOptions) {
+    this.#options = options;
+  }
+
+  /** Prompts on passive or post-check state transitions when the active page cannot render them. */
+  async stateChanged(state: UpdateState): Promise<void> {
+    if (state.phase === "available") {
+      const key = `${state.phase}:${state.version}`;
+      if (this.#prompted === key) return;
+      this.#prompted = key;
+      const { label, text } = this.#options.strings();
+      const clicked = await this.#ask({
+        type: "info",
+        message: text.updateAvailableTitle(state.version),
+        detail: text.updateAvailable(this.#options.version),
+        buttons: [label.download, label.later],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
+      return;
+    }
+    if (state.phase === "downloaded") {
+      const key = `${state.phase}:${state.version}`;
+      if (this.#prompted === key) return;
+      this.#prompted = key;
+      const { label, text } = this.#options.strings();
+      const clicked = await this.#ask({
+        type: "info",
+        message: text.updateDownloadedTitle,
+        detail: text.updateDownloaded(state.version),
+        buttons: [label.restart, label.later],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (clicked === 0 && !this.#options.quitting()) this.#options.flow.install();
+      return;
+    }
+    if (state.phase === "error") {
+      const key = `${state.phase}:${state.version}`;
+      if (this.#prompted === key) return;
+      this.#prompted = key;
+      const { label, text } = this.#options.strings();
+      const clicked = await this.#ask({
+        type: "warning",
+        message: text.updateFailedTitle,
+        detail: state.message,
+        buttons: [label.tryAgain, label.later],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
+      return;
+    }
+    this.#prompted = null;
+  }
+
+  /** Handles Check for Updates… when the active page cannot handle `check-updates`. */
+  async checkByHand(): Promise<void> {
+    if (this.#options.quitting() || this.#open) return;
+    const state = this.#options.flow.state;
+    const { label, text } = this.#options.strings();
+    if (state.phase === "read-only") {
+      await this.#ask({
+        type: "info",
+        message: text.readOnlyTitle,
+        detail: text.readOnly,
+        buttons: [label.ok],
+      });
+      return;
+    }
+    if (state.phase === "available" || state.phase === "downloaded" || state.phase === "error") {
+      this.#prompted = null;
+      await this.stateChanged(state);
+      return;
+    }
+    if (state.phase !== "idle" && state.phase !== "checking") return;
+    this.#prompted = null;
+    const res = await this.#options.flow.check(true);
+    if (this.#options.quitting()) return;
+    if (res.outcome === "none") {
+      await this.#ask({
+        type: "info",
+        message: text.upToDateTitle,
+        detail: text.upToDate(this.#options.version),
+        buttons: [label.ok],
+      });
+      return;
+    }
+    if (res.outcome === "error") {
+      await this.#ask({
+        type: "warning",
+        message: text.checkFailedTitle,
+        detail: res.message,
+        buttons: [label.ok],
+      });
+      return;
+    }
+    if (this.#prompted !== `available:${res.version}`) {
+      await this.stateChanged(this.#options.flow.state);
+    }
+  }
+
+  async #ask(
+    box: Pick<
+      MessageBoxOptions,
+      "type" | "message" | "detail" | "buttons" | "defaultId" | "cancelId"
+    >,
+  ): Promise<number | null> {
+    if (this.#open || this.#options.quitting()) return null;
+    this.#open = true;
+    try {
+      return await this.#options.showBox({
+        ...box,
+        title: "LAPLACE Eidolon",
+        noLink: true,
+        ...(this.#options.icon === undefined ? {} : { icon: this.#options.icon }),
+      });
+    } finally {
+      this.#open = false;
+    }
+  }
 }

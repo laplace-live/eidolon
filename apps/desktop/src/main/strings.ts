@@ -74,6 +74,8 @@ export interface Strings {
     readonly tryAgain: string;
     /** Over the failure page's last lines of the server's stderr. */
     readonly details: string;
+    readonly download: string;
+    readonly later: string;
     /** Restarts into a downloaded update. */
     readonly restart: string;
     /** The folder dialog's title, where the OS shows one, and its button. */
@@ -127,6 +129,16 @@ export interface Strings {
      * it: after what else stops, or alone (null).
      */
     readonly unsavedLost: (before: string | null) => string;
+    readonly updateAvailableTitle: (version: string) => string;
+    readonly updateAvailable: (current: string) => string;
+    readonly updateDownloadedTitle: string;
+    readonly updateDownloaded: (version: string) => string;
+    readonly upToDateTitle: string;
+    readonly upToDate: (version: string) => string;
+    readonly checkFailedTitle: string;
+    readonly updateFailedTitle: string;
+    readonly readOnlyTitle: string;
+    readonly readOnly: string;
     /** Windows' one-time notice when closing first hides the window. */
     readonly hideNoticeTitle: string;
     readonly hideNotice: string;
@@ -227,6 +239,8 @@ const en: Strings = {
     ok: "OK",
     tryAgain: "Try Again",
     details: "Details",
+    download: "Download",
+    later: "Later",
     restart: "Restart",
     chooseFolderTitle: "Choose a Folder",
     chooseFolderButton: "Choose",
@@ -288,6 +302,19 @@ const en: Strings = {
       "LAPLACE Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
     unsavedLost: (before) =>
       `${before === null ? "" : `${before} `}Your unsaved changes will be lost.`,
+    updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} is available`,
+    updateAvailable: (current) =>
+      `You have ${current}. LAPLACE Eidolon downloads the update in the background, then asks before restarting.`,
+    updateDownloadedTitle: "Restart to finish updating",
+    updateDownloaded: (version) =>
+      `LAPLACE Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit LAPLACE Eidolon.`,
+    upToDateTitle: "LAPLACE Eidolon is up to date",
+    upToDate: (version) => `LAPLACE Eidolon ${version} is the latest version.`,
+    checkFailedTitle: "LAPLACE Eidolon couldn't check for updates",
+    updateFailedTitle: "LAPLACE Eidolon couldn't update",
+    readOnlyTitle: "LAPLACE Eidolon can't update itself here",
+    readOnly:
+      "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again.",
     hideNoticeTitle: "LAPLACE Eidolon is still running",
     hideNotice:
       "Calls, tasks and jobs keep going while the window is closed. Click the tray icon to open it " +
@@ -366,6 +393,8 @@ const zhHans: Strings = {
     ok: "确定",
     tryAgain: "重试",
     details: "详情",
+    download: "下载",
+    later: "稍后",
     restart: "重启",
     chooseFolderTitle: "选择文件夹",
     chooseFolderButton: "选择",
@@ -426,6 +455,19 @@ const zhHans: Strings = {
     restartUnknown:
       "LAPLACE Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
     unsavedLost: (before) => `${before ?? ""}未保存的修改将会丢失。`,
+    updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} 已发布`,
+    updateAvailable: (current) =>
+      `当前版本为 ${current}。LAPLACE Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
+    updateDownloadedTitle: "重启以完成更新",
+    updateDownloaded: (version) =>
+      `LAPLACE Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 LAPLACE Eidolon 时安装。`,
+    upToDateTitle: "LAPLACE Eidolon 已是最新版本",
+    upToDate: (version) => `LAPLACE Eidolon ${version} 是最新版本。`,
+    checkFailedTitle: "LAPLACE Eidolon 无法检查更新",
+    updateFailedTitle: "LAPLACE Eidolon 无法完成更新",
+    readOnlyTitle: "LAPLACE Eidolon 无法在当前位置更新",
+    readOnly:
+      "LAPLACE Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
     hideNoticeTitle: "LAPLACE Eidolon 仍在运行",
     hideNotice:
       "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 LAPLACE Eidolon。",

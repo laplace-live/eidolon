@@ -355,6 +355,34 @@ describe("the menus' commands to the app's page", () => {
     page.listening();
     expect(sent).toEqual(["settings"]);
   });
+
+  test("routes held check-updates to fallback when the loaded page never queried updateState", () => {
+    const sent: string[] = [];
+    let fallbacks = 0;
+    const page = new PageCommands(
+      (command) => sent.push(command),
+      () => {
+        fallbacks++;
+      },
+    );
+    page.send("check-updates");
+    page.listening();
+    expect(page.isListening).toBe(true);
+    expect(page.hasUpdater).toBe(false);
+    expect(sent).toEqual([]);
+    expect(fallbacks).toBe(1);
+
+    // A new document that registers BRIDGE.updateState before takesCommands receives check-updates normally.
+    page.replaced();
+    expect(page.isListening).toBe(false);
+    expect(page.hasUpdater).toBe(false);
+    page.send("check-updates");
+    page.updaterListening();
+    page.listening();
+    expect(page.hasUpdater).toBe(true);
+    expect(sent).toEqual(["check-updates"]);
+    expect(fallbacks).toBe(1);
+  });
 });
 
 describe("the page's beforeunload", () => {
