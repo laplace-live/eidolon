@@ -8,8 +8,10 @@ ENV CI=1 \
 RUN corepack enable pnpm
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json ./
 RUN corepack install && pnpm --version
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 
 COPY apps/bot/package.json apps/bot/
 COPY apps/cli/package.json apps/cli/
