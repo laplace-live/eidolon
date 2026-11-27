@@ -304,7 +304,7 @@ const en: Strings = {
       `${before === null ? "" : `${before} `}Your unsaved changes will be lost.`,
     updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} is available`,
     updateAvailable: (current) =>
-      `You have ${current}. LAPLACE Eidolon downloads the update in the background, then asks before restarting.`,
+      `You have ${current}. Click Download to download the update in the background; LAPLACE Eidolon asks before restarting.`,
     updateDownloadedTitle: "Restart to finish updating",
     updateDownloaded: (version) =>
       `LAPLACE Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit LAPLACE Eidolon.`,
@@ -457,7 +457,7 @@ const zhHans: Strings = {
     unsavedLost: (before) => `${before ?? ""}未保存的修改将会丢失。`,
     updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} 已发布`,
     updateAvailable: (current) =>
-      `当前版本为 ${current}。LAPLACE Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
+      `当前版本为 ${current}。点击「下载」后会在后台下载更新，下载完成后会先询问再重启。`,
     updateDownloadedTitle: "重启以完成更新",
     updateDownloaded: (version) =>
       `LAPLACE Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 LAPLACE Eidolon 时安装。`,

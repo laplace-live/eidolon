@@ -955,6 +955,7 @@ describe("FallbackUpdateBoxes", () => {
     const calls: { message: string; detail?: string; buttons: readonly string[] }[] = [];
     const responses: number[] = [];
     let isQuitting = false;
+    let restarts = 0;
     let boxes: FallbackUpdateBoxes;
     const f = new UpdateFlow({
       driver: s.driver,
@@ -964,6 +965,8 @@ describe("FallbackUpdateBoxes", () => {
         void boxes?.stateChanged(state);
       },
       restart: (install) => {
+        restarts += 1;
+        if (restarts === 1) return Promise.resolve(false);
         install();
         return Promise.resolve(true);
       },
@@ -1027,9 +1030,18 @@ describe("FallbackUpdateBoxes", () => {
     });
     expect(s.downloads).toHaveLength(2);
 
-    responses.push(0); // Click Restart on downloaded
+    responses.push(0); // Click Restart, then cancel QuitConfirmation
     s.downloads[1]?.done.resolve();
     await settle();
+    expect(calls.filter((c) => c.message === "Restart to finish updating")).toHaveLength(1);
+    expect(s.installs).toEqual([]);
+    expect(f.state.phase).toBe("downloaded");
+
+    // Manual check re-prompts after canceling restart, then installs when confirmed.
+    responses.push(0);
+    await boxes.checkByHand();
+    await settle();
+    expect(calls.filter((c) => c.message === "Restart to finish updating")).toHaveLength(2);
     expect(calls.at(-1)).toMatchObject({
       message: "Restart to finish updating",
       buttons: ["Restart", "Later"],

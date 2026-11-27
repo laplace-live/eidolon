@@ -118,6 +118,12 @@ describe("STRINGS", () => {
     expect(webChinese("Restart")).toBe(zh.label.restart);
     expect(en.text.updateAvailableTitle("1.0.0")).toBe("LAPLACE Eidolon 1.0.0 is available");
     expect(zh.text.updateAvailableTitle("1.0.0")).toBe("LAPLACE Eidolon 1.0.0 已发布");
+    expect(en.text.updateAvailable("0.1.0")).toBe(
+      "You have 0.1.0. Click Download to download the update in the background; LAPLACE Eidolon asks before restarting.",
+    );
+    expect(zh.text.updateAvailable("0.1.0")).toBe(
+      "当前版本为 0.1.0。点击「下载」后会在后台下载更新，下载完成后会先询问再重启。",
+    );
   });
 
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {

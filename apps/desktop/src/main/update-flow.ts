@@ -667,6 +667,7 @@ export class FallbackUpdateBoxes {
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
       return;
     }
+    if (state.phase === "installing") return;
     this.#prompted = null;
   }
 
