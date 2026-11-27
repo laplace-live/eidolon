@@ -1,5 +1,11 @@
 # laplace-eidolon-desktop
 
+## 0.12.0
+
+### Minor Changes
+
+- 028dbb1: Unify Subspace sharing with automatic Relay fallback
+
 ## 0.11.0
 
 ### Minor Changes
