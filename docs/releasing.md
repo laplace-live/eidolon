@@ -135,10 +135,10 @@ tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
 - **A GitHub App pushes the tags.** Events caused by the workflow's own `GITHUB_TOKEN` start no
   other workflow, so the laplace-release-bot App's token (the `RELEASE_APP_CLIENT_ID` and
   `RELEASE_APP_PRIVATE_KEY` org secrets) does it.
-- **`laplace-eidolon@X.Y.Z` builds the images.** It fires `docker.yml`, which pushes
-  `ghcr.io/laplace-live/eidolon` and `ghcr.io/laplace-live/eidolon-python` tagged `X.Y.Z`, `X.Y`
-  and `X`. `@laplace.live/eidolon@X.Y.Z` and `@laplace.live/eidolon-sdk@X.Y.Z` match no workflow's
-  trigger and build no image.
+- **`laplace-eidolon@X.Y.Z` builds the images.** It fires `docker.yml` and `relay.yml`, which
+  push `ghcr.io/laplace-live/eidolon`, `ghcr.io/laplace-live/eidolon-python`, and
+  `ghcr.io/laplace-live/eidolon-relay` tagged `X.Y.Z`, `X.Y` and `X`. `@laplace.live/eidolon@X.Y.Z`
+  and `@laplace.live/eidolon-sdk@X.Y.Z` match no workflow's trigger and build no image.
 - **`laplace-eidolon-desktop@X.Y.Z` releases the desktop app.** It fires `desktop.yml` in the tagged
   commit, which checks that the commit is on master and the tag names the package's version, signs
   and notarizes each platform's build, checks it, and uploads it to R2, where installs update from
@@ -147,8 +147,12 @@ tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
   ones ([desktop.md](desktop.md#secrets)). A run of it that fails is re-run with "Re-run failed
   jobs", never "Re-run all jobs" once its upload began ([desktop.md](desktop.md#recovery)).
 - **Production follows `:edge`, not the tags.** Every push to `master` that `docker.yml` doesn't
-  ignore rebuilds `:edge`, and Watchtower restarts the production bot from it
-  ([AGENTS.md](../AGENTS.md#shipping-a-change)).
+  ignore rebuilds bot `:edge` (and Watchtower restarts the production bot from it;
+  [AGENTS.md](../AGENTS.md#shipping-a-change)), while `relay.yml` rebuilds
+  `ghcr.io/laplace-live/eidolon-relay` on qualifying `master` pushes when `apps/relay`,
+  `packages/subspace`, `packages/config`, workspace manifests/lockfile, `docker-bake.hcl`, or
+  `relay.yml` change (release tags and manual/webhook dispatches also trigger it) so bot and relay
+  `:edge` deploys stay isolated.
 
 ## Publishing to npm
 

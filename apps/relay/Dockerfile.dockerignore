@@ -1,0 +1,36 @@
+# Replaces the root .dockerignore for apps/relay/Dockerfile builds; the two are not merged.
+#
+# Every workspace package has its own node_modules of symlinks into the root one.
+# A bare `node_modules/` matches only the root, so the host's nested ones would
+# overwrite the image's own through `COPY packages/*` and `COPY apps/relay`.
+**/node_modules/
+**/*.tsbuildinfo
+
+# Local secrets: never in the build context. findDotenv walks up from apps/relay/src, so a nested
+# one would load too.
+**/.env
+**/.env.*
+
+# Large local-only trees and tests the relay image never runs.
+.git/
+.venv/
+streams/
+vods/
+data/
+personas/
+docs/
+scripts/
+apps/*/test/
+packages/*/test/
+
+# Other apps never ship in the relay image; keep only their manifests for --frozen-lockfile.
+apps/bot/*
+!apps/bot/package.json
+apps/cli/*
+!apps/cli/package.json
+apps/desktop/*
+!apps/desktop/package.json
+apps/eidolon/*
+!apps/eidolon/package.json
+apps/web/*
+!apps/web/package.json

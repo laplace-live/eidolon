@@ -48,6 +48,7 @@ on:
       - ".github/workflows/desktop.yml"
       - ".github/workflows/desktop-build.yml"
       - ".github/workflows/desktop-update-test.yml"
+      - ".github/workflows/relay.yml"
       - ".env.example"
   pull_request:
     branches:
@@ -82,6 +83,7 @@ on:
       - ".github/workflows/desktop.yml"
       - ".github/workflows/desktop-build.yml"
       - ".github/workflows/desktop-update-test.yml"
+      - ".github/workflows/relay.yml"
       - ".env.example"
   repository_dispatch:
     types:

@@ -13,8 +13,9 @@ When a remote server is active, every conversation row in the sidebar shows an o
   `ws://<host>:<port>/v1/subspace`. Intended for single-network or mesh-VPN setups without logging
   into a relay.
 - **Subspace Relay:** Pairs across NATs and firewalls via `apps/relay` (`@eidolon/relay`), run
-  locally with `pnpm relay` or deployed using `apps/relay/Dockerfile` (default relay:
-  `https://eidolon-relay.vrp.moe`, configured via `subspace.relayUrl` /
+  locally with `pnpm relay` or deployed as `ghcr.io/laplace-live/eidolon-relay` from
+  [`apps/relay/Dockerfile`](../apps/relay/Dockerfile) via [`.github/workflows/relay.yml`](../.github/workflows/relay.yml)
+  (default relay: `https://eidolon-relay.vrp.moe`, configured via `subspace.relayUrl` /
   `EIDOLON_SUBSPACE_RELAY_URL`). Users authenticate via RFC 8628 device authorization against
   `https://id.laplace.live` (`subspace.authUrl` / `EIDOLON_SUBSPACE_AUTH_URL`, or auto-discovered
   from a custom relay's `/healthz`), exchange their session at `/api/auth/token` for short-lived
@@ -62,4 +63,6 @@ share it verbatim:
   `login`, `logout`, `grants`, `revoke <id>`, with optional `--relay-url` and `--auth-url`).
 - **Relay configuration:** Configure `EIDOLON_RELAY_PUBLIC_URL`, `EIDOLON_RELAY_DB_PATH`,
   `EIDOLON_RELAY_AUTH_ISSUER`, `EIDOLON_RELAY_AUTH_AUDIENCE`, and optional `EIDOLON_RELAY_JWKS_URL`
-  (defaults to `<issuer>/.well-known/jwks.json`). Run with `pnpm relay` or `apps/relay/Dockerfile`.
+  (defaults to `<issuer>/.well-known/jwks.json`). Run with `pnpm relay`, `apps/relay/Dockerfile`,
+  or `ghcr.io/laplace-live/eidolon-relay` (built by [`.github/workflows/relay.yml`](../.github/workflows/relay.yml),
+  tagged `edge`, `sha-…`, and `X.Y.Z` / `X.Y` / `X` on release).
