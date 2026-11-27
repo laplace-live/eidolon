@@ -5,6 +5,7 @@ import {
   effectiveProvider,
   effectiveProviderType,
   isTimeZone,
+  strip,
 } from "@/components/settings-form/controls";
 import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
 import { OFF_PROVIDER, providerById, providerOfAccount, roleById } from "@/lib/providers";
@@ -113,6 +114,23 @@ export function voiceProvider(
     effectiveProviderType(roleById("voice"), rows, {}, accounts) ??
     (accounts === undefined ? null : "fish")
   );
+}
+
+/**
+ * Whether `rows` puts a persona on realtime; creating one reads `env` alone since starter settings
+ * leave realtime out.
+ */
+export function targetUsesRealtime(
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  creating = false,
+): boolean {
+  if (creating) {
+    const env = rows.find((row) => row.path === "realtime.provider")?.envValue;
+    const value = env ? strip(env).toLowerCase() : "";
+    return value !== "" && value !== OFF_PROVIDER;
+  }
+  const provider = effectiveProvider(roleById("realtime"), rows, {});
+  return provider !== null && provider !== OFF_PROVIDER;
 }
 
 /**

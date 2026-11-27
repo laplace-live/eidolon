@@ -189,13 +189,22 @@ function parseChanges(
   }
   if (body.options !== undefined) {
     if (!isPlainObject(body.options)) return bad("Send options as {field: value or null}");
-    const fields = new Set((provider.fields ?? []).map((field) => field.key));
+    const fields = new Map((provider.fields ?? []).map((field) => [field.key, field]));
     const options: Record<string, string | null> = {};
     for (const [key, raw] of Object.entries(body.options)) {
-      if (!fields.has(key)) return bad(`${provider.name} takes no setting by that name`);
+      const field = fields.get(key);
+      if (field === undefined) return bad(`${provider.name} takes no setting by that name`);
       const set = raw === null ? null : typedValue(raw);
       if (raw !== null && set === null) return bad("A setting is one line of text");
-      options[key] = set;
+      if (set !== null && field.options !== undefined) {
+        const match = field.options.find((option) => option.toLowerCase() === set.toLowerCase());
+        if (match === undefined) {
+          return bad(`${field.label} must be one of: ${field.options.join(", ")}`);
+        }
+        options[key] = match;
+      } else {
+        options[key] = set;
+      }
     }
     changes.options = options;
   }

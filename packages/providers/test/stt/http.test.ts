@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { select, setUsageSink, type UsageRecord } from "../../src/index.ts";
+import { openHttpWhisperStt } from "../../src/stt/http.ts";
 import { STT_STREAMS } from "../../src/stt/index.ts";
 import { serveWs } from "../ws-server.ts";
 import { live, watch } from "./fake.ts";
@@ -145,4 +146,52 @@ test("openai-compatible uses Realtime WebSocket when sttProtocol is realtime", a
   expect(stream.inputRate).toBe(24000);
   expect(wsPath).toBe("/v1/realtime?intent=transcription");
   await stream.close();
+});
+
+test("HTTP Whisper STT closes events on signal abort and times out stalled requests", async () => {
+  let count = 0;
+  const server = await serveWs({
+    open() {},
+    async fetch() {
+      count += 1;
+      if (count === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return Response.json({ text: "恢复了" });
+    },
+  });
+  stopServer = () => server.stop();
+
+  const controller = new AbortController();
+  const stream = await openHttpWhisperStt(
+    compatibleSelection(`http://127.0.0.1:${server.port}/v1`),
+    null,
+    controller.signal,
+    { timeoutMs: 40 },
+  );
+  const events = watch(stream);
+
+  stream.speechStarted?.();
+  stream.send(new Int16Array(3200));
+  stream.finalize();
+  await events.until((e) => e.type === "finalized");
+  expect(events.seen).toEqual([
+    { type: "error", message: "OpenAI-compatible STT timed out after 0.04 s", fatal: false },
+    { type: "finalized" },
+  ]);
+
+  stream.speechStarted?.();
+  stream.send(new Int16Array(3200));
+  stream.finalize();
+  await events.until((e) => e.type === "final");
+  expect(events.seen.at(-1)).toEqual({ type: "final", text: "恢复了", finalized: true });
+
+  // Aborting caller signal ends the event stream without requiring explicit close().
+  const done = (async () => {
+    for await (const _ of stream.events) {
+      // drain until closed
+    }
+  })();
+  controller.abort();
+  await done;
 });

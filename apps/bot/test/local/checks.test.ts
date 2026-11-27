@@ -604,6 +604,10 @@ describe("POST credentials/check", () => {
     installSettings();
     try {
       expect(callsDisabled(["milky-green"])).toBe(true);
+      // Unknown or invalid provider settings shouldn't crash /chats/:id or read as turned off.
+      process.env.TTS_PROVIDER = "bogus";
+      installSettings();
+      expect(callsDisabled(["milky-green"])).toBe(false);
     } finally {
       delete process.env.TTS_PROVIDER;
       resetSettings();

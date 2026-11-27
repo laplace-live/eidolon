@@ -5,7 +5,7 @@ import { FishSpeechSelfHosted } from "../../src/speech/stream/fish-speech.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
 import { OpenAISpeech } from "../../src/speech/stream/openai.ts";
-import { encodeWav } from "../../src/speech/wav.ts";
+import { encodeWav, pcmBody, stripWavHeader } from "../../src/speech/wav.ts";
 import { useFakeClock } from "../clock.ts";
 import {
   bytesOf,
@@ -414,4 +414,78 @@ test("openai-compatible TTS allows omitted voice and optional API key", async ()
     model: "tts-1",
     response_format: "pcm",
   });
+});
+
+test("pcmBody strips WAV headers across chunk boundaries and preserves raw PCM", async () => {
+  const wav = encodeWav(new Int16Array([11, -22, 33, -44]), 44100);
+  // Insert a 5-byte JUNK subchunk (odd size, padded to 6 data bytes) before `data`.
+  const extra = new Uint8Array([
+    0x4a, 0x55, 0x4e, 0x4b, 0x03, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x00,
+  ]);
+  const withExtra = new Uint8Array(wav.length + extra.length);
+  withExtra.set(wav.subarray(0, 36), 0);
+  withExtra.set(extra, 36);
+  withExtra.set(wav.subarray(36), 36 + extra.length);
+  expect(stripWavHeader(withExtra)).toEqual(wav.subarray(44));
+
+  fake = await fakeServer({
+    // Split directly inside RIFF, WAVE, extra JUNK, data header, and PCM body.
+    http: () =>
+      streamed([
+        withExtra.subarray(0, 2),
+        withExtra.subarray(2, 10),
+        withExtra.subarray(10, 39),
+        withExtra.subarray(39, 54),
+        withExtra.subarray(54),
+      ]),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "fish-speech",
+    FISH_SPEECH_BASE_URL: `${fake.base}`,
+  });
+  const stream = keep(openSpeech());
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "喂。" });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [11, -22, 33, -44] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+
+  // Raw PCM that begins with "RI" (0x52, 0x49) passes through intact once it diverges from "RIFF".
+  const collectBody = async (chunks: Uint8Array[]) => {
+    const out: number[] = [];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    for await (const chunk of pcmBody(body)) out.push(...chunk);
+    return out;
+  };
+  expect(await collectBody([new Uint8Array([0x52, 0x49]), new Uint8Array([0x00, 0x01])])).toEqual([
+    0x52, 0x49, 0x00, 0x01,
+  ]);
+  expect(await collectBody([wav.subarray(0, 22), wav.subarray(22, 44)])).toEqual([]);
+
+  // Malformed RIFF/WAVE streams exceeding 64 KiB without a `data` chunk stop probing and flush.
+  const oversize = new Uint8Array(64 * 1024 + 16);
+  oversize.set(wav.subarray(0, 12), 0);
+  oversize.set([0x4a, 0x55, 0x4e, 0x4b, 0xff, 0xff, 0x01, 0x00], 12);
+  const yielded: Uint8Array[] = [];
+  const oversizeBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(oversize);
+      controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+      controller.close();
+    },
+  });
+  for await (const chunk of pcmBody(oversizeBody)) yielded.push(chunk);
+  expect(yielded.length).toBe(2);
+  expect(yielded[0]?.length).toBe(oversize.length);
+  expect(yielded[1]).toEqual(new Uint8Array([1, 2, 3, 4]));
 });

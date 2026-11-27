@@ -302,6 +302,30 @@ test("turned-off hearing or voice and default-voice custom servers keep readines
     text: "home.ready.voice.providerDefault",
     vars: { provider: "Fish Speech (self-hosted)" },
   });
+
+  // A broken voice provider reports models-voice error without a contradictory "Off" voice row.
+  const brokenVoice: Status = {
+    ...healthy,
+    call: {
+      realtime: false,
+      roles: [
+        healthy.call.roles[0]!,
+        healthy.call.roles[1]!,
+        {
+          role: "voice",
+          provider: null,
+          model: null,
+          problem: "OpenAI-compatible endpoint needs an API base: set OPENAI_COMPATIBLE_BASE_URL",
+        },
+      ],
+    },
+    persona: {
+      ...healthy.persona,
+      voice: { id: null, source: "default", ok: null, provider: null, account: null },
+    },
+  };
+  expect(item(brokenVoice, "models-voice")?.tone).toBe("error");
+  expect(item(brokenVoice, "voice")).toBeUndefined();
 });
 
 test("the verdict: an error blocks calls, a warning wants a look, information is fine", () => {

@@ -369,11 +369,14 @@ function ControlInput({
   switch (control.type) {
     case "provider": {
       const { role } = control;
+      const off = PROVIDER_OFF_LABELS[role.id];
+      const offLabel = off === undefined ? t`Off` : t(off);
       const name = (account: string) =>
-        accounts?.find((entry) => entry.id === account)?.name ?? providerName(account);
+        account === OFF_PROVIDER
+          ? offLabel
+          : (accounts?.find((entry) => entry.id === account)?.name ?? providerName(account));
       const followed = inherited === null && role.follows !== undefined ? provider : null;
       const fallback = inherited ?? followed ?? role.defaultProvider;
-      const off = PROVIDER_OFF_LABELS[role.id];
       const followedRole = role.follows === undefined ? "" : t(ROLE_LABELS[role.follows]);
       const defaultLabel =
         fallback === null
@@ -397,9 +400,7 @@ function ControlInput({
         )
         .map((entry) => ({ value: entry.id, label: entry.name }));
       const options = [
-        ...(role.optional && fallback !== null
-          ? [{ value: OFF_PROVIDER, label: off === undefined ? t`Off` : t(off) }]
-          : []),
+        ...(role.optional && fallback !== null ? [{ value: OFF_PROVIDER, label: offLabel }] : []),
         ...listed.map((account) => ({ value: account.id, label: account.name })),
         ...localDefaults,
       ];
@@ -418,7 +419,8 @@ function ControlInput({
     }
     case "model": {
       const { role } = control;
-      const type = providerOfAccount(provider, accounts);
+      const account = provider === OFF_PROVIDER ? null : provider;
+      const type = providerOfAccount(account, accounts);
       const offer = type === null ? undefined : providerById(type)?.offers[role.category];
       const fallback = inherited ?? fallbackModel;
       // A closed offer such as Fish's lists nowhere, and an id it doesn't know runs as another model.
@@ -442,7 +444,7 @@ function ControlInput({
       return (
         <ModelPicker
           id={id}
-          account={provider}
+          account={account}
           provider={type}
           category={role.category}
           draft={draft}

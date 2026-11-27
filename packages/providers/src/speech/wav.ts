@@ -32,23 +32,47 @@ export function encodeWav(
   return out;
 }
 
+const RIFF = [0x52, 0x49, 0x46, 0x46] as const;
+const EMPTY = new Uint8Array(0);
+const MAX_WAV_HEADER_BYTES = 64 * 1024;
+
+function appendBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  if (a.length === 0) return b;
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+
+/**
+ * Index past the `data` subchunk header once a RIFF/WAVE header is complete, -1 while the prefix
+ * could still complete one, or null when the stream is not RIFF/WAVE.
+ */
+function wavHeaderEnd(bytes: Uint8Array): number | null {
+  const prefix = Math.min(bytes.length, RIFF.length);
+  for (let i = 0; i < prefix; i++) {
+    if (bytes[i] !== RIFF[i]) return null;
+  }
+  if (bytes.length < 12) return -1;
+  if (readAscii(bytes, 8, 4) !== "WAVE") return null;
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const id = readAscii(bytes, offset, 4);
+    const size = new DataView(bytes.buffer, bytes.byteOffset + offset + 4, 4).getUint32(0, true);
+    const dataStart = offset + 8;
+    if (id === "data") return dataStart;
+    offset = dataStart + size + (size & 1);
+  }
+  return bytes.length > MAX_WAV_HEADER_BYTES ? null : -1;
+}
+
 /**
  * Strip a leading RIFF/WAVE header when an HTTP TTS server returns WAV-wrapped PCM instead of raw
  * samples. Passes raw PCM chunks through unchanged.
  */
 export function stripWavHeader(chunk: Uint8Array): Uint8Array {
-  if (chunk.length < 12 || readAscii(chunk, 0, 4) !== "RIFF" || readAscii(chunk, 8, 4) !== "WAVE") {
-    return chunk;
-  }
-  let offset = 12;
-  while (offset + 8 <= chunk.length) {
-    const id = readAscii(chunk, offset, 4);
-    const size = new DataView(chunk.buffer, chunk.byteOffset + offset + 4, 4).getUint32(0, true);
-    const dataStart = offset + 8;
-    if (id === "data") return chunk.subarray(dataStart);
-    offset = dataStart + size + (size & 1);
-  }
-  return chunk;
+  const end = wavHeaderEnd(chunk);
+  return end !== null && end > 0 ? chunk.subarray(end) : chunk;
 }
 
 /** Yield raw PCM chunks from a fetch body, stripping a leading RIFF/WAVE header if present. */
@@ -56,16 +80,28 @@ export async function* pcmBody(
   body: ReadableStream<Uint8Array> | null,
 ): AsyncGenerator<Uint8Array> {
   if (body === null) return;
-  let first = true;
+  let probed = false;
+  let pending: Uint8Array = EMPTY;
   for await (const chunk of body) {
-    if (first) {
-      first = false;
-      const pcm = stripWavHeader(chunk);
-      if (pcm.length > 0) yield pcm;
-    } else {
+    if (chunk.length === 0) continue;
+    if (probed) {
       yield chunk;
+      continue;
+    }
+    pending = appendBytes(pending, chunk);
+    const end = wavHeaderEnd(pending);
+    if (end === null) {
+      probed = true;
+      yield pending;
+      pending = EMPTY;
+    } else if (end > 0) {
+      probed = true;
+      const pcm = pending.subarray(end);
+      pending = EMPTY;
+      if (pcm.length > 0) yield pcm;
     }
   }
+  if (!probed && pending.length > 0) yield pending;
 }
 
 function writeAscii(target: Uint8Array, offset: number, text: string): void {

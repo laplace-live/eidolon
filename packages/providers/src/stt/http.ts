@@ -12,6 +12,7 @@ const TTFS_P99 = 1.5;
 const PRE_ROLL_SAMPLES = SAMPLE_RATE * 0.5;
 const MIN_SPEECH_SAMPLES = SAMPLE_RATE * 0.1;
 const MAX_UTTERANCE_SAMPLES = SAMPLE_RATE * 60;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 class HttpWhisperStt implements SttStream {
   readonly inputRate = SAMPLE_RATE;
@@ -25,8 +26,10 @@ class HttpWhisperStt implements SttStream {
   readonly #language: string | null;
   readonly #secret: string;
   readonly #meter: Meter;
+  readonly #timeoutMs: number;
   readonly #controller = new AbortController();
   readonly #signal: AbortSignal;
+  readonly #detach: () => void;
 
   #preRoll: Int16Array[] = [];
   #preRollSamples = 0;
@@ -36,7 +39,12 @@ class HttpWhisperStt implements SttStream {
   #closed = false;
   #chain: Promise<void> = Promise.resolve();
 
-  constructor(selection: Selection, language: string | null, signal: AbortSignal) {
+  constructor(
+    selection: Selection,
+    language: string | null,
+    signal: AbortSignal,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ) {
     if (!selection.baseUrl) {
       throw new ProviderConfigError(`${selection.account.name} needs an API base`);
     }
@@ -46,7 +54,16 @@ class HttpWhisperStt implements SttStream {
     this.#model = selection.model;
     this.#language = language;
     this.#meter = new Meter(selection);
+    this.#timeoutMs = timeoutMs;
     this.#signal = AbortSignal.any([signal, this.#controller.signal]);
+    const onAbort = () => void this.close();
+    if (signal.aborted) {
+      this.#detach = () => {};
+      void this.close();
+    } else {
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.#detach = () => signal.removeEventListener("abort", onAbort);
+    }
   }
 
   speechStarted(): void {
@@ -114,12 +131,14 @@ class HttpWhisperStt implements SttStream {
     form.append("file", new Blob([wav], { type: "audio/wav" }), "audio.wav");
     this.#meter.add({ audioSeconds: samples.length / SAMPLE_RATE });
     this.#meter.flush();
+    const timeout = AbortSignal.timeout(this.#timeoutMs);
+    const signal = AbortSignal.any([this.#signal, timeout]);
     try {
       const response = await fetch(this.#url, {
         method: "POST",
         headers: this.#headers,
         body: form,
-        signal: this.#signal,
+        signal,
       });
       if (!response.ok) {
         const body = scrubbed(await response.text(), this.#secret);
@@ -140,9 +159,12 @@ class HttpWhisperStt implements SttStream {
       }
     } catch (error) {
       if (this.#closed || this.#signal.aborted) return;
+      const message = timeout.aborted
+        ? `OpenAI-compatible STT timed out after ${this.#timeoutMs / 1000} s`
+        : `OpenAI-compatible STT error: ${scrubbed(errorText(error), this.#secret)}`;
       this.events.push({
         type: "error",
-        message: `OpenAI-compatible STT error: ${scrubbed(errorText(error), this.#secret)}`,
+        message,
         fatal: false,
       });
       this.events.push({ type: "finalized" });
@@ -152,6 +174,7 @@ class HttpWhisperStt implements SttStream {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#detach();
     this.#controller.abort();
     this.#meter.flush();
     this.events.close();
@@ -172,6 +195,7 @@ export async function openHttpWhisperStt(
   selection: Selection,
   language: string | null,
   signal: AbortSignal,
+  options?: { readonly timeoutMs?: number },
 ): Promise<SttStream> {
-  return new HttpWhisperStt(selection, language, signal);
+  return new HttpWhisperStt(selection, language, signal, options?.timeoutMs);
 }

@@ -231,8 +231,11 @@ export function readiness(status: Status, format: Formats): Item[] {
         fix: { kind: "link", to: studio("models"), label: "home.fix.models" },
       });
     }
-    const voiceKeyMissing = missing.some((key) => key.roles.includes("voice"));
-    items.push(voiceItem(status.persona, voiceKeyMissing));
+    const voiceRole = status.call.roles.find((role) => role.role === "voice");
+    if (status.persona.voice.provider !== null || (voiceRole?.problem ?? null) === null) {
+      const voiceKeyMissing = missing.some((key) => key.roles.includes("voice"));
+      items.push(voiceItem(status.persona, voiceKeyMissing));
+    }
   }
   items.push(memoryItem(status.memory));
   const table = (name: IndexTable["table"]) => status.index.tables.find((t) => t.table === name);

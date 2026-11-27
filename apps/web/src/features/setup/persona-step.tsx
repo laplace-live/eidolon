@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { accountsQuery } from "@/lib/accounts";
 import { type ApiError, asApiError, call } from "@/lib/api";
-import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { addAvatar } from "./avatar";
 import { AvatarPicker } from "./avatar-picker";
@@ -29,6 +28,7 @@ import {
   type PersonaDraft,
   personaErrors,
   shouldSkipVoiceStep,
+  targetUsesRealtime,
 } from "./wizard";
 
 /** Whose voice the next step picks: a persona that exists, or one it will create. */
@@ -102,7 +102,6 @@ export function PersonaStep({
   const queryClient = useQueryClient();
   const personas = useQuery(personasQuery);
   const settings = useQuery(settingsQuery());
-  const status = useQuery(statusQuery);
   const accounts = useQuery(accountsQuery);
   const [choice, setChoice] = useState<Choice | null>(() => {
     if (initial?.kind === "create") return "create";
@@ -158,15 +157,18 @@ export function PersonaStep({
         await queryClient.invalidateQueries({ queryKey: ["settings"] });
       }
       const existingPersona = chosen === "demo" ? demo : current;
-      if (onSkipVoice && status.data && accounts.data) {
-        let skip = status.data.call.realtime;
-        if (!skip) {
-          const targetSettings =
-            chosen !== "create" && existingPersona !== undefined && existingPersona.id !== activeId
-              ? (await queryClient.query(settingsQuery(existingPersona.id))).settings
-              : activeSettings;
-          skip = shouldSkipVoiceStep(false, targetSettings, accounts.data.accounts);
-        }
+      if (onSkipVoice) {
+        const creating = chosen === "create";
+        const targetSettings =
+          !creating && existingPersona !== undefined && existingPersona.id !== activeId
+            ? (await queryClient.query(settingsQuery(existingPersona.id))).settings
+            : activeSettings;
+        const accountList = (accounts.data ?? (await queryClient.query(accountsQuery))).accounts;
+        const skip = shouldSkipVoiceStep(
+          targetUsesRealtime(targetSettings, creating),
+          targetSettings,
+          accountList,
+        );
         if (skip) {
           let committed: PersonaRef;
           if (chosen === "create") {
