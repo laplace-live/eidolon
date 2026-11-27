@@ -91,6 +91,7 @@ export class TurnDetector {
     // The Ear has just called finalize(): a recognizer that answers every one and is silent past
     // the cap has nothing to add.
     if (this.#options.acknowledgesFinalize) {
+      if (this.#finalizeCapMs() !== undefined) this.#acknowledged = false;
       this.#unanswered++;
       this.#armAckCap();
     }
@@ -146,6 +147,7 @@ export class TurnDetector {
   }
 
   final(text: string, finalized: boolean): void {
+    const earlierStop = finalized && this.#unanswered > 0 && !this.#vadStopped;
     if (text.trim()) this.#finals.push(text);
     if (finalized) this.#unanswered = Math.max(0, this.#unanswered - 1);
     if (this.#unanswered > 0 && this.#finalizeCapMs() !== undefined) this.#armAckCap();
@@ -154,8 +156,8 @@ export class TurnDetector {
     this.#options.post({ type: "final", text });
     this.#text = text;
     this.#wordsPending = false;
-    // An earlier stop's answer, with the last stop's still owed, is a final like any other.
-    if (finalized && this.#unanswered === 0) {
+    // An earlier stop's answer, with the last stop's still owed or speech resumed, is a final like any other.
+    if (finalized && this.#unanswered === 0 && !earlierStop) {
       this.#acknowledge();
       if (!this.#inTurn) return;
     } else if (
@@ -228,7 +230,7 @@ export class TurnDetector {
   #maybeStop(): void {
     if (!this.#turnComplete) return;
     // Acknowledged, the turn ends with or without words: one with none (a cough) as an empty turn.
-    if (this.#acknowledged) {
+    if (this.#acknowledged && (this.#unanswered === 0 || this.#finalizeCapMs() === undefined)) {
       this.#cancelTimeout?.();
       this.#cancelTimeout = null;
       this.#stop();

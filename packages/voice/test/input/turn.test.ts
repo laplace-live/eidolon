@@ -669,4 +669,29 @@ describe("slow HTTP batch recognition", () => {
     clock.advance(1);
     expect(events).toEqual(["user-started", "user-stopped null"]);
   });
+
+  test("an earlier HTTP final arriving after speech resumes never short-circuits the second segment", () => {
+    const { turn, clock, events } = detector({
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+    });
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    turn.speechStarted();
+    // First segment's HTTP response lands while the caller is speaking again.
+    turn.final("前半句", true);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(2_100);
+    expect(events).toEqual(["user-started", "final 前半句"]);
+    turn.final("后半句", true);
+    expect(events).toEqual([
+      "user-started",
+      "final 前半句",
+      "final 后半句",
+      "user-stopped 前半句|后半句",
+    ]);
+  });
 });

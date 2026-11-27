@@ -101,7 +101,8 @@ export function NewPersonaDialog({
     onOpenChange(next);
   }
 
-  const loadingVoice = active.isPending || accounts.isPending || unavailable !== null;
+  const loadingVoice =
+    active.isPending || (!voiceOff && accounts.isPending) || unavailable !== null;
 
   function submit() {
     setShowErrors(true);
