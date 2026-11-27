@@ -113,6 +113,7 @@ export {
   type SearchRequest,
   type SearchResult,
 } from "./search.ts";
+export { fishSpeechRoot } from "./speech/wav.ts";
 export {
   billingProvider,
   type CostSource,

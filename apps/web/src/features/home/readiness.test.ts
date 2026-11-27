@@ -119,15 +119,26 @@ function without(...accounts: string[]): Status {
   };
 }
 
-test("a missing key names its provider and links to setup", () => {
-  const status = without("fish", "soniox");
-  expect(item(status, "keys")).toEqual({
+test("missing call-only keys stay informational while required keys block readiness", () => {
+  const callOnly = without("fish", "soniox");
+  expect(item(callOnly, "keys")).toEqual({
     id: "keys",
-    tone: "error",
-    text: "home.ready.keys.missing",
+    tone: "info",
+    text: "home.ready.keys.callOnly",
     vars: { names: "Soniox, Fish Audio" },
     fix: { kind: "link", to: "/setup", label: "home.fix.setup" },
   });
+  expect(verdict(readiness(callOnly, plain))).toBe("ready");
+
+  const missingMind = without("openrouter");
+  expect(item(missingMind, "keys")).toEqual({
+    id: "keys",
+    tone: "error",
+    text: "home.ready.keys.missing",
+    vars: { names: "OpenRouter" },
+    fix: { kind: "link", to: "/setup", label: "home.fix.setup" },
+  });
+  expect(verdict(readiness(missingMind, plain))).toBe("blocked");
 });
 
 describe("the voice", () => {
@@ -234,12 +245,95 @@ test("another provider's voice is its own to know; a realtime call has no voice 
   expect(item(realtime, "voice")).toBeUndefined();
 });
 
+test("turned-off hearing or voice and default-voice custom servers keep readiness ready", () => {
+  const off: Status = {
+    ...healthy,
+    call: {
+      realtime: false,
+      roles: [
+        { role: "hearing", provider: null, model: null, problem: null },
+        { role: "mind", provider: "openrouter", model: "m", problem: null },
+        { role: "voice", provider: null, model: null, problem: null },
+      ],
+    },
+    persona: {
+      ...healthy.persona,
+      voice: { id: null, source: "default", ok: null, provider: null, account: null },
+    },
+  };
+  expect(item(off, "models-hearing")).toMatchObject({
+    tone: "info",
+    text: "home.ready.hearing.off",
+  });
+  expect(item(off, "voice")).toMatchObject({
+    tone: "info",
+    text: "home.ready.voice.off",
+  });
+  expect(verdict(readiness(off, plain))).toBe("ready");
+
+  const noFishKeyOrVoice: Status = {
+    ...without("fish"),
+    persona: {
+      ...healthy.persona,
+      voice: { ...healthy.persona.voice, id: null, source: "default", ok: null },
+    },
+  };
+  expect(item(noFishKeyOrVoice, "voice")).toMatchObject({
+    tone: "info",
+    text: "home.ready.voice.noneTextOnly",
+  });
+  expect(verdict(readiness(noFishKeyOrVoice, plain))).toBe("ready");
+
+  const selfHosted: Status = {
+    ...healthy,
+    persona: {
+      ...healthy.persona,
+      voice: {
+        id: null,
+        source: "default",
+        ok: null,
+        provider: "fish-speech",
+        account: "fish-speech",
+      },
+    },
+  };
+  expect(item(selfHosted, "voice")).toMatchObject({
+    tone: "ok",
+    text: "home.ready.voice.providerDefault",
+    vars: { provider: "Fish Speech (self-hosted)" },
+  });
+
+  // A broken voice provider reports models-voice error without a contradictory "Off" voice row.
+  const brokenVoice: Status = {
+    ...healthy,
+    call: {
+      realtime: false,
+      roles: [
+        healthy.call.roles[0]!,
+        healthy.call.roles[1]!,
+        {
+          role: "voice",
+          provider: null,
+          model: null,
+          problem: "OpenAI-compatible endpoint needs an API base: set OPENAI_COMPATIBLE_BASE_URL",
+        },
+      ],
+    },
+    persona: {
+      ...healthy.persona,
+      voice: { id: null, source: "default", ok: null, provider: null, account: null },
+    },
+  };
+  expect(item(brokenVoice, "models-voice")?.tone).toBe("error");
+  expect(item(brokenVoice, "voice")).toBeUndefined();
+});
+
 test("the verdict: an error blocks calls, a warning wants a look, information is fine", () => {
   expect(verdict([{ tone: "ok" }, { tone: "info" }])).toBe("ready");
   expect(verdict([{ tone: "info" }, { tone: "warn" }])).toBe("attention");
   expect(verdict([{ tone: "warn" }, { tone: "error" }, { tone: "ok" }])).toBe("blocked");
-  const noKeys = without("fish");
-  expect(verdict(readiness(noKeys, plain))).toBe("blocked");
+  expect(verdict(readiness(without("fish"), plain))).toBe("ready");
+  expect(verdict(readiness(without("openrouter"), plain))).toBe("blocked");
   expect(verdict(readiness({ ...healthy, freeBytes: 2e9 }, plain))).toBe("attention");
 });
 

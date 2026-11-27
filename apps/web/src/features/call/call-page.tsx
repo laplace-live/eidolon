@@ -261,6 +261,18 @@ export function CallPage() {
   const short = persona.shortName.trim() || persona.name;
   // What a call needs is asked before one starts: a status change during one never hides it.
   switch (up ? null : callBlocker(status)) {
+    case "off":
+      return (
+        <Blocker
+          persona={persona}
+          media={<Face persona={persona} size="xl" />}
+          title={t`Voice calls are turned off for ${ph({ name: short })}`}
+          body={t`Speech or speech recognition is turned off in her settings, so she chats in text.`}
+          to={studioPath(persona.id, persona.voice.provider === null ? "voice" : "models")}
+          icon={<AudioLinesIcon data-icon="inline-start" />}
+          action={t`Open Her Studio`}
+        />
+      );
     case "keys": {
       const names = listOf(status.keys.filter((key) => !key.set).map((key) => key.name));
       return (

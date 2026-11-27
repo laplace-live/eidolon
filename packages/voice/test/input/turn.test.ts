@@ -2,7 +2,11 @@
 // the 5 s watchdog), and the end on the recognizer's acknowledgement, on scripted timelines and a
 // fake clock.
 import { describe, expect, test } from "vitest";
-import { FINALIZE_ACK_CAP_MS, TurnDetector } from "../../src/input/turn.ts";
+import {
+  FINALIZE_ACK_CAP_MS,
+  TurnDetector,
+  type TurnDetectorOptions,
+} from "../../src/input/turn.ts";
 import type { EarEvent } from "../../src/types.ts";
 import { FakeClock } from "./clock.ts";
 
@@ -25,7 +29,12 @@ function describeEvent(event: EarEvent): string {
 }
 
 /** A detector for `recognizer`, its clock, what it posted and how often it cleared Smart Turn. */
-function detector(recognizer = SONIOX) {
+function detector(
+  recognizer: Pick<
+    TurnDetectorOptions,
+    "ttfsP99" | "acknowledgesFinalize" | "finalizeTimeoutMs"
+  > = SONIOX,
+) {
   const clock = new FakeClock(1_000);
   const events: string[] = [];
   const counts = { cleared: 0 };
@@ -595,4 +604,94 @@ test("close cancels every timer", () => {
   expect(clock.pending).toBe(3);
   turn.close();
   expect(clock.pending).toBe(0);
+});
+
+describe("slow HTTP batch recognition", () => {
+  test("holds a rolled-over turn across ttfsP99 until the final segment returns", () => {
+    const { turn, clock, events } = detector({
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+    });
+    turn.speechStarted();
+    turn.final("前半句", false);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(2_100);
+    expect(events).toEqual(["user-started", "final 前半句"]);
+    turn.final("后半句", true);
+    expect(events).toEqual([
+      "user-started",
+      "final 前半句",
+      "final 后半句",
+      "user-stopped 前半句|后半句",
+    ]);
+  });
+
+  test("extends deadline across multiple queued stops and resets watchdog when answered", () => {
+    const { turn, clock, events } = detector({
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+    });
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    clock.advance(1_000);
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("complete");
+    // Two queued stops give 62 s budget; at 35 s the second answer hasn't timed out yet.
+    clock.advance(35_000);
+    expect(events).toEqual(["user-started"]);
+    turn.final("第一段", true);
+    turn.final("第二段", true);
+    expect(events).toEqual([
+      "user-started",
+      "final 第一段",
+      "final 第二段",
+      "user-stopped 第一段|第二段",
+    ]);
+  });
+
+  test("resets watchdog back to 5s once all pending HTTP finalizations answer while turn continues", () => {
+    const { turn, clock, events } = detector({
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+    });
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    turn.finalized();
+    clock.advance(STOP_TIMEOUT_MS - 1);
+    expect(events).toEqual(["user-started"]);
+    clock.advance(1);
+    expect(events).toEqual(["user-started", "user-stopped null"]);
+  });
+
+  test("an earlier HTTP final arriving after speech resumes never short-circuits the second segment", () => {
+    const { turn, clock, events } = detector({
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+    });
+    turn.speechStarted();
+    turn.speechStopped();
+    turn.analyzed("incomplete");
+    turn.speechStarted();
+    // First segment's HTTP response lands while the caller is speaking again.
+    turn.final("前半句", true);
+    turn.speechStopped();
+    turn.analyzed("complete");
+    clock.advance(2_100);
+    expect(events).toEqual(["user-started", "final 前半句"]);
+    turn.final("后半句", true);
+    expect(events).toEqual([
+      "user-started",
+      "final 前半句",
+      "final 后半句",
+      "user-stopped 前半句|后半句",
+    ]);
+  });
 });

@@ -8,6 +8,7 @@ import {
   defaultModel,
   defaultVoice,
   LEGACY_VOICE_ENV,
+  OFF_PROVIDER,
   type Offer,
   type Provider,
   type ProviderId,
@@ -58,6 +59,9 @@ const CATEGORY_NAMES: Readonly<Record<Category, string>> = {
 export function selectedAccount(role: Role, read?: Read | Sources): Account | null {
   const sources = sourcesOf(read);
   const named = clean(sources.read(role.providerEnv))?.toLowerCase();
+  if (named === OFF_PROVIDER && (role.optional || role.defaultProvider === null)) {
+    return null;
+  }
   if (named === undefined && role.follows !== undefined) {
     return selectedAccount(roleById(role.follows), sources);
   }
@@ -144,7 +148,13 @@ export function select(roleId: RoleId, read?: Read | Sources): Selection | null 
 export function selectRequired(roleId: RoleId, read?: Read | Sources): Selection {
   const selection = select(roleId, read);
   if (selection === null) {
-    throw new ProviderConfigError(`No provider fills ${roleById(roleId).providerEnv}`);
+    const role = roleById(roleId);
+    const turnedOff = clean(sourcesOf(read).read(role.providerEnv))?.toLowerCase() === OFF_PROVIDER;
+    throw new ProviderConfigError(
+      turnedOff
+        ? `${role.label} is turned off (${role.providerEnv}=${OFF_PROVIDER})`
+        : `No provider fills ${role.providerEnv}`,
+    );
   }
   return selection;
 }

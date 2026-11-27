@@ -7,6 +7,7 @@
 // OpenAI's speech endpoint, whose `pcm` format is 24 kHz.
 import { withoutTrailingSlashes } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
+import { pcmBody } from "../wav.ts";
 import { HttpUtterance, SpeechError } from "./http.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
 import { type KeyedSelection, SpokenText } from "./shared.ts";
@@ -29,10 +30,11 @@ export class OpenAISpeech implements SpeechStream {
   }
 
   utterance(voice: string | null): Utterance {
+    const key = (this.#selection.apiKey as string | undefined) ?? "";
     return new HttpUtterance(
       this.#text,
       (text, signal) => this.#audio(text, voice ?? this.#voice, signal),
-      { closed: this.#controller.signal, secret: this.#selection.apiKey },
+      { closed: this.#controller.signal, secret: key },
     );
   }
 
@@ -47,23 +49,27 @@ export class OpenAISpeech implements SpeechStream {
     signal: AbortSignal,
   ): AsyncGenerator<Uint8Array> {
     const { voices } = this.#selection.offer;
-    if (voice === null) throw new SpeechError("OpenAI TTS voice must be specified");
-    if (voices?.kind === "preset" && !voices.voices.includes(voice)) {
-      throw new SpeechError(
-        `OpenAI TTS voice '${voice}' is not supported ` +
-          `(must be one of: ${[...voices.voices].sort().join(", ")})`,
-      );
+    if (voices?.kind === "preset") {
+      if (voice === null) throw new SpeechError("OpenAI TTS voice must be specified");
+      if (!voices.voices.includes(voice)) {
+        throw new SpeechError(
+          `OpenAI TTS voice '${voice}' is not supported ` +
+            `(must be one of: ${[...voices.voices].sort().join(", ")})`,
+        );
+      }
     }
+    const key = this.#selection.apiKey as string | undefined;
+    const speaker = voice || undefined;
     const response = await fetch(this.#url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.#selection.apiKey}`,
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         input: text,
         model: this.#selection.model,
-        voice,
+        ...(speaker === undefined ? {} : { voice: speaker }),
         response_format: "pcm",
       }),
       signal,
@@ -72,7 +78,6 @@ export class OpenAISpeech implements SpeechStream {
       const error = await response.text();
       throw new SpeechError(`Error getting audio (status: ${response.status}, error: ${error})`);
     }
-    if (response.body === null) return;
-    yield* response.body;
+    yield* pcmBody(response.body, SAMPLE_RATE);
   }
 }

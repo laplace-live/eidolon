@@ -575,6 +575,7 @@ export const CHECK_PROVIDERS = [
   "soniox",
   "openrouter",
   "fish",
+  "fish-speech",
   "embeddings",
   "rerank",
   "refine",
@@ -700,7 +701,7 @@ export type IdentityUpdate = Partial<PersonaIdentityFields>;
 /** POST personas. The id is a slug, `^[a-z0-9][a-z0-9_-]{0,63}$`. */
 export interface CreatePersonaRequest extends PersonaIdentityFields {
   readonly id: string;
-  readonly voiceId: string;
+  readonly voiceId?: string | null;
 }
 
 export interface ActivePersonaRequest {
@@ -1402,6 +1403,10 @@ export interface ChatContents {
    * one for, as Settings names them; else empty.
    */
   readonly missingCallKeys: readonly string[];
+  /** True when every participant has hearing or speech turned off without a realtime model. */
+  readonly callsOff?: boolean;
+  /** Participants whose voice calls are turned off without a realtime model. */
+  readonly disabledCallPersonas?: readonly ParticipantId[];
   /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
   readonly call: ChatCallInfo | null;
   /**

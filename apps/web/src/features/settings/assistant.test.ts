@@ -101,11 +101,15 @@ describe("Models by Kind", () => {
     expect(said).not.toContain("Quick tasks run on");
   });
 
-  test("only realtime keeps an off-by-default label; kinds and search default via OpenRouter", () => {
+  test("optional roles keep off labels; kinds and search default via OpenRouter", () => {
     const off = Object.fromEntries(
       Object.entries(PROVIDER_OFF_LABELS).map(([role, label]) => [role, label?.message]),
     );
-    expect(off).toEqual({ realtime: "Off: Three Models" });
+    expect(off).toEqual({
+      hearing: "Off: No Speech Recognition",
+      voice: "Off: Text Only",
+      realtime: "Off: Three Models",
+    });
   });
 });
 

@@ -26,7 +26,7 @@ const AUDIO_IDLE_MS = 1_000;
 
 /** A recognizer that records what it was sent; the test scripts its events. */
 class FakeStt implements SttStream {
-  readonly ttfsP99 = 0.35;
+  readonly ttfsP99: number = 0.35;
   readonly sent: Int16Array[] = [];
   readonly events = new AsyncQueue<SttEvent>();
   onFinalize: () => void = () => {};
@@ -371,6 +371,112 @@ describe("the recognizer's events", () => {
     await settle();
     expect(e.posted).toEqual(["stt-error Soniox dropped false", "stt-error Soniox gave up true"]);
     await e.end();
+  });
+
+  test("a recognizer with finalizeTimeoutMs holds the turn across slow responses past the Soniox cap and 5s watchdog", async () => {
+    const clock = new FakeClock(10_000);
+    const log: string[] = [];
+    const stt = new (class extends FakeStt {
+      override readonly ttfsP99 = 1.5;
+      readonly finalizeTimeoutMs = 31_000;
+    })(log, 16000, true);
+    const vad = new ScriptedVad();
+    const turn = new ScriptedTurn(log);
+    const audio = new AsyncQueue<Pcm>();
+    const posted: string[] = [];
+    const abort = new AbortController();
+    const done = runEar(
+      audio,
+      { stt, vad, turn, clock, join: (parts) => parts.join("|") },
+      (event) => posted.push(describeEvent(event)),
+      abort.signal,
+    );
+    vad.edges.set(1, "started");
+    vad.edges.set(4, "stopped");
+    for (let i = 0; i < 5; i++) {
+      audio.push(new Int16Array(320));
+      await settle();
+      clock.advance(FRAME_MS);
+    }
+    clock.advance(6_000);
+    await settle();
+    expect(posted.filter((e) => e !== "user-speaking")).toEqual(["user-started"]);
+
+    stt.events.push({ type: "final", text: "延迟识别", finalized: true });
+    await settle();
+    expect(posted.filter((e) => e !== "user-speaking")).toEqual([
+      "user-started",
+      "final 延迟识别",
+      "user-stopped 延迟识别",
+    ]);
+    audio.close();
+    await stt.close();
+    await done;
+  });
+
+  test("segmented recognizers receive speechStarted before queued PCM frames when turn.analyze blocks", async () => {
+    const clock = new FakeClock(10_000);
+    const eventsLog: string[] = [];
+    const stt: SttStream = {
+      inputRate: 16000,
+      ttfsP99: 1.5,
+      acknowledgesFinalize: true,
+      finalizeTimeoutMs: 31_000,
+      events: new AsyncQueue<SttEvent>(),
+      speechStarted() {
+        eventsLog.push("started");
+      },
+      send(pcm) {
+        eventsLog.push(`send:${pcm[0]}`);
+      },
+      finalize() {
+        eventsLog.push("finalize");
+      },
+      async close() {
+        (this.events as AsyncQueue<SttEvent>).close();
+      },
+    };
+    const vad = new ScriptedVad();
+    const turn = new ScriptedTurn([]);
+    const audio = new AsyncQueue<Pcm>();
+    const abort = new AbortController();
+    const done = runEar(
+      audio,
+      { stt, vad, turn, clock, join: (p) => p.join("|") },
+      () => {},
+      abort.signal,
+    );
+
+    let releaseAnalyze!: () => void;
+    turn.hold = new Promise<void>((resolve) => {
+      releaseAnalyze = resolve;
+    });
+    vad.edges.set(0, "started");
+    vad.edges.set(1, "stopped");
+    vad.edges.set(2, "started");
+    vad.edges.set(3, "stopped");
+
+    for (let i = 0; i < 4; i++) {
+      audio.push(new Int16Array([i]));
+      await settle();
+    }
+    expect(eventsLog).toEqual(["started", "send:0", "send:1", "finalize"]);
+    releaseAnalyze();
+    await settle();
+    await settle();
+    expect(eventsLog).toEqual([
+      "started",
+      "send:0",
+      "send:1",
+      "finalize",
+      "started",
+      "send:2",
+      "send:3",
+      "finalize",
+    ]);
+    audio.close();
+    await stt.close();
+    await done;
   });
 });
 

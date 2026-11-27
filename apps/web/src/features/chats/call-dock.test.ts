@@ -113,12 +113,17 @@ test("a call that ended never offers Expand, but Call Again and Close", () => {
   expect(markup).not.toContain("Hang Up");
 });
 
-function button(personas: readonly (typeof MILKY)[], unavailable: string | null): string {
+function button(
+  personas: readonly (typeof MILKY)[],
+  unavailable: string | null,
+  disabledPersonas: readonly string[] = [],
+): string {
   return wrapped(
     createElement(CallButton, {
       personas,
       groupCall: true,
       disabled: false,
+      disabledPersonas,
       unavailable,
       onCall: () => {},
     }),
@@ -135,4 +140,45 @@ test("the header's Call waits, with no menu, while the tab's call is elsewhere",
   }
   expect(button([MILKY, KURO], null)).toContain("aria-haspopup");
   expect(button([MILKY], null)).not.toContain("aria-disabled");
+});
+
+test("disabledPersonas disables uncallable participants and picks a callable host for Everyone", async () => {
+  const picks: [string, boolean][] = [];
+  const items: { disabled: boolean; onSelect?: () => void }[] = [];
+  vi.resetModules();
+  vi.doMock("@/components/ui/dropdown-menu", () => ({
+    DropdownMenu: ({ children }: { readonly children?: ReactNode }) => children,
+    DropdownMenuTrigger: ({ children }: { readonly children?: ReactNode }) => children,
+    DropdownMenuContent: ({ children }: { readonly children?: ReactNode }) => children,
+    DropdownMenuLabel: ({ children }: { readonly children?: ReactNode }) => children,
+    DropdownMenuSeparator: () => null,
+    DropdownMenuItem: ({
+      children,
+      disabled,
+      onSelect,
+    }: {
+      readonly children?: ReactNode;
+      readonly disabled?: boolean;
+      readonly onSelect?: () => void;
+    }) => {
+      items.push({ disabled: Boolean(disabled), onSelect });
+      return createElement("div", { "data-disabled": String(Boolean(disabled)) }, children);
+    },
+  }));
+  const { CallButton: MockedCallButton } = await import("./call-dock");
+  const markup = wrapped(
+    createElement(MockedCallButton, {
+      personas: [MILKY, KURO],
+      groupCall: true,
+      disabled: false,
+      disabledPersonas: [MILKY.id],
+      unavailable: null,
+      onCall: (persona, group) => picks.push([persona, group]),
+    }),
+  );
+  expect(markup).toContain('data-disabled="true"');
+  // Items order: Everyone, MILKY (disabled), KURO (enabled).
+  expect(items.map((item) => item.disabled)).toEqual([false, true, false]);
+  items[0]?.onSelect?.();
+  expect(picks).toEqual([[KURO.id, true]]);
 });

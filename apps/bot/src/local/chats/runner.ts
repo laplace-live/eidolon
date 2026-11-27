@@ -88,7 +88,7 @@ import {
   taskProgressNudge,
   taskWaitingNudge,
 } from "../tasks/tool.ts";
-import { missingCallKeys } from "./call-keys.ts";
+import { callsDisabled, disabledCallPersonas, missingCallKeys } from "./call-keys.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
@@ -438,6 +438,8 @@ export class ChatRunner {
       lateTools,
       hearingRefusal: refusal,
       missingCallKeys: missingCallKeys(participants),
+      callsOff: callsDisabled(participants),
+      disabledCallPersonas: disabledCallPersonas(participants),
       call,
       groupCall,
       defaultDisplay,
@@ -468,8 +470,8 @@ export class ChatRunner {
   }
 
   /** Why the personas of chat `id` can't be called together now; null when they can. */
-  async groupCallRefusal(id: string): Promise<GroupCallRefusal | null> {
-    return groupCallRefusal(await this.participants(id));
+  async groupCallRefusal(id: string, host?: ParticipantId): Promise<GroupCallRefusal | null> {
+    return groupCallRefusal(await this.participants(id), host);
   }
 
   /**

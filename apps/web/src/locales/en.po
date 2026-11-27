@@ -268,6 +268,10 @@ msgid "{name} API Key"
 msgstr "{name} API Key"
 
 #: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key (If the Server Asks for One)"
+msgstr "{name} API Key (If the Server Asks for One)"
+
+#: src/components/settings-form/account-key-field.tsx
 msgid "{name} API Key (Optional)"
 msgstr "{name} API Key (Optional)"
 
@@ -422,6 +426,10 @@ msgstr "{provider} refused this account's key: check it in Settings → Provider
 #: src/features/home/readiness-labels.ts
 msgid "{provider} speaks with voice {id}."
 msgstr "{provider} speaks with voice {id}."
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} uses its default voice."
+msgstr "{provider} uses its default voice."
 
 #: src/features/jobs/describe.ts
 msgid "{provider}: {reason}"
@@ -1047,10 +1055,12 @@ msgstr "Any Language"
 msgid "Any Site"
 msgstr "Any Site"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "API Base"
 msgstr "API Base"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "API Base (Required)"
 msgstr "API Base (Required)"
@@ -1901,6 +1911,10 @@ msgstr "Default mem0/vectors in the data home."
 #: src/components/settings-form/labels.ts
 msgid "Default Opus Bitrate"
 msgstr "Default Opus Bitrate"
+
+#: src/features/setup/keys-step.tsx
+msgid "Default: {model}. Leave blank to use it, or enter your server's model ID."
+msgstr "Default: {model}. Leave blank to use it, or enter your server's model ID."
 
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
@@ -2852,10 +2866,13 @@ msgstr "Host name updated."
 msgid "How {name} sounds."
 msgstr "How {name} sounds."
 
-#: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx
 msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
 msgstr "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
+
+#: src/features/home/voice-dialog.tsx
+msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, play a sample, or enter a voice ID."
+msgstr "How {name} sounds. Choose from your own Fish Audio voices or the public library, play a sample, or enter a voice ID."
 
 #: src/features/studio/knowledge-section.tsx
 msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
@@ -2912,6 +2929,10 @@ msgstr "How she sounds"
 #: src/features/studio/models-section.tsx
 msgid "How She Talks"
 msgstr "How She Talks"
+
+#: src/lib/labels.ts
+msgid "HTTP (/audio/transcriptions)"
+msgstr "HTTP (/audio/transcriptions)"
 
 #: src/features/setup/persona-fields.tsx
 msgid "ID"
@@ -3733,6 +3754,10 @@ msgid "Mind"
 msgstr "Mind"
 
 #: src/features/home/readiness-labels.ts
+msgid "Missing for calls: {names}. Text chats work without them."
+msgstr "Missing for calls: {names}. Text chats work without them."
+
+#: src/features/home/readiness-labels.ts
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "Missing: {names}. Calls can't start without them."
 
@@ -4081,6 +4106,10 @@ msgstr "No upload date"
 msgid "No videos yet"
 msgstr "No videos yet"
 
+#: src/features/home/readiness-labels.ts
+msgid "No voice picked yet: text chats work without one."
+msgstr "No voice picked yet: text chats work without one."
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "No voice styles yet"
 msgstr "No voice styles yet"
@@ -4212,6 +4241,7 @@ msgstr "Nothing yet."
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
+#: src/features/setup/keys-step.tsx
 #: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "Off"
@@ -4220,13 +4250,29 @@ msgstr "Off"
 msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 msgstr "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 
+#: src/components/settings-form/labels.ts
+msgid "Off: No Speech Recognition"
+msgstr "Off: No Speech Recognition"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: she replies in text only."
+msgstr "Off: she replies in text only."
+
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "Off: she won't remember you between calls."
 
 #: src/components/settings-form/labels.ts
+msgid "Off: Text Only"
+msgstr "Off: Text Only"
+
+#: src/components/settings-form/labels.ts
 msgid "Off: Three Models"
 msgstr "Off: Three Models"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: voice calls and voice messages are disabled."
+msgstr "Off: voice calls and voice messages are disabled."
 
 #: src/features/subspace/servers-card.tsx
 msgid "Offline"
@@ -4268,6 +4314,10 @@ msgstr "One link per line."
 #: src/components/settings-form/labels.ts
 msgid "One model hears, thinks and speaks, in place of the three. Experimental."
 msgstr "One model hears, thinks and speaks, in place of the three. Experimental."
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "One of {name}'s voices, by its ID or reference name."
+msgstr "One of {name}'s voices, by its ID or reference name."
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
@@ -4323,6 +4373,10 @@ msgstr "Open Eidolon from Your Terminal"
 msgid "Open Her Models"
 msgstr "Open Her Models"
 
+#: src/features/call/call-page.tsx
+msgid "Open Her Studio"
+msgstr "Open Her Studio"
+
 #: src/features/home/route.tsx
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "Open one's studio to build her up, or make another the one your calls reach."
@@ -4375,6 +4429,7 @@ msgstr "OpenRouter App Name"
 msgid "OpenRouter App URL"
 msgstr "OpenRouter App URL"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/setup/stepper.tsx
 #: src/features/subspace/add-server-dialog.tsx
 msgid "Optional"
@@ -4609,10 +4664,6 @@ msgstr "Pick a Voice"
 msgid "Pick a voice for {name}"
 msgstr "Pick a voice for {name}"
 
-#: src/features/setup/new-persona.tsx
-msgid "Pick a voice for her."
-msgstr "Pick a voice for her."
-
 #: src/features/studio/voice-styles-card.tsx
 msgid "Pick a voice for this style."
 msgstr "Pick a voice for this style."
@@ -4839,6 +4890,10 @@ msgctxt "realtime model's voice"
 msgid "Realtime Voice"
 msgstr "Realtime Voice"
 
+#: src/lib/labels.ts
+msgid "Realtime WebSocket (/realtime)"
+msgstr "Realtime WebSocket (/realtime)"
+
 #: src/features/home/readiness-labels.ts
 msgid "Rebuild"
 msgstr "Rebuild"
@@ -5055,6 +5110,7 @@ msgid "Required Providers"
 msgstr "Required Providers"
 
 #: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
 #: src/features/setup/persona-fields.tsx
 msgid "Required."
 msgstr "Required."
@@ -5602,6 +5658,14 @@ msgstr "She passed these on, and it reads them first when it goes on:"
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and calls are off until a voice provider is chosen above."
+msgstr "She replies in text, and calls are off until a voice provider is chosen above."
+
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and her realtime model still handles calls."
+msgstr "She replies in text, and her realtime model still handles calls."
+
 #: src/features/settings/desktop-notes.ts
 msgid "She shows as her picture until she has an active character model."
 msgstr "She shows as her picture until she has an active character model."
@@ -5782,6 +5846,10 @@ msgstr "Skills"
 msgid "Skip"
 msgstr "Skip"
 
+#: src/features/setup/voice-step.tsx
+msgid "Skip for Now"
+msgstr "Skip for Now"
+
 #: src/components/update-dialog.tsx
 msgid "Skip This Version"
 msgstr "Skip This Version"
@@ -5850,6 +5918,18 @@ msgstr "Soniox transcribes the audio, the refine model cleans up each transcript
 msgid "Speaks her replies."
 msgstr "Speaks her replies."
 
+#: src/features/studio/voice-section.tsx
+msgid "Speech is turned off"
+msgstr "Speech is turned off"
+
+#: src/features/setup/new-persona.tsx
+msgid "Speech is turned off, so she chats in text. You can pick a voice later in her studio."
+msgstr "Speech is turned off, so she chats in text. You can pick a voice later in her studio."
+
+#: src/features/call/call-page.tsx
+msgid "Speech or speech recognition is turned off in her settings, so she chats in text."
+msgstr "Speech or speech recognition is turned off in her settings, so she chats in text."
+
 #: src/features/home/readiness-labels.ts
 #: src/lib/labels.ts
 msgid "Speech Recognition"
@@ -5862,6 +5942,10 @@ msgstr "Speech Recognition Model"
 #: src/components/settings-form/labels.ts
 msgid "Speech Recognition Provider"
 msgstr "Speech Recognition Provider"
+
+#: src/lib/labels.ts
+msgid "Speech Recognition Transport"
+msgstr "Speech Recognition Transport"
 
 #: src/features/usage/tables.tsx
 msgid "Spend"
@@ -6410,6 +6494,10 @@ msgstr "The {name} style is removed."
 #: src/features/studio/voice-styles-card.tsx
 msgid "The {name} style is saved."
 msgstr "The {name} style is saved."
+
+#: src/features/studio/voice-section.tsx
+msgid "The {provider} voice or reference ID she speaks with. Leave it empty to use the server's default."
+msgstr "The {provider} voice or reference ID she speaks with. Leave it empty to use the server's default."
 
 #: src/features/studio/voice-section.tsx
 msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
@@ -7272,6 +7360,10 @@ msgstr "Use a time zone name such as Asia/Shanghai."
 msgid "Use a two-letter language code such as zh, or none."
 msgstr "Use a two-letter language code such as zh, or none."
 
+#: src/features/settings/account-dialog.tsx
+msgid "Use Default"
+msgstr "Use Default"
+
 #: src/features/studio/voice-section.tsx
 msgid "Use It"
 msgstr "Use It"
@@ -7390,10 +7482,26 @@ msgctxt "reply mode"
 msgid "Voice"
 msgstr "Voice"
 
+#: src/features/call/call-page.tsx
+msgid "Voice calls are turned off for {name}"
+msgstr "Voice calls are turned off for {name}"
+
+#: src/features/chats/chat-view.tsx
+msgid "Voice calls are turned off for everyone in this chat."
+msgstr "Voice calls are turned off for everyone in this chat."
+
+#: src/features/chats/chat-view.tsx
+msgid "Voice calls are turned off in her settings."
+msgstr "Voice calls are turned off in her settings."
+
 #: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voice ID"
 msgstr "Voice ID"
+
+#: src/features/setup/voice-choice.tsx
+msgid "Voice ID (Optional)"
+msgstr "Voice ID (Optional)"
 
 #: src/components/voice-picker/library.tsx
 msgid "Voice Language"
@@ -7417,6 +7525,7 @@ msgstr "Voice Model"
 msgid "Voice Provider"
 msgstr "Voice Provider"
 
+#: src/features/home/voice-dialog.tsx
 #: src/features/studio/voice-section.tsx
 msgid "Voice set to {id}."
 msgstr "Voice set to {id}."
@@ -7788,6 +7897,10 @@ msgstr "You're on v{appVersion}."
 msgid "You're up to date"
 msgstr "You're up to date"
 
+#: src/features/setup/voice-choice.tsx
+msgid "Your {provider} voice or reference ID. Leave it empty to use the server's default."
+msgstr "Your {provider} voice or reference ID. Leave it empty to use the server's default."
+
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"
 msgstr "Your API Keys"
@@ -7795,6 +7908,11 @@ msgstr "Your API Keys"
 #: src/features/call/call-notices.tsx
 msgid "Your browser is holding back {name}'s voice."
 msgstr "Your browser is holding back {name}'s voice."
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Your Fish Speech server's address, such as http://127.0.0.1:8080."
+msgstr "Your Fish Speech server's address, such as http://127.0.0.1:8080."
 
 #: src/features/settings/route.tsx
 msgid "Your keys and the settings every persona shares."
@@ -7839,9 +7957,14 @@ msgstr "Your Personas"
 msgid "Your providers"
 msgstr "Your providers"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
+
+#: src/features/setup/done-step.tsx
+msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
+msgstr "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VoicePicker } from "@/components/voice-picker";
+import { VoiceById } from "@/features/studio/voice-by-id";
 import { providerById, providerName } from "@/lib/providers";
 
 export function VoiceChoice({
@@ -40,12 +41,15 @@ export function VoiceChoice({
 
   if (voices === undefined || voices.kind === "fish-library") {
     return (
-      <VoicePicker
-        value={value ?? fallback}
-        onChange={(voice) => onChange(voice.id)}
-        account={account}
-        disabled={disabled}
-      />
+      <div className="flex flex-col gap-6">
+        <VoicePicker
+          value={value ?? fallback}
+          onChange={(voice) => onChange(voice.id)}
+          account={account}
+          disabled={disabled}
+        />
+        <VoiceById disabled={disabled} onUse={onChange} />
+      </div>
     );
   }
   if (voices.kind === "preset") {
@@ -70,7 +74,9 @@ export function VoiceChoice({
   }
   return (
     <Field className="max-w-xl">
-      <FieldLabel htmlFor={id}>{t`Voice ID`}</FieldLabel>
+      <FieldLabel htmlFor={id}>
+        {voices.libraryUrl ? t`Voice ID` : t`Voice ID (Optional)`}
+      </FieldLabel>
       <Input
         id={id}
         className="font-mono md:text-[0.8125rem]"
@@ -81,15 +87,21 @@ export function VoiceChoice({
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
       />
-      <FieldDescription className="inline-links">
-        <Trans>
-          Find a voice in {ph({ provider: name })}'s{" "}
-          <a href={voices.libraryUrl} target="_blank" rel="noreferrer noopener">
-            voice library
-          </a>
-          , then paste its ID here.
-        </Trans>
-      </FieldDescription>
+      {voices.libraryUrl ? (
+        <FieldDescription className="inline-links">
+          <Trans>
+            Find a voice in {ph({ provider: name })}'s{" "}
+            <a href={voices.libraryUrl} target="_blank" rel="noreferrer noopener">
+              voice library
+            </a>
+            , then paste its ID here.
+          </Trans>
+        </FieldDescription>
+      ) : (
+        <FieldDescription>
+          {t`Your ${ph({ provider: name })} voice or reference ID. Leave it empty to use the server's default.`}
+        </FieldDescription>
+      )}
     </Field>
   );
 }

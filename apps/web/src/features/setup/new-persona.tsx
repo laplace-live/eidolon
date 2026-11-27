@@ -5,25 +5,18 @@ import { useId, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
 import { LargeDialogContent } from "@/components/large-dialog";
-import { browserTimeZone } from "@/components/settings-form/controls";
+import { browserTimeZone, effectiveProvider } from "@/components/settings-form/controls";
 import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useCallPresence } from "@/features/call/call-context";
 import { accountsQuery } from "@/lib/accounts";
 import type { PersonaSummary } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
-import { defaultVoice, providerById, providerName } from "@/lib/providers";
+import { defaultVoice, OFF_PROVIDER, providerById, providerName, roleById } from "@/lib/providers";
 import { addAvatar } from "./avatar";
 import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
@@ -69,10 +62,11 @@ export function NewPersonaDialog({
   const [showErrors, setShowErrors] = useState(false);
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
   const rows = active.data?.settings;
+  const voiceOff = rows ? effectiveProvider(roleById("voice"), rows, {}) === OFF_PROVIDER : false;
   const provider = rows ? voiceProvider(rows, accounts.data?.accounts) : null;
   const account = rows ? fishVoiceAccount(rows, accounts.data?.accounts) : null;
   // A failed request leaves no provider to offer voices from.
-  const unavailable = provider === null ? (active.error ?? accounts.error) : null;
+  const unavailable = provider === null && !voiceOff ? (active.error ?? accounts.error) : null;
   const voice = pickedVoice(pick, provider);
   const fallback =
     provider === null ? null : (defaultVoice(providerById(provider)?.offers.tts) ?? null);
@@ -82,7 +76,7 @@ export function NewPersonaDialog({
   const herName = her ? her.shortName || her.name : "";
 
   const create = useMutation({
-    mutationFn: ({ voiceId }: { voiceId: string }) => createPersona(draft, voiceId),
+    mutationFn: ({ voiceId }: { voiceId: string | null }) => createPersona(draft, voiceId),
     onSuccess: async (made) => {
       toast.success(t`${ph({ name: made.name })} created.`);
       const created = avatar ? await addAvatar(made, avatar) : made;
@@ -107,9 +101,12 @@ export function NewPersonaDialog({
     onOpenChange(next);
   }
 
+  const loadingVoice =
+    active.isPending || (!voiceOff && accounts.isPending) || unavailable !== null;
+
   function submit() {
     setShowErrors(true);
-    if (Object.keys(personaErrors(draft, taken)).length > 0 || voiceId === null) return;
+    if (loadingVoice || Object.keys(personaErrors(draft, taken)).length > 0) return;
     create.mutate({ voiceId });
   }
 
@@ -135,7 +132,7 @@ export function NewPersonaDialog({
               <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
                 {t`Cancel`}
               </Button>
-              <Button onClick={submit} disabled={create.isPending}>
+              <Button onClick={submit} disabled={create.isPending || loadingVoice}>
                 {create.isPending && <Spinner />}
                 {t`Create`}
               </Button>
@@ -171,6 +168,11 @@ export function NewPersonaDialog({
                 {t`She starts on the providers ${herName} uses, so she speaks through ${ph({ provider: providerName(provider) })}. Change them in her studio.`}
               </FieldDescription>
             )}
+            {voiceOff && (
+              <FieldDescription>
+                {t`Speech is turned off, so she chats in text. You can pick a voice later in her studio.`}
+              </FieldDescription>
+            )}
             {provider !== null && (
               <VoiceChoice
                 provider={provider}
@@ -182,9 +184,6 @@ export function NewPersonaDialog({
               />
             )}
             {unavailable && <ErrorAlert error={unavailable} />}
-            {showErrors && voiceId === null && !unavailable && (
-              <FieldError>{t`Pick a voice for her.`}</FieldError>
-            )}
           </FieldSet>
         </div>
         {create.isError && <ErrorAlert error={create.error} />}

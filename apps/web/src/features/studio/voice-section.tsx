@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { Link } from "wouter";
 import { ListCard, ListRow } from "@/components/list";
 import { SectionCard } from "@/components/section-card";
-import { effectiveProviderType } from "@/components/settings-form/controls";
+import { effectiveProvider, effectiveProviderType } from "@/components/settings-form/controls";
 import { Code, EnvBadge } from "@/components/settings-form/field";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { SettingsCard } from "@/components/settings-form/settings-card";
@@ -36,7 +36,7 @@ import { accountsQuery } from "@/lib/accounts";
 import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { studioPath } from "@/lib/paths";
-import { providerById, providerName, roleById } from "@/lib/providers";
+import { OFF_PROVIDER, providerById, providerName, roleById } from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
 import { CUE_MODEL, type CueClash, cueClash } from "./files";
 import { LoadError } from "./parts";
@@ -300,6 +300,8 @@ function ProviderVoiceCard({
             </a>
             .
           </Trans>
+        ) : voices?.kind === "id" ? (
+          t`The ${ph({ provider: providerName(provider) })} voice or reference ID she speaks with. Leave it empty to use the server's default.`
         ) : (
           t`One of ${ph({ provider: providerName(provider) })}'s voices.`
         )
@@ -316,6 +318,7 @@ export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) 
   const accounts = accountList.data?.accounts;
   const rows = settings.data?.settings;
   const clash = cueClash(rows, prompt.data?.text, accounts);
+  const voiceOff = rows ? effectiveProvider(roleById("voice"), rows, {}) === OFF_PROVIDER : false;
   const provider =
     (rows ? effectiveProviderType(roleById("voice"), rows, {}, accounts) : null) ?? "fish";
   const realtime = rows ? effectiveProviderType(roleById("realtime"), rows, {}, accounts) : null;
@@ -345,14 +348,28 @@ export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) 
         title={t`Voice Provider`}
         description={t`Which provider and model read her lines.`}
       >
-        {clash && <CueAlert clash={clash} />}
+        {!voiceOff && clash && <CueAlert clash={clash} />}
       </SettingsCard>
-      {provider === "fish" ? (
-        <VoiceCard persona={persona} account={account} />
+      {voiceOff ? (
+        <Alert>
+          <AudioLinesIcon />
+          <AlertTitle>{t`Speech is turned off`}</AlertTitle>
+          <AlertDescription>
+            {realtime !== null
+              ? t`She replies in text, and her realtime model still handles calls.`
+              : t`She replies in text, and calls are off until a voice provider is chosen above.`}
+          </AlertDescription>
+        </Alert>
       ) : (
-        <ProviderVoiceCard persona={persona} provider={provider} />
+        <>
+          {provider === "fish" ? (
+            <VoiceCard persona={persona} account={account} />
+          ) : (
+            <ProviderVoiceCard persona={persona} provider={provider} />
+          )}
+          <VoiceStylesCard persona={persona} provider={provider} account={account ?? null} />
+        </>
       )}
-      <VoiceStylesCard persona={persona} provider={provider} account={account ?? null} />
     </>
   );
 }

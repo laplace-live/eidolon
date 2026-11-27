@@ -21,7 +21,9 @@ import {
   previousStep,
   RESERVED_IDS,
   STEPS,
+  shouldSkipVoiceStep,
   suggestPersonaId,
+  targetUsesRealtime,
   voiceProvider,
 } from "./wizard";
 
@@ -142,6 +144,50 @@ test("the voice step offers the voices of the provider she speaks through", () =
   expect(voiceProvider([provider({ value: "nobody", source: "persona" })], [])).toBe("fish");
   // Until the accounts load, an account's provider is unknown, not Fish's.
   expect(voiceProvider([provider({ value: "speech", source: "persona" })], undefined)).toBeNull();
+  // Explicitly turned off returns null even once accounts are loaded.
+  expect(voiceProvider([provider({ value: "none", source: "persona" })], [])).toBeNull();
+});
+
+test("skips the voice step when realtime is on, voice is off, or the keyed account has no key", () => {
+  const fish = { id: "fish", provider: "fish", key: { value: null, source: null } };
+  const fishKeyed = {
+    id: "fish",
+    provider: "fish",
+    key: { value: null, source: "account" as const },
+  };
+  const selfHosted = {
+    id: "fish-speech",
+    provider: "fish-speech",
+    key: { value: null, source: null },
+  };
+  expect(shouldSkipVoiceStep(true, [], [fishKeyed])).toBe(true);
+  expect(
+    shouldSkipVoiceStep(false, [provider({ value: "none", source: "persona" })], [fishKeyed]),
+  ).toBe(true);
+  expect(shouldSkipVoiceStep(false, [], [fish])).toBe(true);
+  expect(shouldSkipVoiceStep(false, [], [fishKeyed])).toBe(false);
+  expect(
+    shouldSkipVoiceStep(
+      false,
+      [provider({ value: "fish-speech", source: "persona" })],
+      [selfHosted],
+    ),
+  ).toBe(false);
+});
+
+test("targetUsesRealtime reads the chosen persona's settings, and ignores persona realtime when creating", () => {
+  const rt = (patch: Partial<SettingRow>) =>
+    setting("realtime.provider", { env: "REALTIME_PROVIDER", scope: "persona", ...patch });
+  expect(targetUsesRealtime([rt({ value: "openai", source: "persona" })])).toBe(true);
+  expect(targetUsesRealtime([rt({ value: "none", source: "persona" })])).toBe(false);
+  expect(targetUsesRealtime([])).toBe(false);
+  // Active persona's persona.yaml realtime does not carry over into starter settings of a new persona.
+  expect(targetUsesRealtime([rt({ value: "openai", source: "persona" })], true)).toBe(false);
+  // Environment-set REALTIME_PROVIDER applies to created personas too.
+  expect(
+    targetUsesRealtime([rt({ value: "none", source: "persona", envValue: "openai" })], true),
+  ).toBe(true);
+  expect(targetUsesRealtime([rt({ envValue: "none" })], true)).toBe(false);
 });
 
 test("the picker lists the own voices of the Fish account she speaks through, and no other's", () => {
@@ -236,6 +282,14 @@ describe("creating a persona", () => {
       summary: "",
       timezone: "Asia/Shanghai",
       voiceId: "v".repeat(32),
+    });
+    expect(createRequest(draft, null)).toEqual({
+      id: "mine",
+      name: "小绿",
+      shortName: "小绿",
+      fans: "观众",
+      summary: "",
+      timezone: "Asia/Shanghai",
     });
   });
 });

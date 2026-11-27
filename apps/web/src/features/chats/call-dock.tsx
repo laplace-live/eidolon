@@ -34,6 +34,7 @@ export function CallButton({
   personas,
   groupCall,
   disabled,
+  disabledPersonas = [],
   unavailable = null,
   onCall,
 }: {
@@ -42,14 +43,17 @@ export function CallButton({
   /** Whether they can all be called at once. */
   readonly groupCall: boolean;
   readonly disabled: boolean;
+  /** Participants whose voice calls are turned off. */
+  readonly disabledPersonas?: readonly ParticipantId[];
   /** Why no call can be placed here now, shown in its tooltip; null while one can. */
   readonly unavailable?: string | null;
   readonly onCall: (persona: ParticipantId, group: boolean) => void;
 }) {
   const { t } = useLingui();
   const [only] = personas;
+  const host = personas.find((persona) => !disabledPersonas.includes(persona.id)) ?? only;
   const label = <span className="max-sm:sr-only">{t`Call`}</span>;
-  if (only === undefined) return null;
+  if (only === undefined || host === undefined) return null;
   if (unavailable !== null) {
     return (
       <UnavailableButton variant="outline" size="sm" reason={unavailable}>
@@ -83,7 +87,7 @@ export function CallButton({
         <DropdownMenuLabel>{t`Who to Call`}</DropdownMenuLabel>
         {groupCall && (
           <>
-            <DropdownMenuItem className="gap-2 py-1.5" onSelect={() => onCall(only.id, true)}>
+            <DropdownMenuItem className="gap-2 py-1.5" onSelect={() => onCall(host.id, true)}>
               <UsersIcon />
               <span className="truncate">{t`Everyone`}</span>
             </DropdownMenuItem>
@@ -94,6 +98,7 @@ export function CallButton({
           <DropdownMenuItem
             key={persona.id}
             className="gap-2 py-1.5"
+            disabled={disabledPersonas.includes(persona.id)}
             onSelect={() => onCall(persona.id, false)}
           >
             <PersonaAvatar persona={persona} size="xs" />

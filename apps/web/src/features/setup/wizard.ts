@@ -5,9 +5,10 @@ import {
   effectiveProvider,
   effectiveProviderType,
   isTimeZone,
+  strip,
 } from "@/components/settings-form/controls";
 import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
-import { providerOfAccount, roleById } from "@/lib/providers";
+import { OFF_PROVIDER, providerById, providerOfAccount, roleById } from "@/lib/providers";
 import { requiredKeyMissing } from "./first-run";
 
 export const STEPS = ["keys", "persona", "voice", "memory", "done"] as const;
@@ -108,10 +109,50 @@ export function voiceProvider(
   rows: readonly SettingRow[],
   accounts: AccountList | undefined,
 ): string | null {
+  if (effectiveProvider(roleById("voice"), rows, {}) === OFF_PROVIDER) return null;
   return (
     effectiveProviderType(roleById("voice"), rows, {}, accounts) ??
     (accounts === undefined ? null : "fish")
   );
+}
+
+/**
+ * Whether `rows` puts a persona on realtime; creating one reads `env` alone since starter settings
+ * leave realtime out.
+ */
+export function targetUsesRealtime(
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  creating = false,
+): boolean {
+  if (creating) {
+    const env = rows.find((row) => row.path === "realtime.provider")?.envValue;
+    const value = env ? strip(env).toLowerCase() : "";
+    return value !== "" && value !== OFF_PROVIDER;
+  }
+  const provider = effectiveProvider(roleById("realtime"), rows, {});
+  return provider !== null && provider !== OFF_PROVIDER;
+}
+
+/**
+ * Whether setup should skip the voice step automatically: realtime models speak in their own
+ * voice, the voice role is explicitly off, or the chosen voice account requires an API key that
+ * isn't configured yet.
+ */
+export function shouldSkipVoiceStep(
+  realtime: boolean,
+  rows: readonly SettingRow[],
+  accounts: readonly Pick<AccountView, "id" | "provider" | "key">[],
+): boolean {
+  if (realtime) return true;
+  const accountId = effectiveProvider(roleById("voice"), rows, {});
+  if (accountId === OFF_PROVIDER) return true;
+  const providerId = providerOfAccount(accountId, accounts);
+  const provider = providerId === null ? undefined : providerById(providerId);
+  if (provider !== undefined && provider.credential !== null && !provider.keyOptional) {
+    const listed = accounts.find((entry) => entry.id === accountId);
+    if ((listed?.key.source ?? null) === null) return true;
+  }
+  return false;
 }
 
 /**
@@ -258,7 +299,7 @@ export function personaErrors(
 }
 
 /** POST personas' body; a blank short name or fans word gets the bot's own default. */
-export function createRequest(draft: PersonaDraft, voiceId: string): CreatePersonaRequest {
+export function createRequest(draft: PersonaDraft, voiceId?: string | null): CreatePersonaRequest {
   const name = draft.name.trim();
   return {
     id: draft.id.trim(),
@@ -267,7 +308,7 @@ export function createRequest(draft: PersonaDraft, voiceId: string): CreatePerso
     fans: draft.fans.trim() || DEFAULT_FANS,
     summary: draft.summary.trim(),
     timezone: draft.timezone.trim(),
-    voiceId,
+    ...(voiceId ? { voiceId } : {}),
   };
 }
 

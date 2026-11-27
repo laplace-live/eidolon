@@ -59,7 +59,7 @@ export async function offerChatCall(
   let call: ChatCall | GroupChatCall;
   try {
     if (group) {
-      const refused = await chats.groupCallRefusal(chatId);
+      const refused = await chats.groupCallRefusal(chatId, persona);
       if (refused !== null) return localError(refused.status, refused.code, refused.message);
       call = await chats.startGroupCall(chatId, persona);
     } else {

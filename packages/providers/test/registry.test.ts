@@ -43,7 +43,7 @@ describe("the registry", () => {
   );
 
   test("every provider lists its models, but Fish's closed set and the two without a listing", () => {
-    const unlisted = ["fish", "cartesia", "minimax"];
+    const unlisted = ["fish", "fish-speech", "cartesia", "minimax"];
     expect(Object.keys(LISTINGS).sort()).toEqual(
       PROVIDER_IDS.filter((id) => !unlisted.includes(id)).sort(),
     );

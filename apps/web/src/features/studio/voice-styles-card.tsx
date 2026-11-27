@@ -209,15 +209,21 @@ function StyleVoice({
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
-        <FieldDescription>
-          <Trans>
-            One of {name}'s voices, by its ID. Find one in its{" "}
-            <a href={library} target="_blank" rel="noreferrer noopener">
-              voice library
-            </a>
-            .
-          </Trans>
-        </FieldDescription>
+        {library ? (
+          <FieldDescription>
+            <Trans>
+              One of {name}'s voices, by its ID. Find one in its{" "}
+              <a href={library} target="_blank" rel="noreferrer noopener">
+                voice library
+              </a>
+              .
+            </Trans>
+          </FieldDescription>
+        ) : (
+          <FieldDescription>
+            {t`One of ${name}'s voices, by its ID or reference name.`}
+          </FieldDescription>
+        )}
       </Field>
     );
   }

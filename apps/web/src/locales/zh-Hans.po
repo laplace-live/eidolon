@@ -268,6 +268,10 @@ msgid "{name} API Key"
 msgstr "{name} API 密钥"
 
 #: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key (If the Server Asks for One)"
+msgstr "{name} API 密钥（服务器需要时填写）"
+
+#: src/components/settings-form/account-key-field.tsx
 msgid "{name} API Key (Optional)"
 msgstr "{name} API 密钥（可选）"
 
@@ -422,6 +426,10 @@ msgstr "{provider} 拒绝了这个账号的密钥：请到「设置 → 服务�
 #: src/features/home/readiness-labels.ts
 msgid "{provider} speaks with voice {id}."
 msgstr "使用 {provider} 的声音 {id}。"
+
+#: src/features/home/readiness-labels.ts
+msgid "{provider} uses its default voice."
+msgstr "{provider} 使用其默认声音。"
 
 #: src/features/jobs/describe.ts
 msgid "{provider}: {reason}"
@@ -1047,10 +1055,12 @@ msgstr "所有语言"
 msgid "Any Site"
 msgstr "任何网站"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "API Base"
 msgstr "API 地址"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "API Base (Required)"
 msgstr "API 地址（必填）"
@@ -1901,6 +1911,10 @@ msgstr "默认为数据目录中的 mem0/vectors。"
 #: src/components/settings-form/labels.ts
 msgid "Default Opus Bitrate"
 msgstr "默认 Opus 码率"
+
+#: src/features/setup/keys-step.tsx
+msgid "Default: {model}. Leave blank to use it, or enter your server's model ID."
+msgstr "默认：{model}。留空将使用该模型，或填写你的服务端模型 ID。"
 
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
@@ -2852,10 +2866,13 @@ msgstr "主机名称已更新。"
 msgid "How {name} sounds."
 msgstr "{name}的声音。"
 
-#: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx
 msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
 msgstr "{name}的声音。从你自己的 Fish Audio 声音或公开声音库里挑选，试听样本后再选择。"
+
+#: src/features/home/voice-dialog.tsx
+msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, play a sample, or enter a voice ID."
+msgstr "{name} 的声音。从你自己的 Fish Audio 声音或公共声音库里挑一个、试听样本，或输入声音 ID。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
@@ -2912,6 +2929,10 @@ msgstr "她的声音"
 #: src/features/studio/models-section.tsx
 msgid "How She Talks"
 msgstr "通话方式"
+
+#: src/lib/labels.ts
+msgid "HTTP (/audio/transcriptions)"
+msgstr "HTTP（/audio/transcriptions）"
 
 #: src/features/setup/persona-fields.tsx
 msgid "ID"
@@ -3733,6 +3754,10 @@ msgid "Mind"
 msgstr "思维"
 
 #: src/features/home/readiness-labels.ts
+msgid "Missing for calls: {names}. Text chats work without them."
+msgstr "通话缺少以下密钥：{names}。文本对话不依赖它们。"
+
+#: src/features/home/readiness-labels.ts
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "缺少：{names}。没有它们无法开始通话。"
 
@@ -4081,6 +4106,10 @@ msgstr "没有上传日期"
 msgid "No videos yet"
 msgstr "还没有视频"
 
+#: src/features/home/readiness-labels.ts
+msgid "No voice picked yet: text chats work without one."
+msgstr "还没有选定声音：没有声音也能进行文本对话。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "No voice styles yet"
 msgstr "还没有声线风格"
@@ -4212,6 +4241,7 @@ msgstr "暂无内容。"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
+#: src/features/setup/keys-step.tsx
 #: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "关"
@@ -4220,13 +4250,29 @@ msgstr "关"
 msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 msgstr "关闭后，她不能开始任务，正在运行的任务会停止，「任务」列表也会隐藏。"
 
+#: src/components/settings-form/labels.ts
+msgid "Off: No Speech Recognition"
+msgstr "关闭：不开启语音识别"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: she replies in text only."
+msgstr "关闭：她只用文字回复。"
+
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "已关闭：她不会在多次通话之间记得你。"
 
 #: src/components/settings-form/labels.ts
+msgid "Off: Text Only"
+msgstr "关闭：仅使用文字"
+
+#: src/components/settings-form/labels.ts
 msgid "Off: Three Models"
 msgstr "关闭：使用三个模型"
+
+#: src/features/home/readiness-labels.ts
+msgid "Off: voice calls and voice messages are disabled."
+msgstr "关闭：已禁用语音通话和语音消息。"
 
 #: src/features/subspace/servers-card.tsx
 msgid "Offline"
@@ -4268,6 +4314,10 @@ msgstr "每行一个链接。"
 #: src/components/settings-form/labels.ts
 msgid "One model hears, thinks and speaks, in place of the three. Experimental."
 msgstr "用一个同时负责听、思考和说话的模型代替三个模型。实验性功能。"
+
+#: src/features/studio/voice-styles-card.tsx
+msgid "One of {name}'s voices, by its ID or reference name."
+msgstr "{name} 的一个声音，按 ID 或参考名称填写。"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
@@ -4323,6 +4373,10 @@ msgstr "请从终端打开 Eidolon"
 msgid "Open Her Models"
 msgstr "打开模型设置"
 
+#: src/features/call/call-page.tsx
+msgid "Open Her Studio"
+msgstr "打开她的工作室"
+
 #: src/features/home/route.tsx
 msgid "Open one's studio to build her up, or make another the one your calls reach."
 msgstr "打开人设的工作室来完善她，或把另一个人设设为通话对象。"
@@ -4375,6 +4429,7 @@ msgstr "OpenRouter 应用名称"
 msgid "OpenRouter App URL"
 msgstr "OpenRouter 应用网址"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/setup/stepper.tsx
 #: src/features/subspace/add-server-dialog.tsx
 msgid "Optional"
@@ -4609,10 +4664,6 @@ msgstr "选择声音"
 msgid "Pick a voice for {name}"
 msgstr "为{name}选择声音"
 
-#: src/features/setup/new-persona.tsx
-msgid "Pick a voice for her."
-msgstr "请为她选择一个声音。"
-
 #: src/features/studio/voice-styles-card.tsx
 msgid "Pick a voice for this style."
 msgstr "请为这个风格选一个声音。"
@@ -4839,6 +4890,10 @@ msgctxt "realtime model's voice"
 msgid "Realtime Voice"
 msgstr "实时语音的声音"
 
+#: src/lib/labels.ts
+msgid "Realtime WebSocket (/realtime)"
+msgstr "Realtime WebSocket（/realtime）"
+
 #: src/features/home/readiness-labels.ts
 msgid "Rebuild"
 msgstr "重新构建"
@@ -5055,6 +5110,7 @@ msgid "Required Providers"
 msgstr "必需服务商"
 
 #: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
 #: src/features/setup/persona-fields.tsx
 msgid "Required."
 msgstr "必填。"
@@ -5602,6 +5658,14 @@ msgstr "她转告的话，接着做时会先看："
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "这些是她在你们的通话里记下的，只有她会读到：每个人设各记各的。"
 
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and calls are off until a voice provider is chosen above."
+msgstr "她会用文字回复；在上方选择语音提供方之前，通话保持关闭。"
+
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and her realtime model still handles calls."
+msgstr "她会用文字回复，实时模型仍可用于语音通话。"
+
 #: src/features/settings/desktop-notes.ts
 msgid "She shows as her picture until she has an active character model."
 msgstr "在设好当前形象之前，她会以头像出现。"
@@ -5782,6 +5846,10 @@ msgstr "技能"
 msgid "Skip"
 msgstr "跳过"
 
+#: src/features/setup/voice-step.tsx
+msgid "Skip for Now"
+msgstr "先跳过"
+
 #: src/components/update-dialog.tsx
 msgid "Skip This Version"
 msgstr "跳过此版本"
@@ -5850,6 +5918,18 @@ msgstr "Soniox 转写音频，整理模型清理每份转写稿，嵌入 API 建
 msgid "Speaks her replies."
 msgstr "把她的回复说出来。"
 
+#: src/features/studio/voice-section.tsx
+msgid "Speech is turned off"
+msgstr "语音已关闭"
+
+#: src/features/setup/new-persona.tsx
+msgid "Speech is turned off, so she chats in text. You can pick a voice later in her studio."
+msgstr "语音已关闭，她将只用文字聊天。你之后可以随时在她的工作室里选一个声音。"
+
+#: src/features/call/call-page.tsx
+msgid "Speech or speech recognition is turned off in her settings, so she chats in text."
+msgstr "她的设置中关闭了语音合成或语音识别，因此她只用文字聊天。"
+
 #: src/features/home/readiness-labels.ts
 #: src/lib/labels.ts
 msgid "Speech Recognition"
@@ -5862,6 +5942,10 @@ msgstr "语音识别模型"
 #: src/components/settings-form/labels.ts
 msgid "Speech Recognition Provider"
 msgstr "语音识别服务商"
+
+#: src/lib/labels.ts
+msgid "Speech Recognition Transport"
+msgstr "语音识别传输方式"
 
 #: src/features/usage/tables.tsx
 msgid "Spend"
@@ -6410,6 +6494,10 @@ msgstr "已移除风格 {name}。"
 #: src/features/studio/voice-styles-card.tsx
 msgid "The {name} style is saved."
 msgstr "已保存风格 {name}。"
+
+#: src/features/studio/voice-section.tsx
+msgid "The {provider} voice or reference ID she speaks with. Leave it empty to use the server's default."
+msgstr "她说话所用的 {provider} 声音或参考 ID。留空则使用服务端默认值。"
 
 #: src/features/studio/voice-section.tsx
 msgid "The {provider} voice she speaks with, by its id. Find one in {provider}'s <0>voice library</0>."
@@ -7272,6 +7360,10 @@ msgstr "请使用时区名称，例如 Asia/Shanghai。"
 msgid "Use a two-letter language code such as zh, or none."
 msgstr "请使用两个字母的语言代码，例如 zh，或填写 none。"
 
+#: src/features/settings/account-dialog.tsx
+msgid "Use Default"
+msgstr "使用默认值"
+
 #: src/features/studio/voice-section.tsx
 msgid "Use It"
 msgstr "改用"
@@ -7390,10 +7482,26 @@ msgctxt "reply mode"
 msgid "Voice"
 msgstr "语音"
 
+#: src/features/call/call-page.tsx
+msgid "Voice calls are turned off for {name}"
+msgstr "已关闭{name}的语音通话"
+
+#: src/features/chats/chat-view.tsx
+msgid "Voice calls are turned off for everyone in this chat."
+msgstr "这个聊天里的所有人都已关闭语音通话。"
+
+#: src/features/chats/chat-view.tsx
+msgid "Voice calls are turned off in her settings."
+msgstr "她的设置中关闭了语音通话。"
+
 #: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voice ID"
 msgstr "声音 ID"
+
+#: src/features/setup/voice-choice.tsx
+msgid "Voice ID (Optional)"
+msgstr "声音 ID（可选）"
 
 #: src/components/voice-picker/library.tsx
 msgid "Voice Language"
@@ -7417,6 +7525,7 @@ msgstr "声音模型"
 msgid "Voice Provider"
 msgstr "声音服务商"
 
+#: src/features/home/voice-dialog.tsx
 #: src/features/studio/voice-section.tsx
 msgid "Voice set to {id}."
 msgstr "已把声音设为 {id}。"
@@ -7788,6 +7897,10 @@ msgstr "当前版本为 v{appVersion}。"
 msgid "You're up to date"
 msgstr "已是最新版本"
 
+#: src/features/setup/voice-choice.tsx
+msgid "Your {provider} voice or reference ID. Leave it empty to use the server's default."
+msgstr "你的 {provider} 声音或参考 ID。留空则使用服务端默认值。"
+
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"
 msgstr "你的 API 密钥"
@@ -7795,6 +7908,11 @@ msgstr "你的 API 密钥"
 #: src/features/call/call-notices.tsx
 msgid "Your browser is holding back {name}'s voice."
 msgstr "浏览器暂停了{name}的声音。"
+
+#: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
+msgid "Your Fish Speech server's address, such as http://127.0.0.1:8080."
+msgstr "你的 Fish Speech 服务端地址，例如 http://127.0.0.1:8080。"
 
 #: src/features/settings/route.tsx
 msgid "Your keys and the settings every persona shares."
@@ -7839,9 +7957,14 @@ msgstr "你的人设"
 msgid "Your providers"
 msgstr "你的服务商"
 
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
 msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1。"
+
+#: src/features/setup/done-step.tsx
+msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
+msgstr "设置已保存。你可以立即开始文字聊天，也可以随时再配置语音通话。"
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"

@@ -429,6 +429,7 @@ export const CREDENTIALS: readonly string[] = [
   "SONIOX_API_KEY",
   "OPENROUTER_API_KEY",
   "FISH_API_KEY",
+  "FISH_SPEECH_API_KEY",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",

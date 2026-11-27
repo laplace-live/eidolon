@@ -53,19 +53,28 @@ describe("choices", () => {
   test("every provider that offers a role, the recommended one first", () => {
     const names = (role: Parameters<typeof roleById>[0]) =>
       choicesFor(roleById(role), [], null).map((choice) => choice.account);
-    expect(names("hearing")).toEqual(["soniox", "openai", "elevenlabs", "deepgram"]);
+    expect(names("hearing")).toEqual([
+      "soniox",
+      "openai",
+      "openai-compatible",
+      "elevenlabs",
+      "deepgram",
+      "none",
+    ]);
     expect(names("voice")).toEqual([
       "fish",
       "openai",
+      "openai-compatible",
       "soniox",
+      "fish-speech",
       "elevenlabs",
       "cartesia",
       "minimax",
+      "none",
     ]);
-    expect(names("embeddings")).toEqual(["openrouter", "openai", "google"]);
+    expect(names("embeddings")).toEqual(["openrouter", "openai", "google", "openai-compatible"]);
     // Only OpenRouter serves decision models today; a provider that adds them lists here.
     expect(names("gate")).toEqual(["openrouter"]);
-    // An endpoint of your own has no API base until an account of it is set up.
     expect(names("mind")).toEqual([
       "openrouter",
       "openai",
@@ -77,6 +86,7 @@ describe("choices", () => {
       "moonshot",
       "zhipu",
       "ollama",
+      "openai-compatible",
     ]);
     expect(choicesFor(roleById("mind"), [], null).filter((choice) => choice.recommended)).toEqual([
       { account: "openrouter", name: "OpenRouter", recommended: true },
@@ -302,5 +312,67 @@ describe("the keys the picks need", () => {
     });
     expect(missingFields(need, [saved], undefined)).toEqual([]);
     expect(missingFields({ account: "openai", provider: "openai" }, [], undefined)).toEqual([]);
+  });
+
+  test("an OpenAI-compatible account requires an API base, while sttProtocol is optional", () => {
+    const need = { account: "openai-compatible", provider: "openai-compatible" };
+    expect(missingFields(need, [], undefined, "")).toEqual(["baseUrl"]);
+    expect(missingFields(need, [], undefined, " http://127.0.0.1:8000/v1 ")).toEqual([]);
+    const saved = account("openai-compatible", "openai-compatible", {
+      baseUrl: { value: "http://127.0.0.1:8000/v1", source: "account" },
+    });
+    expect(missingFields(need, [saved], undefined)).toEqual([]);
+    expect(missingFields(need, [saved], undefined, "")).toEqual(["baseUrl"]);
+    const inherited = account("openai-compatible", "openai-compatible", {
+      baseUrl: { value: "http://127.0.0.1:8000/v1", source: "env" },
+    });
+    expect(missingFields(need, [inherited], undefined, "")).toEqual([]);
+    const fromSettings = account("openai-compatible", "openai-compatible", {
+      baseUrl: { value: "http://127.0.0.1:8000/v1", source: "settings" },
+    });
+    expect(missingFields(need, [fromSettings], undefined, "")).toEqual([]);
+    expect(
+      missingFields({ account: "fish-speech", provider: "fish-speech" }, [], undefined),
+    ).toEqual([]);
+  });
+
+  test("clearing a saved model draft in KeysStep writes null so provider default or env applies", () => {
+    const base = rows({
+      "voice.provider": { value: "openai-compatible", source: "persona" },
+      "voice.model": { value: "kokoro", source: "persona" },
+    });
+    expect(modelAfter(roleById("voice"), base, { "voice.model": "" }, [])).toBe("tts-1");
+    expect(pickChanges(base, { "voice.model": "" }, [])).toEqual({
+      persona: { "voice.model": null },
+      app: {},
+    });
+
+    const mindEnv = rows({
+      "mind.provider": { value: "openai-compatible", source: "persona" },
+      "mind.model": { value: "custom-llm", source: "persona", envValue: "qwen3" },
+    });
+    expect(modelAfter(roleById("mind"), mindEnv, { "mind.model": "" }, [])).toBe("qwen3");
+    expect(
+      modelAfter(
+        roleById("mind"),
+        rows({
+          "mind.provider": { value: "openai-compatible", source: "persona" },
+          "mind.model": { value: "custom-llm", source: "persona" },
+        }),
+        { "mind.model": "" },
+        [],
+      ),
+    ).toBeNull();
+    expect(
+      modelAfter(
+        roleById("mind"),
+        rows({
+          "mind.provider": { value: "openai", source: "persona" },
+          "mind.model": { value: "gpt-6-luna", source: "persona", envValue: "qwen3" },
+        }),
+        { "mind.provider": "openai-compatible" },
+        [],
+      ),
+    ).toBeNull();
   });
 });

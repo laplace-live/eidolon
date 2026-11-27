@@ -6,6 +6,7 @@ import { stripMarkup } from "../../markup.ts";
 import { textUnits } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection, voiceOf } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
+import { fishSpeechRoot } from "../wav.ts";
 import { mp3DurationMs } from "./mp3.ts";
 import {
   baseOf,
@@ -59,6 +60,29 @@ const SONIOX_TTS_URL = "https://tts-rt.soniox.com/tts";
 // The API version pipedog's Cartesia service speaks.
 const CARTESIA_VERSION = "2026-03-01";
 
+async function synthesizeOpenAI({ selection, text, voice, options }: Job): Promise<Speech> {
+  const speaker = selection.offer.voices?.kind === "preset" ? named(voice, selection) : voice;
+  const key = selection.apiKey as string | undefined;
+  const response = await send(
+    selection,
+    `${baseOf(selection)}/audio/speech`,
+    {
+      headers: {
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: selection.model,
+        input: text,
+        ...(speaker ? { voice: speaker } : {}),
+        response_format: "mp3",
+      }),
+    },
+    options,
+  );
+  return mp3(response);
+}
+
 /** Each provider's batch speech synthesis, by catalog id: one for every provider that speaks. */
 export const SYNTHESIZERS: { readonly [P in ProviderId]?: (job: Job) => Promise<Speech> } = {
   async fish({ selection, text, voice, options }) {
@@ -86,26 +110,31 @@ export const SYNTHESIZERS: { readonly [P in ProviderId]?: (job: Job) => Promise<
     return mp3(response);
   },
 
-  async openai({ selection, text, voice, options }) {
+  async "fish-speech"({ selection, text, voice, options }) {
+    const key = selection.apiKey as string | undefined;
     const response = await send(
       selection,
-      `${baseOf(selection)}/audio/speech`,
+      `${fishSpeechRoot(baseOf(selection))}/v1/tts`,
       {
         headers: {
-          Authorization: `Bearer ${selection.apiKey}`,
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: selection.model,
-          input: text,
-          voice: named(voice, selection),
-          response_format: "mp3",
+          text,
+          ...(voice ? { reference_id: voice } : {}),
+          format: "mp3",
+          mp3_bitrate: 128,
+          normalize: false,
         }),
       },
       options,
     );
     return mp3(response);
   },
+
+  openai: synthesizeOpenAI,
+  "openai-compatible": synthesizeOpenAI,
 
   async elevenlabs({ selection, text, voice, options }) {
     const path = `/v1/text-to-speech/${encodeURIComponent(named(voice, selection))}`;

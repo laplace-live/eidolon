@@ -184,6 +184,29 @@ describe("adding and editing accounts", () => {
     expect(refused.status).toBe(400);
   });
 
+  test("finite field options are validated and canonicalized", async () => {
+    const call = api();
+    const bad = await call("POST", "/accounts", {
+      provider: "openai-compatible",
+      baseUrl: "http://127.0.0.1:1234/v1",
+      options: { sttProtocol: "websocket" },
+    });
+    expect(bad.status).toBe(400);
+
+    const added = await call("POST", "/accounts", {
+      provider: "openai-compatible",
+      baseUrl: "http://127.0.0.1:1234/v1",
+      options: { sttProtocol: "REALTIME" },
+    });
+    expect(added.status).toBe(201);
+    expect(added.body.options).toEqual({ sttProtocol: { value: "realtime", source: "account" } });
+
+    expect(
+      (await call("PUT", `/accounts/${added.body.id}`, { options: { sttProtocol: "invalid" } }))
+        .status,
+    ).toBe(400);
+  });
+
   test("what isn't an account, a provider or a value is refused", async () => {
     const call = api();
     expect((await call("PUT", "/accounts/ghost", { name: "x" })).body.error.code).toBe(

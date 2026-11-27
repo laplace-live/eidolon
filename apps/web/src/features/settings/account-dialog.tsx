@@ -28,12 +28,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { refreshAccounts } from "@/lib/accounts";
 import { type AccountUpdate, type AccountView, asApiError, call } from "@/lib/api";
-import { ACCOUNT_FIELD_LABELS, CATEGORY_LABELS } from "@/lib/labels";
+import { ACCOUNT_FIELD_LABELS, ACCOUNT_FIELD_OPTION_LABELS, CATEGORY_LABELS } from "@/lib/labels";
 import { type Category, PROVIDERS, type Provider, providerById } from "@/lib/providers";
 
 /** What a provider offers, in the viewer's language: "Chat · Voice". */
@@ -99,6 +106,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
   const [baseUrl, setBaseUrl] = useState("");
   const [options, setOptions] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
+  const [tried, setTried] = useState(false);
 
   // Every opening starts from the account as saved, or from nothing.
   useEffect(() => {
@@ -115,6 +123,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
       ),
     );
     setOutcome(null);
+    setTried(false);
   }, [open, account]);
 
   const check = useMutation({
@@ -143,6 +152,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
       else if (account?.baseUrl.source === "account") body.baseUrl = null;
       const changed: Record<string, string | null> = {};
       for (const field of provider.fields ?? []) {
+        if (!(field.key in options)) continue;
         const typed = (options[field.key] ?? "").trim();
         if (typed !== "") changed[field.key] = typed;
         else if (account?.options[field.key]?.source === "account") changed[field.key] = null;
@@ -172,16 +182,21 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
     },
   });
 
-  function submit(event: SubmitEvent) {
-    event.preventDefault();
-    save.mutate();
-  }
-
   const busy = save.isPending || removeKey.isPending;
   const keySource = account?.key.source ?? null;
   const takesKey = provider !== null && provider.credential !== null;
   const needsBase = provider !== null && provider.baseUrl === null && provider.baseUrlEnv !== null;
+  const inheritedBase =
+    account !== null && account.baseUrl.source !== "account" ? account.baseUrl.value : null;
+  const baseMissing = needsBase && baseUrl.trim() === "" && inheritedBase === null;
   const pages = provider === null ? undefined : keyPages(provider.id);
+
+  function submit(event: SubmitEvent) {
+    event.preventDefault();
+    setTried(true);
+    if (baseMissing) return;
+    save.mutate();
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -278,6 +293,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                     spellCheck={false}
                     className="font-mono md:text-[0.8125rem]"
                     value={baseUrl}
+                    aria-invalid={tried && baseMissing}
                     placeholder={
                       account?.baseUrl.source !== "account"
                         ? (account?.baseUrl.value ?? provider.baseUrl ?? "https://")
@@ -291,37 +307,77 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                   />
                   <FieldDescription>
                     {sourceNote(account?.baseUrl.source ?? null, provider.baseUrlEnv) ??
-                      (needsBase
-                        ? t`Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1.`
-                        : t`Leave it empty for the provider's own API, or point it at a proxy or another region.`)}
+                      (provider.id === "fish-speech"
+                        ? t`Your Fish Speech server's address, such as http://127.0.0.1:8080.`
+                        : needsBase
+                          ? t`Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1.`
+                          : t`Leave it empty for the provider's own API, or point it at a proxy or another region.`)}
                   </FieldDescription>
+                  {tried && baseMissing && <FieldError>{t`Required.`}</FieldError>}
                 </Field>
               )}
-              {(provider.fields ?? []).map((field) => (
-                <Field key={field.key}>
-                  <FieldLabel htmlFor={`${ids.base}-${field.key}`}>
-                    {ACCOUNT_FIELD_LABELS[field.key]
-                      ? t(ACCOUNT_FIELD_LABELS[field.key])
-                      : field.label}
-                  </FieldLabel>
-                  <Input
-                    id={`${ids.base}-${field.key}`}
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={options[field.key] ?? ""}
-                    placeholder={account?.options[field.key]?.value ?? ""}
-                    onChange={(event) =>
-                      setOptions((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    disabled={busy}
-                  />
-                  {sourceNote(account?.options[field.key]?.source ?? null, field.env) && (
-                    <FieldDescription>
-                      {sourceNote(account?.options[field.key]?.source ?? null, field.env)}
-                    </FieldDescription>
-                  )}
-                </Field>
-              ))}
+              {(provider.fields ?? []).map((field) => {
+                const optionLabels = ACCOUNT_FIELD_OPTION_LABELS[field.key];
+                return (
+                  <Field key={field.key}>
+                    <FieldLabel htmlFor={`${ids.base}-${field.key}`}>
+                      {ACCOUNT_FIELD_LABELS[field.key]
+                        ? t(ACCOUNT_FIELD_LABELS[field.key])
+                        : field.label}
+                    </FieldLabel>
+                    {field.options ? (
+                      <Select
+                        value={
+                          field.key in options && options[field.key] === ""
+                            ? "__default__"
+                            : options[field.key] ||
+                              account?.options[field.key]?.value ||
+                              field.default ||
+                              ""
+                        }
+                        onValueChange={(value) =>
+                          setOptions((current) => ({
+                            ...current,
+                            [field.key]: value === "__default__" ? "" : value,
+                          }))
+                        }
+                        disabled={busy}
+                      >
+                        <SelectTrigger id={`${ids.base}-${field.key}`} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {account?.options[field.key]?.source === "account" && (
+                            <SelectItem value="__default__">{t`Use Default`}</SelectItem>
+                          )}
+                          {field.options.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {optionLabels?.[option] ? t(optionLabels[option]) : option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`${ids.base}-${field.key}`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={options[field.key] ?? ""}
+                        placeholder={account?.options[field.key]?.value ?? ""}
+                        onChange={(event) =>
+                          setOptions((current) => ({ ...current, [field.key]: event.target.value }))
+                        }
+                        disabled={busy}
+                      />
+                    )}
+                    {sourceNote(account?.options[field.key]?.source ?? null, field.env) && (
+                      <FieldDescription>
+                        {sourceNote(account?.options[field.key]?.source ?? null, field.env)}
+                      </FieldDescription>
+                    )}
+                  </Field>
+                );
+              })}
               {outcome && <CheckResultView provider={provider.id} outcome={outcome} />}
               {save.isError && <ErrorAlert error={save.error} />}
               {removeKey.isError && <ErrorAlert error={removeKey.error} />}
@@ -334,7 +390,10 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setProvider(null)}
+                onClick={() => {
+                  setProvider(null);
+                  setTried(false);
+                }}
                 disabled={busy}
               >
                 <ArrowLeftIcon data-icon="inline-start" />

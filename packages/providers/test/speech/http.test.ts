@@ -1,9 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
+import { FishSpeechSelfHosted } from "../../src/speech/stream/fish-speech.ts";
+import { SpeechError } from "../../src/speech/stream/http.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
 import { OpenAISpeech } from "../../src/speech/stream/openai.ts";
+import { encodeWav, pcmBody, stripWavHeader } from "../../src/speech/wav.ts";
 import { useFakeClock } from "../clock.ts";
 import {
   bytesOf,
@@ -349,4 +352,171 @@ test("openSpeech speaks for the voice role in scope, and refuses before connecti
   expect(() => openSpeech()).toThrow("MiniMax needs a group id: set MINIMAX_GROUP_ID");
   setEnv({ TTS_PROVIDER: undefined });
   expect(() => openSpeech()).toThrow("Fish Audio needs an API key: set FISH_API_KEY");
+});
+
+test("FishSpeechSelfHosted strips /v1, omits unset auth/reference_id, and strips WAV headers", async () => {
+  fake = await fakeServer({
+    http: () => new Response(encodeWav(new Int16Array([11, -22, 33]), 44100)),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "fish-speech",
+    FISH_SPEECH_BASE_URL: `${fake.base}/v1/`,
+  });
+  const stream = keep(openSpeech());
+  expect(stream).toBeInstanceOf(FishSpeechSelfHosted);
+  expect(stream.sampleRate).toBe(44100);
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "你好。" });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [11, -22, 33] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+  const [req] = fake.requests as [HttpRequest];
+  expect(req.path).toBe("/v1/tts");
+  expect(req.headers.get("authorization")).toBeNull();
+  expect(req.headers.get("model")).toBeNull();
+  expect(JSON.parse(req.body)).toEqual({
+    text: "你好。",
+    format: "pcm",
+    streaming: true,
+    normalize: false,
+  });
+});
+
+test("openai-compatible TTS allows omitted voice and optional API key", async () => {
+  fake = await fakeServer({
+    http: () => new Response(encodeWav(new Int16Array([7, 8]), 24000)),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "openai-compatible",
+    OPENAI_COMPATIBLE_BASE_URL: `${fake.base}/v1/`,
+  });
+  const stream = keep(openSpeech());
+  expect(stream).toBeInstanceOf(OpenAISpeech);
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "Hi." });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [7, 8] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+  const [req] = fake.requests as [HttpRequest];
+  expect(req.path).toBe("/v1/audio/speech");
+  expect(req.headers.get("authorization")).toBeNull();
+  expect(JSON.parse(req.body)).toEqual({
+    input: "Hi.",
+    model: "tts-1",
+    response_format: "pcm",
+  });
+});
+
+test("pcmBody strips WAV headers across chunk boundaries and preserves raw PCM", async () => {
+  const wav = encodeWav(new Int16Array([11, -22, 33, -44]), 44100);
+  // Insert a 5-byte JUNK subchunk (odd size, padded to 6 data bytes) before `data`.
+  const extra = new Uint8Array([
+    0x4a, 0x55, 0x4e, 0x4b, 0x03, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x00,
+  ]);
+  const withExtra = new Uint8Array(wav.length + extra.length);
+  withExtra.set(wav.subarray(0, 36), 0);
+  withExtra.set(extra, 36);
+  withExtra.set(wav.subarray(36), 36 + extra.length);
+  expect(stripWavHeader(withExtra)).toEqual(wav.subarray(44));
+
+  fake = await fakeServer({
+    // Split directly inside RIFF, WAVE, extra JUNK, data header, and PCM body.
+    http: () =>
+      streamed([
+        withExtra.subarray(0, 2),
+        withExtra.subarray(2, 10),
+        withExtra.subarray(10, 39),
+        withExtra.subarray(39, 54),
+        withExtra.subarray(54),
+      ]),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "fish-speech",
+    FISH_SPEECH_BASE_URL: `${fake.base}`,
+  });
+  const stream = keep(openSpeech());
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "喂。" });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [11, -22, 33, -44] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+
+  // Raw PCM that begins with "RI" (0x52, 0x49) passes through intact once it diverges from "RIFF".
+  const collectBody = async (chunks: Uint8Array[]) => {
+    const out: number[] = [];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    for await (const chunk of pcmBody(body)) out.push(...chunk);
+    return out;
+  };
+  expect(await collectBody([new Uint8Array([0x52, 0x49]), new Uint8Array([0x00, 0x01])])).toEqual([
+    0x52, 0x49, 0x00, 0x01,
+  ]);
+  const emptyWav = encodeWav(new Int16Array(0), 44100);
+  expect(await collectBody([emptyWav.subarray(0, 22), emptyWav.subarray(22, 44)])).toEqual([]);
+  await expect(collectBody([wav.subarray(0, 22), wav.subarray(22, 44)])).rejects.toThrow(
+    "Truncated WAV audio",
+  );
+
+  // Malformed RIFF/WAVE streams exceeding 64 KiB without a `data` chunk stop probing and flush.
+  const oversize = new Uint8Array(64 * 1024 + 16);
+  oversize.set(wav.subarray(0, 12), 0);
+  oversize.set([0x4a, 0x55, 0x4e, 0x4b, 0xff, 0xff, 0x01, 0x00], 12);
+  const yielded: Uint8Array[] = [];
+  const oversizeBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(oversize);
+      controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+      controller.close();
+    },
+  });
+  for await (const chunk of pcmBody(oversizeBody)) yielded.push(chunk);
+  expect(yielded.length).toBe(2);
+  expect(yielded[0]?.length).toBe(oversize.length);
+  expect(yielded[1]).toEqual(new Uint8Array([1, 2, 3, 4]));
+
+  // Trailing RIFF metadata subchunks past the `data` extent are discarded, and bad WAV formats reject.
+  const withTrailer = new Uint8Array(wav.length + 12);
+  withTrailer.set(wav, 0);
+  new DataView(withTrailer.buffer).setUint32(4, withTrailer.length - 8, true);
+  withTrailer.set([0x4c, 0x49, 0x53, 0x54, 4, 0, 0, 0, 1, 2, 3, 4], wav.length);
+  expect(stripWavHeader(withTrailer)).toEqual(wav.subarray(44));
+  expect(await collectBody([withTrailer.subarray(0, 48), withTrailer.subarray(48)])).toEqual([
+    ...wav.subarray(44),
+  ]);
+
+  const stereo = encodeWav(new Int16Array([1, 2]), 24000, 2);
+  await expect(collectBody([stereo])).rejects.toThrow(SpeechError);
+  const wrongRateBody = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(wav);
+      c.close();
+    },
+  });
+  await expect(
+    (async () => {
+      for await (const _ of pcmBody(wrongRateBody, 24000)) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow("Unsupported WAV sample rate");
 });

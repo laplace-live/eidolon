@@ -457,4 +457,15 @@ describe("accounts", () => {
       "soniox",
     ]);
   });
+
+  test("none explicitly turns off optional hearing and voice roles without breaking required ones", () => {
+    expect(select("hearing", sources({ STT_PROVIDER: "none" }))).toBeNull();
+    expect(select("voice", sources({ TTS_PROVIDER: "NONE" }))).toBeNull();
+    expect(() => selectRequired("voice", sources({ TTS_PROVIDER: "none" }))).toThrow(
+      "speech is turned off (TTS_PROVIDER=none)",
+    );
+    expect(() => select("mind", sources({ LLM_PROVIDER: "none" }))).toThrow(
+      "LLM_PROVIDER=none is no provider or account Eidolon knows",
+    );
+  });
 });

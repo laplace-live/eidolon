@@ -13,6 +13,7 @@ import {
 import type { AccountView, SettingRow } from "@/lib/api";
 import {
   CALL_ROLES,
+  OFF_PROVIDER,
   providerById,
   providerOfAccount,
   providersFor,
@@ -22,7 +23,7 @@ import {
   SETUP_ROLES,
 } from "@/lib/providers";
 import { RECOMMENDED_ROLES } from "./first-run";
-import { flagOn } from "./wizard";
+import { flagOn, ownValue } from "./wizard";
 
 export type PickedRole = (typeof SETUP_ROLES)[number];
 
@@ -70,8 +71,7 @@ type Listed = readonly Pick<AccountView, "id" | "provider" | "name">[];
 
 /**
  * What can fill `role`: every provider that offers it, as its default account, with the other
- * accounts Settings has of it, the recommended one first. A provider whose API base is the user's
- * own server is listed only once an account of it is set up; `current` always is.
+ * accounts Settings has of it, the recommended one first; `current` always is.
  */
 export function choicesFor(
   role: Role,
@@ -83,17 +83,18 @@ export function choicesFor(
   for (const provider of providersFor(role.category)) {
     const own = listed.filter((account) => account.provider === provider.id);
     const fallback = own.find((account) => account.id === provider.id);
-    if (fallback !== undefined || provider.baseUrl !== null) {
-      choices.push({
-        account: provider.id,
-        name: fallback?.name ?? provider.name,
-        recommended: provider.id === role.defaultProvider,
-      });
-    }
+    choices.push({
+      account: provider.id,
+      name: fallback?.name ?? provider.name,
+      recommended: provider.id === role.defaultProvider,
+    });
     for (const account of own) {
       if (account.id === provider.id) continue;
       choices.push({ account: account.id, name: account.name, recommended: false });
     }
+  }
+  if (role.optional) {
+    choices.push({ account: OFF_PROVIDER, name: "Off", recommended: false });
   }
   if (current !== null && !choices.some((choice) => choice.account === current)) {
     choices.push({ account: current, name: current, recommended: false });
@@ -113,7 +114,8 @@ export function modelAfter(
   drafts: Readonly<Record<string, string>>,
   accounts: AccountList | undefined,
 ): string | null {
-  const typed = strip(drafts[`${role.path}.model`] ?? "");
+  const modelPath = `${role.path}.model`;
+  const typed = strip(drafts[modelPath] ?? "");
   if (typed !== "") return typed;
   const moved =
     effectiveProviderType(role, rows, {}, accounts) !==
@@ -159,6 +161,7 @@ export function pickChanges(
     const role = SETUP_ROLES.map(roleById).find((entry) => `${entry.path}.provider` === path);
     if (role === undefined) {
       if (value !== "") values[path] = value;
+      else if (ownValue(row) !== null) values[path] = null;
     } else if (value !== effectiveProvider(role, rows, {})) {
       values[path] = value;
     }
@@ -250,12 +253,32 @@ export function keyNeeds(
  */
 export function missingFields(
   need: Pick<KeyNeed, "account" | "provider">,
-  accounts: readonly Pick<AccountView, "id" | "options">[] | undefined,
+  accounts:
+    | readonly (Pick<AccountView, "id" | "options"> & Partial<Pick<AccountView, "baseUrl">>)[]
+    | undefined,
   typed: Readonly<Record<string, string>> | undefined,
+  typedBaseUrl?: string,
 ): string[] {
+  const provider = providerById(need.provider);
   const account = accounts?.find((entry) => entry.id === need.account);
-  return (providerById(need.provider)?.fields ?? [])
-    .filter((field) => (account?.options[field.key]?.value ?? null) === null)
-    .filter((field) => (typed?.[field.key] ?? "").trim() === "")
-    .map((field) => field.key);
+  const missing: string[] = [];
+  const inheritedBase =
+    account?.baseUrl && account.baseUrl.source !== "account" ? account.baseUrl.value : null;
+  const effectiveBase =
+    typedBaseUrl !== undefined
+      ? typedBaseUrl.trim() || (inheritedBase ?? "")
+      : (account?.baseUrl?.value ?? "");
+  if (provider?.baseUrl === null && provider.baseUrlEnv !== null && effectiveBase === "") {
+    missing.push("baseUrl");
+  }
+  for (const field of provider?.fields ?? []) {
+    if (field.optional) continue;
+    if (
+      (account?.options[field.key]?.value ?? null) === null &&
+      (typed?.[field.key] ?? "").trim() === ""
+    ) {
+      missing.push(field.key);
+    }
+  }
+  return missing;
 }

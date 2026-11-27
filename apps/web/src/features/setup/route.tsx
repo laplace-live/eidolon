@@ -29,9 +29,13 @@ export function Component() {
   const [target, setTarget] = useState<VoiceTarget | null>(null);
   const [persona, setPersona] = useState<PersonaRef | null>(null);
   const [created, setCreated] = useState(false);
+  const [voiceSkipped, setVoiceSkipped] = useState(false);
   const keysReady = status.data ? !requiredKeyMissing(status.data) : false;
 
-  const back = () => setStep((current) => previousStep(current) ?? current);
+  const back = () =>
+    setStep((current) =>
+      current === "memory" && voiceSkipped ? "persona" : (previousStep(current) ?? current),
+    );
   const forward = () => setStep(nextStep);
   const activeTarget: VoiceTarget | null = status.data
     ? { kind: "existing", persona: status.data.persona }
@@ -83,8 +87,16 @@ export function Component() {
                   initial={target}
                   onBack={back}
                   onDone={(next) => {
+                    setVoiceSkipped(false);
                     setTarget(next);
                     forward();
+                  }}
+                  onSkipVoice={(done, made) => {
+                    setVoiceSkipped(true);
+                    setCreated(made);
+                    setTarget({ kind: "existing", persona: done });
+                    setPersona(done);
+                    setStep("memory");
                   }}
                 />
               )}
@@ -94,8 +106,8 @@ export function Component() {
                   onBack={back}
                   onDone={(done) => {
                     // She exists now: going back to this step must not create her a second time.
+                    setCreated(voiceTarget.kind === "create");
                     if (voiceTarget.kind === "create") {
-                      setCreated(true);
                       setTarget({ kind: "existing", persona: done });
                     }
                     setPersona(done);

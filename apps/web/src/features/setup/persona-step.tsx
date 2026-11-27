@@ -14,13 +14,22 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { accountsQuery } from "@/lib/accounts";
 import { type ApiError, asApiError, call } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { addAvatar } from "./avatar";
 import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
-import type { PersonaRef } from "./personas";
+import { activatePersona, createPersona, type PersonaRef, refreshPersonas } from "./personas";
 import { StepCard } from "./step-card";
-import { DEMO_PERSONA, EMPTY_PERSONA, type PersonaDraft, personaErrors } from "./wizard";
+import {
+  DEMO_PERSONA,
+  EMPTY_PERSONA,
+  type PersonaDraft,
+  personaErrors,
+  shouldSkipVoiceStep,
+  targetUsesRealtime,
+} from "./wizard";
 
 /** Whose voice the next step picks: a persona that exists, or one it will create. */
 export type VoiceTarget =
@@ -81,16 +90,19 @@ export function PersonaStep({
   initial,
   onBack,
   onDone,
+  onSkipVoice,
 }: {
   readonly initial: VoiceTarget | null;
   readonly onBack: () => void;
   readonly onDone: (target: VoiceTarget) => void;
+  readonly onSkipVoice?: (persona: PersonaRef, created: boolean) => void;
 }) {
   const { t } = useLingui();
   const nameId = useId();
   const queryClient = useQueryClient();
   const personas = useQuery(personasQuery);
   const settings = useQuery(settingsQuery());
+  const accounts = useQuery(accountsQuery);
   const [choice, setChoice] = useState<Choice | null>(() => {
     if (initial?.kind === "create") return "create";
     if (initial?.kind === "existing") {
@@ -106,6 +118,8 @@ export function PersonaStep({
   );
   const [viewerName, setViewerName] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  // Kept so retrying activation after creation succeeds doesn't POST a duplicate persona.
+  const [createdPersona, setCreatedPersona] = useState<PersonaRef | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
@@ -116,12 +130,14 @@ export function PersonaStep({
   }
 
   const list = personas.data.personas;
+  const activeId = personas.data.active;
+  const activeSettings = settings.data.settings;
   const demo = list.find((persona) => persona.id === DEMO_PERSONA);
-  const active = list.find((persona) => persona.id === personas.data.active);
+  const active = list.find((persona) => persona.id === activeId);
   const current = active && active.id !== DEMO_PERSONA ? active : undefined;
   // A rerun keeps the active persona instead of switching to the demo.
   const chosen: Choice = choice ?? (current ? "current" : demo ? "demo" : "create");
-  const nameRow = settings.data.settings.find((row) => row.path === VIEWER_NAME);
+  const nameRow = activeSettings.find((row) => row.path === VIEWER_NAME);
   const savedName = typeof nameRow?.value === "string" ? nameRow.value : "";
   const name = viewerName ?? savedName;
   const taken = list.map((persona) => persona.id);
@@ -142,11 +158,40 @@ export function PersonaStep({
         });
         await queryClient.invalidateQueries({ queryKey: ["settings"] });
       }
-      if (chosen === "create") onDone({ kind: "create", draft, avatar });
-      else {
-        const persona = chosen === "demo" ? demo : current;
-        if (persona) onDone({ kind: "existing", persona });
+      const existingPersona = chosen === "demo" ? demo : current;
+      if (onSkipVoice) {
+        const creating = chosen === "create";
+        const targetSettings =
+          !creating && existingPersona !== undefined && existingPersona.id !== activeId
+            ? (await queryClient.query(settingsQuery(existingPersona.id))).settings
+            : activeSettings;
+        const accountList = (accounts.data ?? (await queryClient.query(accountsQuery))).accounts;
+        const skip = shouldSkipVoiceStep(
+          targetUsesRealtime(targetSettings, creating),
+          targetSettings,
+          accountList,
+        );
+        if (skip) {
+          let committed: PersonaRef;
+          if (chosen === "create") {
+            let created =
+              createdPersona?.id === draft.id ? createdPersona : await createPersona(draft, null);
+            if (created !== createdPersona && avatar) created = await addAvatar(created, avatar);
+            setCreatedPersona(created);
+            committed = created;
+          } else if (existingPersona) {
+            committed = existingPersona;
+          } else {
+            return;
+          }
+          if (activeId !== committed.id) await activatePersona(committed.id);
+          await refreshPersonas(queryClient);
+          onSkipVoice(committed, chosen === "create");
+          return;
+        }
       }
+      if (chosen === "create") onDone({ kind: "create", draft, avatar });
+      else if (existingPersona) onDone({ kind: "existing", persona: existingPersona });
     } catch (error) {
       setFailure(asApiError(error));
     } finally {
