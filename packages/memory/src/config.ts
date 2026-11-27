@@ -59,9 +59,12 @@ export interface MemorySearchSettings {
  * non-empty so an existing `.env` still keeps memory on.
  */
 export function isMemoryConfigured(): boolean {
-  const envExplicit = pyStrip(envVariable("MEM0_ENABLED") ?? "");
-  if (envExplicit !== "") return envFlag("MEM0_ENABLED", true);
-  if (pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== "") return true;
+  if (
+    pyStrip(envVariable("MEM0_ENABLED") ?? "") === "" &&
+    pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== ""
+  ) {
+    return true;
+  }
   return envFlag("MEM0_ENABLED", true);
 }
 

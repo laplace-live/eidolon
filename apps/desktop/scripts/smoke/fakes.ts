@@ -88,6 +88,7 @@ interface Message {
 export interface ChatRequest {
   readonly model?: unknown;
   readonly stream?: unknown;
+  readonly response_format?: { readonly type?: unknown };
   readonly messages?: readonly Message[];
   readonly tools?: readonly { readonly function?: { readonly name?: unknown } }[];
 }
@@ -614,21 +615,23 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
         return;
       case "POST /v1/chat/completions": {
         const chat = sent as ChatRequest;
-        if ((sent.response_format as { type?: unknown } | undefined)?.type === "json_object") {
+        const completion = (id: string, content: string) =>
           json(response, 200, {
-            id: "chatcmpl-mem0",
+            id,
             object: "chat.completion",
             created: 0,
             model: typeof chat.model === "string" ? chat.model : "fake-chat",
             choices: [
               {
                 index: 0,
-                message: { role: "assistant", content: '{"facts":[],"memory":[]}' },
+                message: { role: "assistant", content },
                 finish_reason: "stop",
               },
             ],
             usage: UNPRICED,
           });
+        if (chat.response_format?.type === "json_object") {
+          completion("chatcmpl-mem0", '{"facts":[],"memory":[]}');
           return;
         }
         chats.push(chat);
@@ -637,20 +640,7 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
           return;
         }
         const { texts } = answerTo(chat, knobs.taskFolder);
-        json(response, 200, {
-          id: "chatcmpl-desktop-smoke",
-          object: "chat.completion",
-          created: 0,
-          model: typeof chat.model === "string" ? chat.model : "fake-chat",
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: texts.join("") },
-              finish_reason: "stop",
-            },
-          ],
-          usage: UNPRICED,
-        });
+        completion("chatcmpl-desktop-smoke", texts.join(""));
         return;
       }
       case "POST /v1/embeddings": {

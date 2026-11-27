@@ -22,6 +22,7 @@ import {
   SETUP_ROLES,
 } from "@/lib/providers";
 import { RECOMMENDED_ROLES } from "./first-run";
+import { flagOn } from "./wizard";
 
 export type PickedRole = (typeof SETUP_ROLES)[number];
 
@@ -40,6 +41,23 @@ export const RIDERS = [
   "assistant",
   "search",
 ] as const satisfies readonly RoleId[];
+
+/** Which optional rider roles still take a key: rerank and assistant roles unless off, and selfies once the persona has an outfit. */
+export function activeRiders(rows: Rows, selfieReferences: number): (typeof RIDERS)[number][] {
+  const flag = (path: string) =>
+    flagOn(
+      rows.find((row) => row.path === path),
+      true,
+    );
+  const assistantOn = flag("assistant.enabled");
+  const active: Readonly<Record<(typeof RIDERS)[number], boolean>> = {
+    rerank: flag("knowledge.rerank.enabled"),
+    selfie: selfieReferences > 0,
+    assistant: assistantOn,
+    search: assistantOn,
+  };
+  return RIDERS.filter((role) => active[role]);
+}
 
 export interface Choice {
   /** The account it names; a provider's id names its default account. */

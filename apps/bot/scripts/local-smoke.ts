@@ -613,6 +613,7 @@ interface ChatRequest {
   readonly model?: unknown;
   readonly stream?: unknown;
   readonly stop?: unknown;
+  readonly response_format?: { readonly type?: unknown };
   readonly tools?: readonly {
     readonly function?: {
       readonly name?: unknown;
@@ -1119,9 +1120,7 @@ async function fakeEmbeddings(key: string, places: TaskPlaces) {
       if (refused !== null) return refused;
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
-        if (
-          (body as { response_format?: { type?: unknown } }).response_format?.type === "json_object"
-        ) {
+        if (body.response_format?.type === "json_object") {
           return Response.json({
             id: "chatcmpl-mem0",
             object: "chat.completion",
@@ -1134,7 +1133,7 @@ async function fakeEmbeddings(key: string, places: TaskPlaces) {
                 finish_reason: "stop",
               },
             ],
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+            usage: UNPRICED_USAGE,
           });
         }
         if (WORKER_MODELS.has(String(body.model)) && systemOf(body).startsWith(REVIEW_LEAD)) {

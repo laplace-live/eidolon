@@ -91,9 +91,8 @@ const FLAG_ON = new Set(["true", "1", "yes", "on"]);
  */
 export function envFlag(name: string, fallback: boolean): boolean {
   const layer = currentLayer();
-  const own = fromEnvironment(layer, name);
-  const picked = own !== undefined && pyStrip(own) !== "" ? own : (layer.values.get(name) ?? own);
-  const raw = picked === undefined ? "" : pyStrip(picked).toLowerCase();
+  const own = pyStrip(fromEnvironment(layer, name) ?? "");
+  const raw = (own !== "" ? own : pyStrip(layer.values.get(name) ?? "")).toLowerCase();
   if (raw === "") return fallback;
   return fallback ? !FLAG_OFF.has(raw) : FLAG_ON.has(raw);
 }

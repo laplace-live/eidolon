@@ -66,7 +66,7 @@ export function MemoryStep({
       footer={
         action === "next" ? (
           <>
-            {!fromEnv && on && (
+            {!fromEnv && (
               <Button variant="ghost" onClick={() => void saveEnabled(false)} disabled={busy}>
                 {t`Turn Off`}
               </Button>
@@ -86,16 +86,10 @@ export function MemoryStep({
         )
       }
     >
-      {on ? (
-        <Alert>
-          <CircleCheckIcon className="text-success" />
-          <AlertTitle>{t`Memory is on.`}</AlertTitle>
-        </Alert>
-      ) : (
-        <Alert>
-          <AlertTitle>{t`Memory is off.`}</AlertTitle>
-        </Alert>
-      )}
+      <Alert>
+        {on && <CircleCheckIcon className="text-success" />}
+        <AlertTitle>{on ? t`Memory is on.` : t`Memory is off.`}</AlertTitle>
+      </Alert>
       {fromEnv && (
         <FieldDescription>
           {t`Set by ${ph({ env: enabledRow?.envName ?? "MEM0_ENABLED" })} in the environment, which wins over the value saved here. Change it there.`}
