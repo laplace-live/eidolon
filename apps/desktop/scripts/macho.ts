@@ -1,5 +1,5 @@
-// Reads and rewrites the Mach-O LC_UUID on 64-bit MH_EXECUTE binaries so macOS Local Network
-// Privacy tracks each packaged Electron app and its helpers distinctly from stock Electron builds.
+// Detects Mach-O headers for staging, and reads and rewrites the LC_UUID on 64-bit MH_EXECUTE
+// binaries so macOS Local Network Privacy tracks packaged apps and helpers distinctly from stock Electron.
 import { createHash } from "node:crypto";
 import { closeSync, fstatSync, openSync, readSync, writeSync } from "node:fs";
 

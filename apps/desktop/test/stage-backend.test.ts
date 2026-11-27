@@ -1,6 +1,6 @@
-// stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to
-// pnpm-lock.yaml, what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license
-// texts. The staged payload itself is stage.test.ts's.
+// stage-backend's parts, on made-up lockfiles, folders, Mach-O and PE files, and zips: the pinning
+// to pnpm-lock.yaml, what is pruned, where the VC++ runtime goes, the macOS and unsigned-PE signing
+// lists, and the license texts. The staged payload itself is stage.test.ts's.
 import {
   type Dirent,
   existsSync,
@@ -978,6 +978,16 @@ describe("the macOS signing list", () => {
           data: macho64(),
           deflate: true,
         },
+        {
+          name: "Electron.app/Contents/Library/LoginItems/Electron Login Helper.app/",
+          data: Buffer.alloc(0),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Library/LoginItems/Electron Login Helper.app/Contents/MacOS/Electron Login Helper",
+          data: macho64(),
+          deflate: true,
+        },
       ]),
     );
     expect(macSignPathsInZip(file, "LAPLACE Eidolon")).toEqual([
@@ -989,6 +999,8 @@ describe("the macOS signing list", () => {
       "Frameworks/LAPLACE Eidolon Helper.app/Contents/MacOS/LAPLACE Eidolon Helper",
       "Frameworks/Squirrel.framework",
       "Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt",
+      "Library/LoginItems/LAPLACE Eidolon Login Helper.app",
+      "Library/LoginItems/LAPLACE Eidolon Login Helper.app/Contents/MacOS/LAPLACE Eidolon Login Helper",
       "MacOS/LAPLACE Eidolon",
     ]);
   });

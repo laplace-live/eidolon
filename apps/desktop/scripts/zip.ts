@@ -18,6 +18,12 @@ export interface ZipEntry {
   readonly symlink: boolean;
 }
 
+export interface ZipArchive {
+  readonly entries: ZipEntry[];
+  read(entry: ZipEntry): Buffer;
+  readHead(entry: ZipEntry, maxBytes: number): Buffer;
+}
+
 function readAt(fd: number, offset: number, length: number): Buffer {
   const buffer = Buffer.alloc(length);
   const read = readSync(fd, buffer, 0, length, offset);
@@ -25,12 +31,8 @@ function readAt(fd: number, offset: number, length: number): Buffer {
   return buffer;
 }
 
-/** Every file in the zip at `file`, by its name there, with full or prefix reads for it. */
-export function readZip(file: string): {
-  entries: ZipEntry[];
-  read(entry: ZipEntry): Buffer;
-  readHead(entry: ZipEntry, maxBytes: number): Buffer;
-} {
+/** Calls `fn` with every entry in the zip at `file` and full or prefix readers over one open descriptor. */
+export function withZip<T>(file: string, fn: (archive: ZipArchive) => T): T {
   const fd = openSync(file, "r");
   try {
     const size = fstatSync(fd).size;
@@ -72,48 +74,43 @@ export function readZip(file: string): {
       entries.push(entry);
       at += 46 + nameLength + directory.readUInt16LE(at + 30) + directory.readUInt16LE(at + 32);
     }
-    return {
+    return fn({
       entries,
-      read: (entry) => readEntry(file, entry),
-      readHead: (entry, maxBytes) => readEntry(file, entry, maxBytes),
-    };
+      read: (entry) => readEntry(fd, file, entry),
+      readHead: (entry, maxBytes) => readEntry(fd, file, entry, maxBytes),
+    });
   } finally {
     closeSync(fd);
   }
 }
 
-function readEntry(file: string, entry: ZipEntry, maxBytes?: number): Buffer {
+function readEntry(fd: number, file: string, entry: ZipEntry, maxBytes?: number): Buffer {
   if (maxBytes !== undefined && (maxBytes <= 0 || entry.uncompressedSize === 0)) {
     return Buffer.alloc(0);
   }
-  const fd = openSync(file, "r");
-  try {
-    const header = readAt(fd, entry.headerAt, 30);
-    if (header.readUInt32LE(0) !== LOCAL_HEADER) throw new Error(`${file}: no ${entry.name}`);
-    const dataAt = entry.headerAt + 30 + header.readUInt16LE(26) + header.readUInt16LE(28);
-    if (entry.method === 0) {
-      const length =
-        maxBytes === undefined ? entry.compressedSize : Math.min(entry.compressedSize, maxBytes);
-      return readAt(fd, dataAt, length);
-    }
-    if (entry.method === 8) {
-      if (maxBytes === undefined) {
-        return inflateRawSync(readAt(fd, dataAt, entry.compressedSize));
-      }
-      const chunkLen = Math.min(entry.compressedSize, Math.max(4096, maxBytes * 4));
-      const head = inflateRawSync(readAt(fd, dataAt, chunkLen), {
-        finishFlush: constants.Z_SYNC_FLUSH,
-      });
-      if (
-        head.length >= Math.min(entry.uncompressedSize, maxBytes) ||
-        chunkLen === entry.compressedSize
-      ) {
-        return head.subarray(0, maxBytes);
-      }
-      return inflateRawSync(readAt(fd, dataAt, entry.compressedSize)).subarray(0, maxBytes);
-    }
-    throw new Error(`${file}: ${entry.name} is compressed with method ${entry.method}`);
-  } finally {
-    closeSync(fd);
+  const header = readAt(fd, entry.headerAt, 30);
+  if (header.readUInt32LE(0) !== LOCAL_HEADER) throw new Error(`${file}: no ${entry.name}`);
+  const dataAt = entry.headerAt + 30 + header.readUInt16LE(26) + header.readUInt16LE(28);
+  if (entry.method === 0) {
+    const length =
+      maxBytes === undefined ? entry.compressedSize : Math.min(entry.compressedSize, maxBytes);
+    return readAt(fd, dataAt, length);
   }
+  if (entry.method === 8) {
+    if (maxBytes === undefined) {
+      return inflateRawSync(readAt(fd, dataAt, entry.compressedSize));
+    }
+    const chunkLen = Math.min(entry.compressedSize, Math.max(4096, maxBytes * 4));
+    const head = inflateRawSync(readAt(fd, dataAt, chunkLen), {
+      finishFlush: constants.Z_SYNC_FLUSH,
+    });
+    if (
+      head.length >= Math.min(entry.uncompressedSize, maxBytes) ||
+      chunkLen === entry.compressedSize
+    ) {
+      return head.subarray(0, maxBytes);
+    }
+    return inflateRawSync(readAt(fd, dataAt, entry.compressedSize)).subarray(0, maxBytes);
+  }
+  throw new Error(`${file}: ${entry.name} is compressed with method ${entry.method}`);
 }

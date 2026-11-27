@@ -1,9 +1,10 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
 // (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to pnpm-lock.yaml and pruned, and the node shim (node-shim.ts). On Windows the natives
-// also get the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files
-// the release signs.
+// pinned to pnpm-lock.yaml and pruned, and the node shim (node-shim.ts). On macOS
+// .stage/darwin-arm64/mac-sign.json lists the Mach-O and bundle paths to codesign; on Windows the
+// natives get the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE
+// files the release signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -29,7 +30,7 @@ import { type LsNode, lockDrift, lockedTree, pinOverrides, readPnpmLock } from "
 import { isMacho } from "./macho.ts";
 import { NODE_SHIM, shimPnpm, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
-import { readZip } from "./zip.ts";
+import { withZip } from "./zip.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 const ROOT = resolve(DESKTOP, "../..");
@@ -264,15 +265,16 @@ export function peFilesIn(dir: string): PeFile[] {
  * renames electron_wer.dll after the executable, `<productName>_wer.dll`.
  */
 export function peFilesInZip(zip: string, productName: string): PeFile[] {
-  const archive = readZip(zip);
-  return archive.entries
-    .filter((entry) => /\.(node|dll)$/i.test(entry.name))
-    .flatMap((entry) => {
-      const pe = readPe(archive.read(entry));
-      const name = basename(entry.name);
-      if (pe === null) return [];
-      return [[name === "electron_wer.dll" ? `${productName}_wer.dll` : name, pe] as const];
-    });
+  return withZip(zip, (archive) =>
+    archive.entries
+      .filter((entry) => /\.(node|dll)$/i.test(entry.name))
+      .flatMap((entry) => {
+        const pe = readPe(archive.read(entry));
+        const name = basename(entry.name);
+        if (pe === null) return [];
+        return [[name === "electron_wer.dll" ? `${productName}_wer.dll` : name, pe] as const];
+      }),
+  );
 }
 
 /** The names of the files among `pes` whose certificate table is empty, once each. */
@@ -280,19 +282,16 @@ export function unsignedNames(pes: readonly PeFile[]): string[] {
   return [...new Set(pes.filter(([, pe]) => !pe.signed).map(([name]) => name))].sort();
 }
 
+const MAC_HELPER_PATH =
+  /^(Frameworks\/(?=Electron Helper)|Library\/LoginItems\/(?=Electron Login Helper))Electron( Helper[^/]*| Login Helper)\.app(?:(\/Contents\/MacOS\/)Electron\2)?(?=\/|$)/;
+
 function renameMacElectronPath(rel: string, productName: string): string {
   if (rel === "MacOS/Electron") return `MacOS/${productName}`;
-  return rel
-    .replace(
-      /^(Frameworks\/)Electron( Helper[^/]*\.app)(\/Contents\/MacOS\/)Electron( Helper[^/]*)$/,
-      `$1${productName}$2$3${productName}$4`,
-    )
-    .replace(/^(Frameworks\/)Electron( Helper[^/]*\.app)(?=\/|$)/, `$1${productName}$2`)
-    .replace(
-      /^(Library\/LoginItems\/)Electron( Login Helper\.app)(\/Contents\/MacOS\/)Electron( Login Helper)$/,
-      `$1${productName}$2$3${productName}$4`,
-    )
-    .replace(/^(Library\/LoginItems\/)Electron( Login Helper\.app)(?=\/|$)/, `$1${productName}$2`);
+  return rel.replace(
+    MAC_HELPER_PATH,
+    (_, dir: string, suffix: string, macos?: string) =>
+      `${dir}${productName}${suffix}.app${macos ? `${macos}${productName}${suffix}` : ""}`,
+  );
 }
 
 /**
@@ -325,28 +324,29 @@ export function macSignPathsInDir(dir: string, prefix = ""): string[] {
  * names electron-builder gives the main and helper bundles (`electronMac.js`).
  */
 export function macSignPathsInZip(zip: string, productName: string): string[] {
-  const archive = readZip(zip);
-  const contentsPrefix = "Electron.app/Contents/";
-  const symlinks = archive.entries
-    .filter((entry) => entry.symlink && entry.name.startsWith(contentsPrefix))
-    .map((entry) => entry.name.slice(contentsPrefix.length).replace(/\/$/, ""));
-  const underSymlink = (rel: string) =>
-    symlinks.some((link) => rel === link || rel.startsWith(`${link}/`));
-  const found: string[] = [];
-  for (const entry of archive.entries) {
-    if (!entry.name.startsWith(contentsPrefix) || entry.symlink) continue;
-    const rel = entry.name.slice(contentsPrefix.length);
-    if (!rel || underSymlink(rel)) continue;
-    if (rel.endsWith("/")) {
-      const trimmed = rel.slice(0, -1);
-      if (/\.(app|framework)$/.test(trimmed)) {
-        found.push(renameMacElectronPath(trimmed, productName));
+  return withZip(zip, (archive) => {
+    const contentsPrefix = "Electron.app/Contents/";
+    const symlinks = archive.entries
+      .filter((entry) => entry.symlink && entry.name.startsWith(contentsPrefix))
+      .map((entry) => entry.name.slice(contentsPrefix.length).replace(/\/$/, ""));
+    const underSymlink = (rel: string) =>
+      symlinks.some((link) => rel === link || rel.startsWith(`${link}/`));
+    const found: string[] = [];
+    for (const entry of archive.entries) {
+      if (!entry.name.startsWith(contentsPrefix) || entry.symlink) continue;
+      const rel = entry.name.slice(contentsPrefix.length);
+      if (!rel || underSymlink(rel)) continue;
+      if (rel.endsWith("/")) {
+        const trimmed = rel.slice(0, -1);
+        if (/\.(app|framework)$/.test(trimmed)) {
+          found.push(renameMacElectronPath(trimmed, productName));
+        }
+      } else if (entry.uncompressedSize >= 4 && isMacho(archive.readHead(entry, 8))) {
+        found.push(renameMacElectronPath(rel, productName));
       }
-    } else if (entry.uncompressedSize >= 4 && isMacho(archive.readHead(entry, 8))) {
-      found.push(renameMacElectronPath(rel, productName));
     }
-  }
-  return [...new Set(found)].sort();
+    return [...new Set(found)].sort();
+  });
 }
 
 interface ElectronGet {

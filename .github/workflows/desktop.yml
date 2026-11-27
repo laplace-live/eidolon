@@ -78,7 +78,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request'
       || (github.event_name == 'push' && github.ref_type == 'tag')
-      || (github.event_name == 'workflow_dispatch' && !(inputs.release_index || inputs.update_test) && (!inputs.sign || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/electron'))
+      || (github.event_name == 'workflow_dispatch' && !(inputs.release_index || inputs.update_test))
     runs-on: macos-latest
     timeout-minutes: 35
     defaults:
@@ -159,9 +159,9 @@ jobs:
       AZURE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
       AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
 
-  # Its own job, after both legs: a re-run sends the very bytes the build signed, where a re-run of a
-  # leg would sign new ones. One release's at a time, queued: two at once could both find R2 serving
-  # neither, and the older write the flat files last.
+  # Its own job, after both legs and electron-node: a re-run sends the very bytes the build signed,
+  # where a re-run of a leg would sign new ones. One release's at a time, queued: two at once could
+  # both find R2 serving neither, and the older write the flat files last.
   upload:
     name: Upload to R2
     needs: [signed-mac, signed-win, electron-node]

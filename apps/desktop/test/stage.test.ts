@@ -1,8 +1,8 @@
 // The payloads staged in apps/desktop/.stage (`pnpm build:desktop` stages this machine's): what
 // each holds, pinned to pnpm-lock.yaml and pruned, its natives loading from it, its node shim, on
-// Windows the VC++ runtime and the signatures, and the packaged app holding it file for file. A
-// target with no stage, or one staged from another version or pnpm-lock.yaml, skips, unless
-// EIDOLON_REQUIRE_STAGE=1 and it is this machine's.
+// macOS the signing list and pruned locales, on Windows the VC++ runtime and the signatures, and
+// the packaged app holding it file for file. A target with no stage, or one staged from another
+// version or pnpm-lock.yaml, skips, unless EIDOLON_REQUIRE_STAGE=1 and it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";

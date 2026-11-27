@@ -168,9 +168,9 @@ jobs:
           EIDOLON_EXPECT_PROVISIONING_PROFILE: ${{ runner.os == 'macOS' && secrets.APPLE_PROVISIONING_PROFILE != '' && '1' || '0' }}
         run: node apps/desktop/scripts/signed-check.ts
 
-      # What the payload holds, pinned to pnpm-lock.yaml; its natives loading from it; on Windows the
-      # VC++ runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged
-      # after it, the app holding it file for file.
+      # What the payload holds, pinned to pnpm-lock.yaml; its natives loading from it; on macOS the
+      # signing list and pruned locales, and on Windows the VC++ runtime beside them and every DLL
+      # signed by Microsoft or listed to sign; and, packaged after it, the app holding it file for file.
       - name: The staged payload
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 15
