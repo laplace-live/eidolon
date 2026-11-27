@@ -1,5 +1,11 @@
 # @laplace.live/eidolon
 
+## 0.22.0
+
+### Minor Changes
+
+- 8936907: Make voice optional and add custom speech and self-hosted Fish Speech providers
+
 ## 0.21.0
 
 ### Minor Changes

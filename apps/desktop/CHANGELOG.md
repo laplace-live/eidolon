@@ -1,5 +1,11 @@
 # laplace-eidolon-desktop
 
+## 0.10.0
+
+### Minor Changes
+
+- 8936907: Make voice optional and add custom speech and self-hosted Fish Speech providers
+
 ## 0.9.0
 
 ### Minor Changes
