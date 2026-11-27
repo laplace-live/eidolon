@@ -1,5 +1,14 @@
 # @laplace.live/eidolon
 
+## 0.20.0
+
+### Minor Changes
+
+- 9e76a97: Unlimit task context and raise the default spend pause to $10
+- 6f28164: Show unread badges in the chat list and keep background chats updated
+- 9e76a97: Add desktop chat notifications with custom avatars and group avatar grids
+- 7720a5d: Pair with remote Eidolon servers via Subspace direct links or stateless JWKS relay
+
 ## 0.19.0
 
 ### Minor Changes

@@ -2,6 +2,52 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-27T02:27:37.948Z",
+      "versions": {
+        "laplace-eidolon": "0.20.0",
+        "@laplace.live/eidolon": "0.20.0",
+        "laplace-eidolon-desktop": "0.8.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Unlimit task context and raise the default spend pause to $10"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Show unread badges in the chat list and keep background chats updated"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Add desktop chat notifications with custom avatars and group avatar grids"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Pair with remote Eidolon servers via Subspace direct links or stateless JWKS relay"
+        }
+      ]
+    },
+    {
       "date": "2026-11-26T19:37:50.018Z",
       "versions": {
         "laplace-eidolon": "0.19.0",
