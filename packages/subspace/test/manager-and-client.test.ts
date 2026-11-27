@@ -1550,6 +1550,156 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(invitesByAttempt[1]).toEqual([hash1, hash2]);
   });
 
+  test("host_hello_ack installs grants paired mid-restore and refuses connected state if ws closes mid-flush", async () => {
+    const healthServer = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: "h.p.s", expiresAt: Date.now() + 60_000 }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    let attempt = 0;
+    const installedByAttempt: string[][] = [];
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+
+    const dir = tempDir("subspace-restore-grants-");
+    const store = new SubspaceStore(dir);
+    store.saveRelayAuth({
+      authUrl: "http://127.0.0.1:0",
+      relayUrl: "ws://127.0.0.1:0",
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    store.addGrant({
+      id: "g_initial",
+      clientName: "Initial",
+      tokenSha256: "a".repeat(64),
+      relayTokenSha256: "b".repeat(64),
+      mode: "relay",
+      createdAt: Date.now(),
+      lastSeenAt: null,
+    });
+
+    healthServer.on("upgrade", (req, socket, head) => {
+      if (req.url !== RELAY_PATHS.HOST_CONTROL) {
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const myAttempt = attempt;
+        attempt += 1;
+        const installed: string[] = [];
+        installedByAttempt.push(installed);
+        let relayHostId = "";
+        ws.on("message", async (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+          if (msg.type === "host_hello") {
+            relayHostId = String(msg.relayHostId);
+            const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString("base64");
+            await computeRelayControlProof(
+              relayPriv,
+              String(msg.hostPublicKeyB64),
+              challengeB64,
+              "alice",
+            );
+            ws.send(
+              JSON.stringify({
+                type: "host_challenge",
+                challengeB64,
+                relayEphPubB64: relayKp.publicKeyB64,
+                userId: "alice",
+              }),
+            );
+          } else if (msg.type === "host_challenge_ack") {
+            if (myAttempt === 0) {
+              // Simulate a concurrent pairing grant arriving while host_hello_ack is flushing g_initial.
+              const realRead = store.readGrants.bind(store);
+              let addedConcurrent = false;
+              vi.spyOn(store, "readGrants").mockImplementation(() => {
+                const list = realRead();
+                if (!addedConcurrent) {
+                  addedConcurrent = true;
+                  queueMicrotask(() => {
+                    store.addGrant({
+                      id: "g_concurrent",
+                      clientName: "Concurrent",
+                      tokenSha256: "c".repeat(64),
+                      relayTokenSha256: "d".repeat(64),
+                      mode: "relay",
+                      createdAt: Date.now(),
+                      lastSeenAt: null,
+                    });
+                  });
+                }
+                return list;
+              });
+            }
+            ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+            if (myAttempt === 1) {
+              // On second connect, immediately close server-side right as host_hello_ack lands.
+              ws.close(1012, "closing mid-restore");
+            }
+          } else if (msg.type === "device_install") {
+            installed.push(String(msg.grantId));
+            ws.send(JSON.stringify({ type: "device_installed", grantId: String(msg.grantId) }));
+          }
+        });
+      });
+    });
+    await new Promise<void>((resolve) => healthServer.listen(0, "127.0.0.1", resolve));
+    const addr = healthServer.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const c of wss.clients) c.terminate();
+          wss.close(() => healthServer.close(() => resolve()));
+        }),
+    );
+
+    store.saveRelayAuth({
+      authUrl: `http://127.0.0.1:${port}`,
+      relayUrl: `ws://127.0.0.1:${port}`,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const events: boolean[] = [];
+    const host = new SubspaceHost({
+      store,
+      serverVersion: () => "0.19.0",
+      dispatch: async () => Response.json({ ok: true }),
+      onEvent: (ev) => {
+        if (ev.type === "relay-state") events.push(ev.connected);
+      },
+    });
+    cleanups.push(() => host.stop());
+
+    host.startRelay();
+    await vi.waitFor(() => {
+      expect(host.relayConnected).toBe(true);
+      expect(installedByAttempt[0]).toEqual(["g_initial", "g_concurrent"]);
+    });
+
+    // Trigger reconnect (attempt 1) where server closes socket immediately on host_hello_ack,
+    // followed by clean attempt 2; attempt 1 must never publish a transient connected=true.
+    vi.restoreAllMocks();
+    events.length = 0;
+    for (const c of wss.clients) c.close(1012, "cycle");
+    await vi.waitFor(
+      () => {
+        expect(attempt).toBeGreaterThanOrEqual(3);
+        expect(host.relayConnected).toBe(true);
+      },
+      { timeout: 8_000 },
+    );
+    expect(events.filter(Boolean)).toHaveLength(1);
+  });
+
   test("pairServer rejects re-pairing a host with active calls even when activate is false without dropping its tunnel", async () => {
     const hostDir = tempDir("subspace-repair-host-");
     const clientDir = tempDir("subspace-repair-client-");

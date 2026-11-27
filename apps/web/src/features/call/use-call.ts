@@ -3,7 +3,13 @@
 // leaves running can reach the next one.
 import { EidolonClient, type WaitState, Watchdog } from "@laplace.live/eidolon-sdk";
 import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { ChatCallRequestData } from "@/lib/api";
+import {
+  type ChatCallRequestData,
+  getExpectedSubspaceHost,
+  getHostMutationEpoch,
+  notifyExpectedHostConflict,
+  subscribeHostMutationEpoch,
+} from "@/lib/api";
 import { hangUpClient } from "./hang-up";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
@@ -93,6 +99,7 @@ export function useCall(signals: CallSignals): Call {
   const activeRef = useRef<ActiveCall | null>(null);
   // Bumped by every start and hang-up: an older start stops at its next await.
   const attemptRef = useRef(0);
+  const dialingAttemptRef = useRef(0);
   /** The last call hung up, until its client has disconnected. */
   const leavingRef = useRef<Promise<void>>(Promise.resolve());
   const typedRef = useRef(0);
@@ -249,7 +256,10 @@ export function useCall(signals: CallSignals): Call {
     async (target?: ChatCallRequestData) => {
       if (activeRef.current !== null) return;
       const attempt = ++attemptRef.current;
-      const stale = () => attempt !== attemptRef.current;
+      dialingAttemptRef.current = attempt;
+      const expectedHost = getExpectedSubspaceHost();
+      const startEpoch = getHostMutationEpoch();
+      const stale = () => attempt !== attemptRef.current || getHostMutationEpoch() !== startEpoch;
       dispatchPhase({ type: "start", at: Date.now() });
       dispatchTranscript({ type: "reset" });
       watchdog.clear();
@@ -257,55 +267,62 @@ export function useCall(signals: CallSignals): Call {
       setMicProblem(null);
       setBotError(null);
 
-      // Until the server hears the last call go, it refuses another in the same chat.
-      await leavingRef.current;
-      if (stale()) return;
-      const problem = await probeMic(navigator.mediaDevices);
-      if (stale()) return;
-      if (problem !== null) {
-        dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "mic", problem } });
-        return;
-      }
-      let iceServers: RTCIceServer[];
       try {
-        iceServers = await fetchIceServers();
-      } catch (error) {
+        // Until the server hears the last call go, it refuses another in the same chat.
+        await leavingRef.current;
         if (stale()) return;
-        const detail = error instanceof Error ? error.message : "";
-        dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "ice", detail } });
-        return;
-      }
-      if (stale()) return;
+        const problem = await probeMic(navigator.mediaDevices);
+        if (stale()) return;
+        if (problem !== null) {
+          dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "mic", problem } });
+          return;
+        }
+        let iceServers: RTCIceServer[];
+        try {
+          iceServers = await fetchIceServers(expectedHost);
+        } catch (error) {
+          if (stale()) return;
+          const detail = error instanceof Error ? error.message : "";
+          dispatchPhase({ type: "failed", at: Date.now(), end: { kind: "ice", detail } });
+          return;
+        }
+        if (stale()) return;
 
-      const client = new EidolonClient({ iceServers, enableMic: true });
-      const call: ActiveCall = {
-        client,
-        botLeft: false,
-        heardAt: Date.now(),
-        detach() {},
-      };
-      call.detach = subscribe(call);
-      activeRef.current = call;
-      dispatchPhase({ type: "dial" });
-      try {
-        await client.connect(offerOptions(target));
-      } catch (error) {
+        const client = new EidolonClient({ iceServers, enableMic: true });
+        const call: ActiveCall = {
+          client,
+          botLeft: false,
+          heardAt: Date.now(),
+          detach() {},
+        };
+        call.detach = subscribe(call);
+        activeRef.current = call;
+        dispatchPhase({ type: "dial" });
+        try {
+          await client.connect(offerOptions(target, expectedHost));
+        } catch (error) {
+          if (stale()) return;
+          release(call);
+          const end = connectEnd(error);
+          if (end.kind === "connect" && end.status === 409) notifyExpectedHostConflict();
+          dispatchPhase({ type: "failed", at: Date.now(), end });
+          return;
+        }
         if (stale()) return;
-        release(call);
-        dispatchPhase({ type: "failed", at: Date.now(), end: connectEnd(error) });
-        return;
+        call.heardAt = Date.now();
+        dispatchPhase({ type: "ready" });
+        // No one greets on a group call: it waits for the viewer, so it is answered as it comes up.
+        if (target?.group) dispatchPhase({ type: "answered", at: Date.now() });
+      } finally {
+        if (dialingAttemptRef.current === attempt) dialingAttemptRef.current = 0;
       }
-      if (stale()) return;
-      call.heardAt = Date.now();
-      dispatchPhase({ type: "ready" });
-      // No one greets on a group call: it waits for the viewer, so it is answered as it comes up.
-      if (target?.group) dispatchPhase({ type: "answered", at: Date.now() });
     },
     [subscribe, release, watchdog],
   );
 
   const hangUp = useCallback(async () => {
     attemptRef.current++;
+    dialingAttemptRef.current = 0;
     dispatchPhase({ type: "hang-up" });
     const call = activeRef.current;
     if (call !== null) {
@@ -316,6 +333,14 @@ export function useCall(signals: CallSignals): Call {
     }
     dispatchPhase({ type: "disconnected", at: Date.now(), end: { kind: "hung-up" } });
   }, [release]);
+
+  useEffect(
+    () =>
+      subscribeHostMutationEpoch(() => {
+        if (dialingAttemptRef.current !== 0 || activeRef.current !== null) void hangUp();
+      }),
+    [hangUp],
+  );
 
   const setMic = useCallback((on: boolean) => {
     activeRef.current?.client.enableMic(on);

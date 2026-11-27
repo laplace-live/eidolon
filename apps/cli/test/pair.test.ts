@@ -417,7 +417,11 @@ const server = createServer((req, res) => {
       share: { hostName: "ExitTest", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants: [] },
       relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
     }));
-    setTimeout(() => process.exit(3), 120);
+    return;
+  }
+  if (url.pathname === "/__exit" && req.method === "POST") {
+    res.writeHead(200).end("{}");
+    process.nextTick(() => process.exit(3));
     return;
   }
   res.writeHead(404).end();
@@ -438,12 +442,15 @@ server.listen(0, "127.0.0.1", () => {
         removedCalls += 1;
       });
       unsubscribeRemoved();
-      await new Promise<void>((resolve) => {
+      const exited = new Promise<void>((resolve) => {
         server.onExited(() => {
           keptCalls += 1;
           resolve();
         });
       });
+      const res = await fetch(`${server.server.baseUrl}/__exit`, { method: "POST" });
+      expect(res.ok).toBe(true);
+      await exited;
       expect(removedCalls).toBe(0);
       expect(keptCalls).toBe(1);
     } finally {

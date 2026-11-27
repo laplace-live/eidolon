@@ -15,7 +15,7 @@ import { callOn } from "@/features/chats/stream";
 import { pausePlayback } from "@/features/chats/voice";
 import { CompanionFeed } from "@/features/companion/feed";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
-import type { Status } from "@/lib/api";
+import { type Status, subscribeHostMutationEpoch } from "@/lib/api";
 import { subscribeWindowShows, windowShows } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { useRevalidate } from "@/router";
@@ -139,6 +139,16 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
     setTarget(null);
     setServerCall(null);
   }, [target, phase, active]);
+
+  useEffect(
+    () =>
+      subscribeHostMutationEpoch(() => {
+        placing.current = false;
+        setTarget(null);
+        setServerCall(null);
+      }),
+    [],
+  );
 
   useEffect(
     () => () => {

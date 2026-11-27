@@ -875,13 +875,29 @@ export class SubspaceHost {
         return;
       }
       case "host_hello_ack": {
-        const now = Date.now();
-        await Promise.all([
-          ...this.#deps.store
+        const installedGrantIds = new Set<string>();
+        let restoredInvites = false;
+        while (
+          this.#relayWs === ws &&
+          ws.readyState === WebSocket.OPEN &&
+          !this.#stopped &&
+          this.#relayWanted
+        ) {
+          const pendingGrants = this.#deps.store
             .readGrants()
-            .filter((grant) => grant.mode === "relay")
-            .map((grant) =>
-              sendWs(
+            .filter((grant) => grant.mode === "relay" && !installedGrantIds.has(grant.id));
+          const now = Date.now();
+          const pendingInvites = restoredInvites
+            ? []
+            : [...this.#invites.values()].filter(
+                (invite) => invite.mode === "relay" && invite.expiresAt > now,
+              );
+          restoredInvites = true;
+          if (pendingGrants.length === 0 && pendingInvites.length === 0) break;
+          await Promise.all([
+            ...pendingGrants.map((grant) => {
+              installedGrantIds.add(grant.id);
+              return sendWs(
                 ws,
                 JSON.stringify({
                   type: "device_install",
@@ -889,11 +905,9 @@ export class SubspaceHost {
                   tokenHash: grant.relayTokenSha256 ?? grant.tokenSha256,
                   clientName: grant.clientName,
                 }),
-              ).catch(() => {}),
-            ),
-          ...[...this.#invites.values()]
-            .filter((invite) => invite.mode === "relay" && invite.expiresAt > now)
-            .map(async (invite) => {
+              ).catch(() => {});
+            }),
+            ...pendingInvites.map(async (invite) => {
               if (!this.#invites.has(invite.id) || this.#relayWs !== ws) return;
               await sendWs(
                 ws,
@@ -905,8 +919,16 @@ export class SubspaceHost {
                 }),
               ).catch(() => {});
             }),
-        ]);
-        if (this.#relayWs !== ws || this.#stopped || !this.#relayWanted) return;
+          ]);
+        }
+        if (
+          this.#relayWs !== ws ||
+          ws.readyState !== WebSocket.OPEN ||
+          this.#stopped ||
+          !this.#relayWanted
+        ) {
+          return;
+        }
         this.#relayBackoffMs = 1_000;
         this.#setRelayState(true, null);
         return;

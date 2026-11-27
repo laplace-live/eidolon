@@ -14,6 +14,7 @@ export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
 let expectedSubspaceHost: string | undefined;
 let hostMutationEpoch = 0;
 const expectedHostConflictListeners = new Set<() => void>();
+const hostMutationEpochListeners = new Set<() => void>();
 
 export class StaleHostMutationError extends Error {
   override readonly name = "StaleHostMutationError";
@@ -25,10 +26,32 @@ export class StaleHostMutationError extends Error {
 
 export function bumpHostMutationEpoch(): void {
   hostMutationEpoch += 1;
+  for (const listener of [...hostMutationEpochListeners]) listener();
+}
+
+export function getHostMutationEpoch(): number {
+  return hostMutationEpoch;
+}
+
+export function subscribeHostMutationEpoch(listener: () => void): () => void {
+  hostMutationEpochListeners.add(listener);
+  return () => {
+    hostMutationEpochListeners.delete(listener);
+  };
 }
 
 export function setExpectedSubspaceHost(activeHostId: string | null): void {
   expectedSubspaceHost = activeHostId ?? "local";
+}
+
+export function getExpectedSubspaceHost(): string | undefined {
+  return expectedSubspaceHost;
+}
+
+export function expectedHostHeaders(
+  expectedHost: string | undefined = expectedSubspaceHost,
+): Record<string, string> {
+  return expectedHost === undefined ? {} : { "X-Eidolon-Expected-Host": expectedHost };
 }
 
 export function resetExpectedSubspaceHost(): void {
@@ -38,6 +61,10 @@ export function resetExpectedSubspaceHost(): void {
 
 export function primeExpectedSubspaceHost(activeHostId: string | null): void {
   if (expectedSubspaceHost === undefined) setExpectedSubspaceHost(activeHostId);
+}
+
+export function notifyExpectedHostConflict(): void {
+  for (const listener of [...expectedHostConflictListeners]) listener();
 }
 
 export function subscribeExpectedHostConflict(listener: () => void): () => void {
