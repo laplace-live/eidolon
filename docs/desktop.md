@@ -2034,8 +2034,9 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
      24 assume, and its system minimums, which this doc and [README.md](../README.md#system-requirements)
      state (update the `<!-- Electron 45 floors … -->` marker in `README.md` alongside any
      floor changes so `pnpm doc-check` passes);
-   - the stage's signing lists, read from Electron's zips: `mac-sign.json` on macOS (Electron's
-     Mach-O binaries and bundles) and `unsigned-pe.json` on Windows (Electron's unsigned DLLs).
+   - the stage's signing lists, which read Electron's entries from its zips: `mac-sign.json` on
+     macOS (Electron's Mach-O binaries and bundles) and `unsigned-pe.json` on Windows (Electron's
+     unsigned DLLs).
 5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `pnpm test
    apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both
    [smokes](#the-smokes), `pnpm smoke:desktop` and, on macOS, `pnpm smoke:desktop:dev`.

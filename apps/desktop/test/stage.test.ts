@@ -443,12 +443,21 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           expect(skipped(join(contents, "Resources/eidolon/data/models/silero_vad.onnx"))).toBe(
             true,
           );
+          const appLocales = readdirSync(PACKAGED[target])
+            .filter((name) => name.endsWith(".lproj"))
+            .sort();
+          expect(appLocales).toEqual(["en.lproj", "zh_CN.lproj"]);
           const fwResources = join(
             contents,
             "Frameworks/Electron Framework.framework/Versions/A/Resources",
           );
           const locales = readdirSync(fwResources).filter((name) => name.endsWith(".lproj"));
-          expect(locales.every((name) => /^(en|zh_CN)/i.test(name))).toBe(true);
+          expect(locales).toEqual(expect.arrayContaining(["en.lproj", "zh_CN.lproj"]));
+          expect(
+            locales.filter(
+              (name) => !/^(?:en|zh_CN(?:_(?:FEMININE|MASCULINE|NEUTER))?)\.lproj$/.test(name),
+            ),
+          ).toEqual([]);
         }
       },
       120_000,
