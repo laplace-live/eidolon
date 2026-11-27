@@ -5,6 +5,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { app, dialog, Menu, Notification, type Session, shell } from "electron";
+import { isPermissionStatus, type PermissionStatus } from "../shared/bridge.ts";
 import { DOWNLOADS_FOLDER, DownloadPaths, type NoticeEvents, nativeUi } from "./background.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
@@ -25,6 +26,8 @@ interface MacNotifyAddon {
     groupTitle?: string;
   }): void;
   close(id: string): void;
+  getStatus(callback: (status: string) => void): void;
+  requestPermission(callback: (status: string) => void): void;
 }
 
 const MAX_MAC_PENDING = 64;
@@ -68,6 +71,31 @@ function loadMacNotify(): MacNotifyAddon | null {
     macAddon = null;
   }
   return macAddon;
+}
+
+function queryMacNotification(
+  ask: (addon: MacNotifyAddon, done: (status: string) => void) => void,
+): Promise<PermissionStatus> {
+  if (background || process.platform !== "darwin") return Promise.resolve("unknown");
+  const addon = loadMacNotify();
+  if (addon === null) return Promise.resolve("unknown");
+  return new Promise((resolve) => {
+    try {
+      ask(addon, (status) => resolve(isPermissionStatus(status) ? status : "unknown"));
+    } catch {
+      resolve("unknown");
+    }
+  });
+}
+
+/** Silent macOS UserNotifications authorization status; never runs in background mode. */
+export function macNotificationStatus(): Promise<PermissionStatus> {
+  return queryMacNotification((addon, done) => addon.getStatus(done));
+}
+
+/** Prompts macOS for notification authorization without sending a test banner; never runs in background mode. */
+export function requestMacNotificationPermission(): Promise<PermissionStatus> {
+  return queryMacNotification((addon, done) => addon.requestPermission(done));
 }
 
 export const native = nativeUi(

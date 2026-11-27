@@ -11,6 +11,7 @@ import {
   designatedRequirement,
   ensureNoWindowsInstall,
   gatekeeperCheck,
+  macBundleLocalNetworkChecks,
   macSignerCheck,
   nativeCheck,
   parseAppleXmlPlist,
@@ -245,6 +246,50 @@ ${APP}: satisfies its Designated Requirement
     };
     expect(stapleCheck(missing)).toMatchObject({ pass: false });
     expect(stapleCheck(missing).detail).toContain("does not have a ticket stapled to it");
+  });
+
+  test("validates Local Network usage description and unique non-stock Mach-O executable UUIDs", () => {
+    const validPlist = {
+      NSLocalNetworkUsageDescription:
+        "LAPLACE Eidolon uses your local network to connect directly to Subspace servers on your LAN.",
+    };
+    const uniqueUuids = new Map<string, string | null>([
+      ["Contents/MacOS/LAPLACE Eidolon", "11111111-2222-5333-8444-555555555555"],
+      [
+        "Contents/Frameworks/Helper.app/Contents/MacOS/Helper",
+        "aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee",
+      ],
+    ]);
+    expect(macBundleLocalNetworkChecks(validPlist, uniqueUuids).every((c) => c.pass)).toBe(true);
+
+    expect(macBundleLocalNetworkChecks({}, uniqueUuids)[0]).toMatchObject({
+      name: "Info.plist carries NSLocalNetworkUsageDescription",
+      pass: false,
+    });
+
+    const stockUuids = new Map<string, string | null>([
+      ["Contents/MacOS/LAPLACE Eidolon", "4c4c448e-5555-3144-a14c-bbd02afa9f74"],
+      [
+        "Contents/Frameworks/Helper.app/Contents/MacOS/Helper",
+        "aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee",
+      ],
+    ]);
+    expect(macBundleLocalNetworkChecks(validPlist, stockUuids)[1]).toMatchObject({
+      name: "app and helper executables carry unique non-stock Mach-O LC_UUIDs",
+      pass: false,
+    });
+
+    const dupUuids = new Map<string, string | null>([
+      ["Contents/MacOS/LAPLACE Eidolon", "11111111-2222-5333-8444-555555555555"],
+      [
+        "Contents/Frameworks/Helper.app/Contents/MacOS/Helper",
+        "11111111-2222-5333-8444-555555555555",
+      ],
+    ]);
+    expect(macBundleLocalNetworkChecks(validPlist, dupUuids)[1]).toMatchObject({
+      name: "app and helper executables carry unique non-stock Mach-O LC_UUIDs",
+      pass: false,
+    });
   });
 });
 
@@ -623,5 +668,25 @@ describe("macOS anti-doxxing checks", () => {
       "subject=C=US,O=LAPLACE Live LLC,OU=9H3CCD4YMM,CN=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM),UID=9H3CCD4YMM\n",
     );
     expect(provisioningProfileChecks(parsed, [realCert]).every((c) => c.pass)).toBe(true);
+  });
+
+  test("parses self-closing Apple XML1 plist tags with whitespace before />", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Enabled</key><true />
+  <key>Disabled</key><false />
+  <key>Empty</key><string />
+  <key>NestedDict</key><dict />
+  <key>NestedArray</key><array />
+</dict>
+</plist>`;
+    expect(parseAppleXmlPlist(xml)).toEqual({
+      Enabled: true,
+      Disabled: false,
+      Empty: "",
+      NestedDict: {},
+      NestedArray: [],
+    });
   });
 });

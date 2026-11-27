@@ -13,6 +13,7 @@ import {
   nativeImage,
   screen,
   session,
+  systemPreferences,
 } from "electron";
 import { BRIDGE, type DesktopCommand, type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
@@ -40,13 +41,19 @@ import { COMPANION_FILE, readCompanion } from "./companion.ts";
 import { Companion, CompanionLink } from "./companion-flow.ts";
 import { companionWindow, handleCompanionBridge } from "./companion-window.ts";
 import type { AppPaths } from "./controller.ts";
+import { createDesktopPermissions } from "./desktop-permissions.ts";
 import { folderDialogOptions, joinPending } from "./folder-dialog.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
 import { background, isLaunchRequest, primary, refused, request } from "./instance.ts";
 import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
 import { attachContextMenu, setApplicationMenu } from "./menu.ts";
 import { aboutPanel, type TrayActions, type UpdatesItem, updatesItem } from "./menus.ts";
-import { native, saveDownloads } from "./native.ts";
+import {
+  macNotificationStatus,
+  native,
+  requestMacNotificationPermission,
+  saveDownloads,
+} from "./native.ts";
 import { guardNavigation } from "./navigation.ts";
 import {
   failurePage,
@@ -677,6 +684,34 @@ function run(): void {
         updateDownload: () => updates?.download(),
         updateInstall: () => updates?.install(),
         updateSkip: () => updates?.skip(),
+        ...createDesktopPermissions({
+          platform: process.platform,
+          background,
+          packaged: app.isPackaged,
+          installedCopy,
+          execPath: process.execPath,
+          env: process.env,
+          log: mainLog,
+          getMediaStatus: (mediaType) => {
+            if (process.platform !== "darwin" && process.platform !== "win32") return "unknown";
+            try {
+              return systemPreferences.getMediaAccessStatus(mediaType);
+            } catch {
+              return "unknown";
+            }
+          },
+          askMicrophone: () =>
+            process.platform === "darwin"
+              ? systemPreferences.askForMediaAccess("microphone")
+              : Promise.resolve(false),
+          isAccessibilityTrusted: (prompt) =>
+            process.platform === "darwin"
+              ? systemPreferences.isTrustedAccessibilityClient(prompt)
+              : false,
+          getMacNotificationStatus: macNotificationStatus,
+          requestMacNotification: requestMacNotificationPermission,
+          openExternal: (url) => native.openExternal(url),
+        }),
       });
       handleCompanionBridge({
         linkApp: () => link.companionAsks(),

@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -226,6 +227,68 @@ static NSString* read_prop(napi_env env, napi_value obj, const char* key) {
 
 static bool has_bundle_identifier(void) {
   return [[NSBundle mainBundle] bundleIdentifier].length > 0;
+}
+
+typedef struct {
+  char* status;
+} StatusCallbackPayload;
+
+static const char* auth_status_string(UNAuthorizationStatus status) {
+  switch (status) {
+    case UNAuthorizationStatusNotDetermined:
+      return "not-determined";
+    case UNAuthorizationStatusDenied:
+      return "denied";
+    case UNAuthorizationStatusAuthorized:
+    case UNAuthorizationStatusProvisional:
+      return "granted";
+    default:
+      return "unknown";
+  }
+}
+
+static void call_status_js(napi_env env, napi_value js_cb, void* ctx, void* data) {
+  (void)ctx;
+  StatusCallbackPayload* payload = (StatusCallbackPayload*)data;
+  if (payload == NULL) return;
+  if (env != NULL && js_cb != NULL && payload->status != NULL) {
+    napi_value undef = NULL;
+    napi_value arg = NULL;
+    napi_value ignored = NULL;
+    if (napi_get_undefined(env, &undef) == napi_ok &&
+        napi_create_string_utf8(env, payload->status, NAPI_AUTO_LENGTH, &arg) == napi_ok) {
+      napi_call_function(env, undef, js_cb, 1, &arg, &ignored);
+    }
+  }
+  free(payload->status);
+  free(payload);
+}
+
+static napi_threadsafe_function create_status_tsfn(
+    napi_env env, napi_value callback, const char* name) {
+  napi_value resource_name = NULL;
+  napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &resource_name);
+  napi_threadsafe_function tsfn = NULL;
+  if (napi_create_threadsafe_function(
+          env, callback, NULL, resource_name, 0, 1, NULL, NULL, NULL, call_status_js, &tsfn) !=
+      napi_ok) {
+    return NULL;
+  }
+  return tsfn;
+}
+
+static void resolve_status_tsfn(napi_threadsafe_function tsfn, const char* status) {
+  if (tsfn == NULL) return;
+  StatusCallbackPayload* payload = calloc(1, sizeof(StatusCallbackPayload));
+  if (payload != NULL) {
+    payload->status = strdup(status != NULL ? status : "unknown");
+    if (payload->status == NULL ||
+        napi_call_threadsafe_function(tsfn, payload, napi_tsfn_nonblocking) != napi_ok) {
+      free(payload->status);
+      free(payload);
+    }
+  }
+  napi_release_threadsafe_function(tsfn, napi_tsfn_release);
 }
 
 static napi_value js_init(napi_env env, napi_callback_info info) {
@@ -493,18 +556,122 @@ static napi_value js_close(napi_env env, napi_callback_info info) {
   return undef;
 }
 
+static bool prepare_status_tsfn(
+    napi_env env, napi_callback_info info, const char* fn_name, const char* tsfn_name,
+    const char* tsfn_err, napi_threadsafe_function* out_tsfn) {
+  size_t argc = 1;
+  napi_value argv[1] = {NULL};
+  char err_msg[96];
+  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc < 1) {
+    snprintf(err_msg, sizeof(err_msg), "%s(callback) takes a callback function", fn_name);
+    napi_throw_error(env, NULL, err_msg);
+    return false;
+  }
+  napi_valuetype cb_type = napi_undefined;
+  if (napi_typeof(env, argv[0], &cb_type) != napi_ok || cb_type != napi_function) {
+    snprintf(err_msg, sizeof(err_msg), "%s(callback) requires a function argument", fn_name);
+    napi_throw_error(env, NULL, err_msg);
+    return false;
+  }
+  napi_threadsafe_function tsfn = create_status_tsfn(env, argv[0], tsfn_name);
+  if (tsfn == NULL) {
+    napi_throw_error(env, NULL, tsfn_err);
+    return false;
+  }
+  if (!has_bundle_identifier()) {
+    resolve_status_tsfn(tsfn, "unavailable");
+    *out_tsfn = NULL;
+    return true;
+  }
+  *out_tsfn = tsfn;
+  return true;
+}
+
+static napi_value js_get_status(napi_env env, napi_callback_info info) {
+  napi_threadsafe_function tsfn = NULL;
+  if (!prepare_status_tsfn(
+          env, info, "getStatus", "eidolon:mac-notify:status",
+          "couldn't create notification status callback", &tsfn)) {
+    return NULL;
+  }
+  if (tsfn != NULL) {
+    @autoreleasepool {
+      @try {
+        UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* settings) {
+          resolve_status_tsfn(tsfn, auth_status_string(settings.authorizationStatus));
+        }];
+      } @catch (NSException* ex) {
+        (void)ex;
+        resolve_status_tsfn(tsfn, "unknown");
+      }
+    }
+  }
+  napi_value undef = NULL;
+  napi_get_undefined(env, &undef);
+  return undef;
+}
+
+static napi_value js_request_permission(napi_env env, napi_callback_info info) {
+  napi_threadsafe_function tsfn = NULL;
+  if (!prepare_status_tsfn(
+          env, info, "requestPermission", "eidolon:mac-notify:request-permission",
+          "couldn't create notification permission callback", &tsfn)) {
+    return NULL;
+  }
+  if (tsfn != NULL) {
+    @autoreleasepool {
+      @try {
+        UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+        [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert |
+                                                 UNAuthorizationOptionSound)
+                              completionHandler:^(BOOL granted, NSError* _Nullable authError) {
+          (void)authError;
+          if (granted) {
+            resolve_status_tsfn(tsfn, "granted");
+            return;
+          }
+          @try {
+            [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* settings) {
+              resolve_status_tsfn(tsfn, auth_status_string(settings.authorizationStatus));
+            }];
+          } @catch (NSException* innerEx) {
+            (void)innerEx;
+            resolve_status_tsfn(tsfn, "denied");
+          }
+        }];
+      } @catch (NSException* ex) {
+        (void)ex;
+        resolve_status_tsfn(tsfn, "unknown");
+      }
+    }
+  }
+  napi_value undef = NULL;
+  napi_get_undefined(env, &undef);
+  return undef;
+}
+
 static napi_value register_exports(napi_env env, napi_value exports) {
   napi_value fn_init = NULL;
   napi_value fn_show = NULL;
   napi_value fn_close = NULL;
+  napi_value fn_get_status = NULL;
+  napi_value fn_request_permission = NULL;
   if (napi_create_function(env, "init", NAPI_AUTO_LENGTH, js_init, NULL, &fn_init) != napi_ok ||
       napi_create_function(env, "show", NAPI_AUTO_LENGTH, js_show, NULL, &fn_show) != napi_ok ||
-      napi_create_function(env, "close", NAPI_AUTO_LENGTH, js_close, NULL, &fn_close) != napi_ok) {
+      napi_create_function(env, "close", NAPI_AUTO_LENGTH, js_close, NULL, &fn_close) != napi_ok ||
+      napi_create_function(
+          env, "getStatus", NAPI_AUTO_LENGTH, js_get_status, NULL, &fn_get_status) != napi_ok ||
+      napi_create_function(
+          env, "requestPermission", NAPI_AUTO_LENGTH, js_request_permission, NULL,
+          &fn_request_permission) != napi_ok) {
     return NULL;
   }
   napi_set_named_property(env, exports, "init", fn_init);
   napi_set_named_property(env, exports, "show", fn_show);
   napi_set_named_property(env, exports, "close", fn_close);
+  napi_set_named_property(env, exports, "getStatus", fn_get_status);
+  napi_set_named_property(env, exports, "requestPermission", fn_request_permission);
   return exports;
 }
 

@@ -96,13 +96,29 @@ function invokes() {
     updateSkip: (...args: unknown[]) => {
       calls.push(["updateSkip", ...args]);
     },
+    permissions: async (...args: unknown[]) => {
+      calls.push(["permissions", ...args]);
+      return { background: false, items: [{ id: "microphone", status: "granted" }] };
+    },
+    requestPermission: async (id) => {
+      calls.push(["requestPermission", id]);
+      return { id, status: "granted", openedSettings: false };
+    },
+    openPermissionSettings: async (id) => {
+      calls.push(["openPermissionSettings", id]);
+      return true;
+    },
+    testLocalNetwork: async (target) => {
+      calls.push(["testLocalNetwork", target]);
+      return { ok: true, host: target.host, port: target.port, testedAt: 1 };
+    },
   };
   const list = appInvokes(actions);
   return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
 }
 
 describe("appInvokes", () => {
-  test("answers the folder dialog, the system options, the desktop companion, and the updater, one invoke each", () => {
+  test("answers the folder dialog, the system options, the desktop companion, the updater, and permissions, one invoke each", () => {
     expect(invokes().list.map(([channel]) => channel)).toEqual([
       BRIDGE.chooseFolder,
       BRIDGE.loginItem,
@@ -118,6 +134,10 @@ describe("appInvokes", () => {
       BRIDGE.updateDownload,
       BRIDGE.updateInstall,
       BRIDGE.updateSkip,
+      BRIDGE.permissions,
+      BRIDGE.requestPermission,
+      BRIDGE.openPermissionSettings,
+      BRIDGE.testLocalNetwork,
     ]);
   });
 
@@ -211,6 +231,51 @@ describe("appInvokes", () => {
     expect(calls).toEqual([
       ["setCompanion", { on: true }],
       ["setCompanion", { showAtLogin: false }],
+    ]);
+  });
+
+  test("permissions invokes accept only valid permission ids and local-network targets", async () => {
+    const { answer, calls } = invokes();
+    expect(await answer(BRIDGE.permissions)(app, null)).toEqual({
+      background: false,
+      items: [{ id: "microphone", status: "granted" }],
+    });
+    expect(await answer(BRIDGE.requestPermission)(app, "microphone")).toEqual({
+      id: "microphone",
+      status: "granted",
+      openedSettings: false,
+    });
+    expect(await answer(BRIDGE.openPermissionSettings)(app, "local-network")).toBe(true);
+    expect(
+      await answer(BRIDGE.testLocalNetwork)(app, { host: "10.0.1.5", port: 63427, extra: 1 }),
+    ).toEqual({ ok: true, host: "10.0.1.5", port: 63427, testedAt: 1 });
+
+    for (const badId of ["camera", "full-disk-access", "", null, 1, ["microphone"]]) {
+      expect(() => answer(BRIDGE.requestPermission)(app, badId)).toThrow(
+        "a permission must be a known permission id",
+      );
+      expect(() => answer(BRIDGE.openPermissionSettings)(app, badId)).toThrow(
+        "a permission must be a known permission id",
+      );
+    }
+    for (const badTarget of [
+      null,
+      "10.0.1.5",
+      [],
+      { host: "10.0.1.5" },
+      { host: 123, port: 63427 },
+      { host: "a".repeat(257), port: 63427 },
+      { host: "10.0.1.5", port: Number.NaN },
+    ]) {
+      expect(() => answer(BRIDGE.testLocalNetwork)(app, badTarget)).toThrow(
+        "a local network test takes a host and port",
+      );
+    }
+    expect(calls).toEqual([
+      ["permissions"],
+      ["requestPermission", "microphone"],
+      ["openPermissionSettings", "local-network"],
+      ["testLocalNetwork", { host: "10.0.1.5", port: 63427 }],
     ]);
   });
 });

@@ -173,6 +173,7 @@ export const ERROR_CODES = [
   "invalid-model",
   "unknown-model",
   "subspace-unreachable",
+  "local-network-blocked",
   "invalid-pairing-code",
   "pairing-expired",
   "pairing-failed",
@@ -2173,6 +2174,7 @@ export interface SubspaceServerView {
   readonly lastVersion: string | null;
   readonly connectionState: SubspaceConnectionState;
   readonly lastError: string | null;
+  readonly lastErrorCode?: string | null;
   readonly latencyMs: number | null;
 }
 

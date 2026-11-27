@@ -32,12 +32,18 @@ import {
   isCompanionDrawn,
   isCompanionSize,
   isLanguage,
+  isLocalNetworkTestRequest,
+  isPermissionId,
+  isPermissionStatus,
   isThemeSetting,
+  localNetworkTestResultOf,
   loginItemStateOf,
   openChatCommand,
   openTaskCommand,
   type PageChannel,
   pageAt,
+  permissionRequestResultOf,
+  permissionsStateOf,
   updateCheckOutcomeOf,
   updateStateOf,
   versionsOf,
@@ -123,6 +129,10 @@ describe("accepts", () => {
     BRIDGE.updateDownload,
     BRIDGE.updateInstall,
     BRIDGE.updateSkip,
+    BRIDGE.permissions,
+    BRIDGE.requestPermission,
+    BRIDGE.openPermissionSettings,
+    BRIDGE.testLocalNetwork,
   ];
   const SHELL_CHANNELS: PageChannel[] = [BRIDGE.retry, BRIDGE.showLogs, BRIDGE.quit];
   /** The app page's channels for the desktop companion. */
@@ -732,6 +742,78 @@ describe("the preload's bridges", () => {
     };
     const bridge = desktopBridge(ipc, "win32", { version: "", serverVersion: "" });
     await expect(bridge.loginItem()).rejects.toThrow("refused");
+  });
+
+  test("the app's bridge reads OS permissions, requests them, opens OS settings, and runs LAN checks", async () => {
+    const sampleState = {
+      background: false,
+      items: [
+        { id: "microphone", status: "granted" },
+        { id: "notifications", status: "not-determined" },
+        { id: "local-network", status: "unknown" },
+      ],
+    };
+    const { ipc, invoked } = fakeIpc([
+      {
+        ...sampleState,
+        extra: true,
+        items: [...sampleState.items, { id: "camera", status: "granted" }],
+      },
+      { id: "microphone", status: "granted", openedSettings: false },
+      true,
+      { ok: false, host: "10.0.1.5", port: 63427, testedAt: 100, failure: "blocked" },
+      { ok: true, host: "10.0.1.5", port: 63427, testedAt: 200 },
+    ]);
+    const bridge = desktopBridge(ipc, "darwin", { version: "", serverVersion: "" });
+    expect(await bridge.permissions()).toEqual(sampleState);
+    expect(await bridge.requestPermission("microphone")).toEqual({
+      id: "microphone",
+      status: "granted",
+      openedSettings: false,
+    });
+    expect(await bridge.openPermissionSettings("local-network")).toBe(true);
+    expect(await bridge.testLocalNetwork({ host: "10.0.1.5", port: 63427 })).toEqual({
+      ok: false,
+      host: "10.0.1.5",
+      port: 63427,
+      testedAt: 100,
+      failure: "blocked",
+    });
+    expect(permissionsStateOf(null)).toEqual({ background: false, items: [] });
+    expect(permissionRequestResultOf(null, "notifications")).toEqual({
+      id: "notifications",
+      status: "unknown",
+      openedSettings: false,
+    });
+    expect(localNetworkTestResultOf(null)).toEqual({
+      ok: false,
+      host: "",
+      port: 0,
+      testedAt: 0,
+      failure: "failed",
+    });
+    expect(await bridge.testLocalNetwork({ host: "10.0.1.5", port: 63427 })).toEqual({
+      ok: true,
+      host: "10.0.1.5",
+      port: 63427,
+      testedAt: 200,
+    });
+    await expect(bridge.requestPermission("camera" as never)).rejects.toThrow();
+    await expect(bridge.openPermissionSettings("bad" as never)).rejects.toThrow();
+    await expect(bridge.testLocalNetwork({ host: "10.0.1.5" } as never)).rejects.toThrow();
+    expect(isPermissionId("local-network")).toBe(true);
+    expect(isPermissionId("camera")).toBe(false);
+    expect(isPermissionStatus("not-determined")).toBe(true);
+    expect(isPermissionStatus("ready")).toBe(false);
+    expect(isLocalNetworkTestRequest({ host: "10.0.1.5", port: 63427 })).toBe(true);
+    expect(isLocalNetworkTestRequest({ host: "10.0.1.5", port: "63427" })).toBe(false);
+    expect(invoked).toEqual([
+      [BRIDGE.permissions],
+      [BRIDGE.requestPermission, "microphone"],
+      [BRIDGE.openPermissionSettings, "local-network"],
+      [BRIDGE.testLocalNetwork, { host: "10.0.1.5", port: 63427 }],
+      [BRIDGE.testLocalNetwork, { host: "10.0.1.5", port: 63427 }],
+    ]);
   });
 
   test("the shell's bridge sends each button's channel with nothing in it", () => {

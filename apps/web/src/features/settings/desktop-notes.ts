@@ -11,7 +11,7 @@ import type {
 } from "@/lib/desktop";
 
 /** Why this copy of the app can't offer an option, said under either row. */
-const UNAVAILABLE_NOTES: Readonly<Record<Unavailable, MessageDescriptor>> = {
+export const UNAVAILABLE_NOTES: Readonly<Record<Unavailable, MessageDescriptor>> = {
   background: msg`Background mode leaves this computer as it is.`,
   unpackaged: msg`Available in the installed app only.`,
   "outside-applications": msg`Move LAPLACE Eidolon to the Applications folder to use this.`,

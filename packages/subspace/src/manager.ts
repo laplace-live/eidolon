@@ -73,6 +73,7 @@ export interface SubspaceServerView {
   readonly lastVersion: string | null;
   readonly connectionState: SubspaceConnectionState;
   readonly lastError: string | null;
+  readonly lastErrorCode: SubspaceConnectError["code"] | null;
   readonly latencyMs: number | null;
 }
 
@@ -276,6 +277,7 @@ export class SubspaceManager {
           lastVersion: server.lastVersion,
           connectionState: client.state,
           lastError: client.lastError,
+          lastErrorCode: client.lastErrorCode,
           latencyMs: client.latencyMs,
         };
       }),

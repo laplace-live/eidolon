@@ -11,7 +11,8 @@ When a remote server is active, every conversation row in the sidebar shows an o
 
 - **Direct Network (no account required):** Pairs over LAN, Tailscale, or a custom host using
   `ws://<host>:<port>/v1/subspace`. Intended for single-network or mesh-VPN setups without logging
-  into a relay.
+  into a relay. In the macOS desktop app, LAN endpoints require **System Settings → Privacy & Security → Local
+  Network** permission for `LAPLACE Eidolon`.
 - **Subspace Relay:** Pairs across NATs and firewalls via `apps/relay` (`@eidolon/relay`), run
   locally with `pnpm relay` or deployed as `ghcr.io/laplace-live/eidolon-relay` from
   [`apps/relay/Dockerfile`](../apps/relay/Dockerfile) via [`.github/workflows/relay.yml`](../.github/workflows/relay.yml)

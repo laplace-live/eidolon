@@ -7,6 +7,7 @@ import {
   CARDS,
   NAMED,
   offersCompanion,
+  offersPermissions,
   offersSystemOptions,
   resolveSection,
   SECTIONS,
@@ -167,11 +168,11 @@ describe("the Desktop section", () => {
     expect(offersSystemOptions(companionApp)).toBe(false);
     expect(offersCompanion(companionApp)).toBe(true);
     expect(offersCompanion({ ...desktopApp, ...companion })).toBe(true);
-    expect(shownSections(companionApp)).toEqual(SECTIONS);
+    expect(shownSections(companionApp)).toEqual(SECTIONS.filter((id) => id !== "permissions"));
   });
 
   test("a browser, or an app whose bridge predates the options, shows every other section", () => {
-    const others = SECTIONS.filter((id) => id !== "desktop");
+    const others = SECTIONS.filter((id) => id !== "desktop" && id !== "permissions");
     expect(shownSections(null)).toEqual(others);
     expect(shownSections(bridge)).toEqual(others);
     expect(shownSections({ ...bridge, chooseFolder: async () => null })).toEqual(others);
@@ -204,5 +205,59 @@ describe("the Desktop section", () => {
 
   test("has no rows of its own, so Advanced still shows every app row no card names", () => {
     expect(CARDS.desktop).toEqual([]);
+  });
+});
+
+describe("the Permissions section", () => {
+  const ignore = () => {};
+  const bridge: EidolonDesktop = {
+    platform: "darwin",
+    version: "0.9.0",
+    serverVersion: "0.20.0",
+    setTheme: ignore,
+    setLanguage: ignore,
+    onCommand: ignore,
+  };
+  const perms = {
+    permissions: async () => ({ background: false, items: [] }),
+    requestPermission: async (
+      id: "microphone" | "notifications" | "local-network" | "screen" | "accessibility",
+    ) => ({
+      id,
+      status: "granted" as const,
+      openedSettings: false,
+    }),
+    openPermissionSettings: async () => true,
+    testLocalNetwork: async ({ host, port }: { host: string; port: number }) => ({
+      ok: true as const,
+      host,
+      port,
+      testedAt: 1,
+    }),
+  };
+
+  test("shows when the desktop bridge offers permissions, and requires all four members", () => {
+    expect(offersPermissions(null)).toBe(false);
+    expect(offersPermissions(bridge)).toBe(false);
+    const withPerms: EidolonDesktop = { ...bridge, ...perms };
+    expect(offersPermissions(withPerms)).toBe(true);
+    expect(shownSections(withPerms)).toEqual(SECTIONS.filter((id) => id !== "desktop"));
+
+    for (const member of Object.keys(perms) as (keyof typeof perms)[]) {
+      const { [member]: _, ...withoutOne } = perms;
+      const incomplete = { ...bridge, ...withoutOne };
+      expect(offersPermissions(incomplete), member).toBe(false);
+    }
+    expect(
+      resolveSection(
+        new URLSearchParams("tab=permissions"),
+        "milky-green",
+        shownSections(withPerms),
+      ),
+    ).toEqual({ section: "permissions" });
+    expect(
+      resolveSection(new URLSearchParams("tab=permissions"), "milky-green", shownSections(null)),
+    ).toEqual({ redirect: "?tab=providers" });
+    expect(CARDS.permissions).toEqual([]);
   });
 });

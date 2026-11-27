@@ -13,6 +13,7 @@ import {
   OrbitIcon,
   PlugIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   SlidersHorizontalIcon,
   WandSparklesIcon,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { AllowedCommandsCard } from "./commands-card";
 import { DesktopCard } from "./desktop-card";
 import { McpServersCard } from "./mcp-card";
 import { Notices } from "./notices";
+import { PermissionsSection } from "./permissions-card";
 import {
   CARDS,
   type CardId,
@@ -52,6 +54,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   skills: <WandSparklesIcon />,
   subspace: <OrbitIcon />,
   desktop: <MonitorIcon />,
+  permissions: <ShieldCheckIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
 
@@ -64,6 +67,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   skills: msg`Skills`,
   subspace: msg`Subspace`,
   desktop: msg`Desktop`,
+  permissions: msg`Permissions`,
   advanced: msg`Advanced`,
 };
 
@@ -150,6 +154,7 @@ function Section({ section }: { readonly section: SectionId }) {
           )}
           {section === "skills" && <SkillsCard />}
           {section === "desktop" && <DesktopCard />}
+          {section === "permissions" && <PermissionsSection />}
         </>
       );
   }

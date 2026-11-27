@@ -18,10 +18,17 @@ import {
   type IpcSender,
   isCommandAction,
   isCompanionChange,
+  isLocalNetworkTestRequest,
   isModelRef,
+  isPermissionId,
+  type LocalNetworkTestRequest,
+  type LocalNetworkTestResult,
   type LoginItemState,
   type ModelRef,
   type PageChannel,
+  type PermissionId,
+  type PermissionRequestResult,
+  type PermissionsState,
   type UpdateCheckOutcome,
   type WindowSize,
 } from "../shared/bridge.ts";
@@ -43,6 +50,10 @@ export interface AppInvokes {
   readonly updateDownload: () => void;
   readonly updateInstall: () => void;
   readonly updateSkip: () => void;
+  readonly permissions: () => Promise<PermissionsState>;
+  readonly requestPermission: (id: PermissionId) => Promise<PermissionRequestResult>;
+  readonly openPermissionSettings: (id: PermissionId) => Promise<boolean>;
+  readonly testLocalNetwork: (target: LocalNetworkTestRequest) => Promise<LocalNetworkTestResult>;
 }
 
 /** An invoke's answer to who sent it and its argument; throws for another sender or argument. */
@@ -92,6 +103,21 @@ export function appInvokes(actions: AppInvokes): readonly (readonly [PageChannel
     guarded(BRIDGE.updateDownload, () => actions.updateDownload()),
     guarded(BRIDGE.updateInstall, () => actions.updateInstall()),
     guarded(BRIDGE.updateSkip, () => actions.updateSkip()),
+    guarded(BRIDGE.permissions, () => actions.permissions()),
+    guarded(BRIDGE.requestPermission, (id) => {
+      if (!isPermissionId(id)) throw new Error("a permission must be a known permission id");
+      return actions.requestPermission(id);
+    }),
+    guarded(BRIDGE.openPermissionSettings, (id) => {
+      if (!isPermissionId(id)) throw new Error("a permission must be a known permission id");
+      return actions.openPermissionSettings(id);
+    }),
+    guarded(BRIDGE.testLocalNetwork, (target) => {
+      if (!isLocalNetworkTestRequest(target)) {
+        throw new Error("a local network test takes a host and port");
+      }
+      return actions.testLocalNetwork({ host: target.host, port: target.port });
+    }),
   ];
 }
 

@@ -1231,4 +1231,80 @@ describe("Subspace web UI regressions", () => {
     await expect(streamPromise).rejects.toBeInstanceOf(StaleHostMutationError);
     expect(cancelSpy).toHaveBeenCalledTimes(1);
   });
+
+  test("ServersCard shows Check Permissions only when macOS reports local-network-blocked", () => {
+    const originalDesktop = globalThis.eidolonDesktop;
+    const baseServer: SubspaceStateResponse["servers"][number] = {
+      id: "srv-lan",
+      name: "Studio LAN",
+      mode: "direct",
+      endpoint: { host: "10.0.1.5", port: 63427 },
+      relay: null,
+      addedAt: 1,
+      lastConnectedAt: null,
+      lastVersion: null,
+      connectionState: "error",
+      lastError: "Could not reach the server on your local network",
+      latencyMs: null,
+    };
+    const renderServers = (lastErrorCode: string | null) => {
+      const history = createBrowserHistory(null);
+      const client = new QueryClient();
+      client.setQueryData(
+        subspaceQuery.queryKey,
+        makeState({
+          servers: [{ ...baseServer, lastErrorCode }],
+        }),
+      );
+      const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+      try {
+        return renderToStaticMarkup(
+          createElement(
+            I18nProvider,
+            { i18n },
+            createElement(
+              QueryClientProvider,
+              { client },
+              createElement(
+                Router as FunctionComponent<RouterOptions>,
+                { hook: history.hook, searchHook: history.searchHook },
+                createElement(ServersCard),
+              ),
+            ),
+          ),
+        );
+      } finally {
+        history.dispose();
+      }
+    };
+
+    try {
+      globalThis.eidolonDesktop = {
+        platform: "darwin",
+        version: "0.10.0",
+        serverVersion: "0.22.0",
+        setTheme: () => {},
+        setLanguage: () => {},
+        onCommand: () => {},
+        permissions: async () => ({ background: false, items: [] }),
+        requestPermission: async () => ({
+          id: "local-network",
+          status: "unknown",
+          openedSettings: false,
+        }),
+        openPermissionSettings: async () => true,
+        testLocalNetwork: async () => ({
+          ok: true,
+          host: "10.0.1.5",
+          port: 63427,
+          testedAt: 1,
+        }),
+      };
+
+      expect(renderServers("subspace-unreachable")).not.toContain("Check Permissions");
+      expect(renderServers("local-network-blocked")).toContain("Check Permissions");
+    } finally {
+      globalThis.eidolonDesktop = originalDesktop;
+    }
+  });
 });

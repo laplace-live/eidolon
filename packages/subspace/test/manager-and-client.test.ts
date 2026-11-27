@@ -16,6 +16,7 @@ import {
   generateX25519KeyPair,
   importX25519PrivateKey,
   isAllowedAuthUrl,
+  isMacLocalNetworkBlocked,
   parsePairingInput,
   RELAY_CLOSE_CODE,
   RELAY_PATHS,
@@ -2311,5 +2312,121 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     const checkRes = await mgr.proxyToActive(new Request("http://127.0.0.1/api/ping"), "/api/ping");
     expect(checkRes.status).toBe(200);
     await expect(checkRes.json()).resolves.toEqual({ ok: true, host: "host1" });
+  });
+
+  test("isMacLocalNetworkBlocked identifies darwin Direct EHOSTUNREACH against LAN and mDNS hosts", () => {
+    const ehostunreach = Object.assign(new Error("connect EHOSTUNREACH 10.0.1.5:63427"), {
+      code: "EHOSTUNREACH",
+    });
+    const econnrefused = Object.assign(new Error("connect ECONNREFUSED 10.0.1.5:63427"), {
+      code: "ECONNREFUSED",
+    });
+
+    for (const host of [
+      "10.0.1.5",
+      "192.168.1.25",
+      "172.16.0.1",
+      "172.31.255.254",
+      "169.254.1.2",
+      "[fe80::1]",
+      "[fe80::1%en0]",
+      "fd12:3456::1",
+      "fc00::1",
+      "asi",
+      "asi.local",
+      "asi.local.",
+    ]) {
+      expect([host, isMacLocalNetworkBlocked(ehostunreach, "direct", host, "darwin")]).toEqual([
+        host,
+        true,
+      ]);
+    }
+
+    for (const host of [
+      "127.0.0.1",
+      "127.0.1.1",
+      "localhost",
+      "localhost.",
+      "[::1]",
+      "172.15.255.254",
+      "172.32.0.1",
+      "203.0.113.10",
+      "2001:db8::1",
+      "subspace.example.com",
+      "",
+    ]) {
+      expect([host, isMacLocalNetworkBlocked(ehostunreach, "direct", host, "darwin")]).toEqual([
+        host,
+        false,
+      ]);
+    }
+
+    expect(isMacLocalNetworkBlocked(ehostunreach, "relay", "10.0.1.5", "darwin")).toBe(false);
+    expect(isMacLocalNetworkBlocked(ehostunreach, "direct", "10.0.1.5", "linux")).toBe(false);
+    expect(isMacLocalNetworkBlocked(ehostunreach, "direct", "10.0.1.5", "win32")).toBe(false);
+    expect(isMacLocalNetworkBlocked(econnrefused, "direct", "10.0.1.5", "darwin")).toBe(false);
+    expect(
+      isMacLocalNetworkBlocked(
+        new AggregateError([ehostunreach, ehostunreach]),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(true);
+    expect(
+      isMacLocalNetworkBlocked(
+        new AggregateError([ehostunreach, econnrefused]),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(false);
+    // Node 24's net.createConnection sets AggregateError.code = errors[0].code; mixed errors must still inspect nested items.
+    expect(
+      isMacLocalNetworkBlocked(
+        Object.assign(new AggregateError([ehostunreach, econnrefused]), { code: "EHOSTUNREACH" }),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(false);
+    expect(
+      isMacLocalNetworkBlocked(
+        Object.assign(new AggregateError([ehostunreach, ehostunreach]), { code: "EHOSTUNREACH" }),
+        "direct",
+        "asi.local",
+        "darwin",
+      ),
+    ).toBe(true);
+  });
+
+  test("SubspaceClient exposes lastErrorCode on connection failure and clears it on stop", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected HTTP server address");
+    const unusedPort = address.port;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    const hostKp = await generateX25519KeyPair();
+    const client = new SubspaceClient({
+      id: "srv-err-code",
+      name: "Unreachable Host",
+      hostPublicKeyB64: hostKp.publicKeyB64,
+      grantId: "grant-1",
+      deviceToken: "token-1",
+      mode: "direct",
+      endpoint: { host: "127.0.0.1", port: unusedPort },
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+      lastVersion: null,
+    });
+    cleanups.push(() => client.stop());
+    await expect(client.connect()).rejects.toMatchObject({ code: "subspace-unreachable" });
+    expect(client.state).toBe("error");
+    expect(client.lastErrorCode).toBe("subspace-unreachable");
+    client.stop();
+    expect(client.state).toBe("disconnected");
+    expect(client.lastErrorCode).toBeNull();
   });
 });

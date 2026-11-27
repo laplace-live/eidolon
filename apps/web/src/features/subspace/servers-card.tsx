@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type SubmitEvent, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { ListCard, ListRow } from "@/components/list";
 import { QuietBadge } from "@/components/quiet-badge";
 import { SectionCard } from "@/components/section-card";
@@ -48,7 +49,9 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useCallPresence } from "@/features/call/call-context";
+import { offersPermissions } from "@/features/settings/sections";
 import type { SubspaceConnectionState, SubspaceServerView } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
 import { AddSubspaceServerDialog } from "./add-server-dialog";
 import {
   SUBSPACE_CONNECTION_DOT,
@@ -261,6 +264,9 @@ export function ServersCard() {
     connect.isPending ||
     disconnect.isPending;
 
+  const app = desktop();
+  const macDesktop = app?.platform === "darwin" && offersPermissions(app);
+
   return (
     <SectionCard
       title={t`Subspace Servers`}
@@ -318,6 +324,11 @@ export function ServersCard() {
           ]
             .filter((part): part is string => Boolean(part))
             .join(" · ");
+          const showPermissionsLink =
+            macDesktop &&
+            server.mode === "direct" &&
+            server.connectionState === "error" &&
+            server.lastErrorCode === "local-network-blocked";
 
           return (
             <ListRow
@@ -336,7 +347,21 @@ export function ServersCard() {
                   <QuietBadge dot={conn.dot}>{t(conn.label)}</QuietBadge>
                 </span>
               }
-              description={details}
+              description={
+                showPermissionsLink ? (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {details && <span>{details}</span>}
+                    <Link
+                      to="/settings?tab=permissions"
+                      className="underline underline-offset-4 hover:text-foreground"
+                    >
+                      {t`Check Permissions`}
+                    </Link>
+                  </span>
+                ) : (
+                  details
+                )
+              }
               trailing={
                 <>
                   {!active && (

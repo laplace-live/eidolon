@@ -11,9 +11,9 @@ import {
   performPairingHandshake,
   SubspaceClient,
   SubspaceConnectError,
-  type SubspaceManager,
+  SubspaceManager,
 } from "@eidolon/subspace";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   type ErrorBody,
   EXPECTED_HOST_HEADER,
@@ -28,6 +28,7 @@ import { type Booted, bootFixture, cleanUpBoot, fixtureDist } from "./harness.ts
 const cleanups: (() => Promise<void> | void)[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const fn of cleanups.splice(0).reverse()) await fn();
   cleanUpBoot();
 });
@@ -418,6 +419,26 @@ describe("Local server Subspace proxy & host switching", () => {
     const downBody = (await downRes.json()) as ErrorBody;
     expect(downBody.error.code).toBe("subspace-unreachable");
     expect(downBody.error.id).toMatch(/^[0-9a-f]{8}$/);
+
+    // 8. macOS Local Network privacy failures preserve local-network-blocked across the proxy.
+    const blockedSpy = vi
+      .spyOn(SubspaceManager.prototype, "proxyToActive")
+      .mockRejectedValueOnce(
+        new SubspaceConnectError(
+          "local-network-blocked",
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+        ),
+      );
+    const blockedRes = await fetch(`${local.base}/api/local/chats`, { headers: local.session });
+    expect(blockedSpy).toHaveBeenCalledTimes(1);
+    expect(blockedRes.status).toBe(502);
+    const blockedBody = (await blockedRes.json()) as ErrorBody;
+    expect(blockedBody.error).toMatchObject({
+      code: "local-network-blocked",
+      message:
+        "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+    });
+    expect(blockedBody.error.id).toMatch(/^[0-9a-f]{8}$/);
   });
 
   test("tunneled /api/offer sets allowHostCandidates while direct local offers keep it false, and dispatchLocal preserves botFallback 405 + Allow", async () => {
@@ -498,6 +519,12 @@ describe("subspaceRoutes error handling", () => {
       },
       revokeGrant: async () => {
         throw Object.assign(new Error("raw internal conflict detail"), { code: "conflict" });
+      },
+      pairServer: async () => {
+        throw new SubspaceConnectError(
+          "local-network-blocked",
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+        );
       },
       startRelayAuth: async () => {
         throw Object.assign(new Error("connect ECONNREFUSED 10.9.8.7:4444"), {
@@ -581,6 +608,23 @@ describe("subspaceRoutes error handling", () => {
     expect(badOfferRes.status).toBe(400);
     expect((await badOfferRes.json()) as ErrorBody).toMatchObject({
       error: { code: "bad-request" },
+    });
+
+    const localNetRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/servers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "dummy-code" }),
+      }),
+      server,
+    );
+    expect(localNetRes.status).toBe(502);
+    expect((await localNetRes.json()) as ErrorBody).toEqual({
+      error: {
+        code: "local-network-blocked",
+        message:
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+      },
     });
   });
 

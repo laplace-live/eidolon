@@ -15,6 +15,7 @@ export {
   startDeviceAuthorization,
 } from "./auth-client.ts";
 export {
+  isMacLocalNetworkBlocked,
   performPairingHandshake,
   SubspaceClient,
   type SubspaceClientEvents,

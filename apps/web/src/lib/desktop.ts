@@ -149,6 +149,66 @@ export type UpdateCheckOutcome =
   | { readonly outcome: "none" }
   | { readonly outcome: "error"; readonly message: string };
 
+export const PERMISSION_IDS = [
+  "microphone",
+  "notifications",
+  "local-network",
+  "screen",
+  "accessibility",
+] as const;
+export type PermissionId = (typeof PERMISSION_IDS)[number];
+
+export type PermissionStatus =
+  | "granted"
+  | "denied"
+  | "restricted"
+  | "not-determined"
+  | "unknown"
+  | "unavailable";
+
+export interface PermissionItem {
+  readonly id: PermissionId;
+  readonly status: PermissionStatus;
+  readonly unavailable?: Unavailable;
+}
+
+export interface PermissionsState {
+  readonly background: boolean;
+  readonly items: readonly PermissionItem[];
+}
+
+export interface PermissionRequestResult {
+  readonly id: PermissionId;
+  readonly status: PermissionStatus;
+  readonly openedSettings: boolean;
+  readonly unavailable?: Unavailable;
+}
+
+export interface LocalNetworkTestRequest {
+  readonly host: string;
+  readonly port: number;
+}
+
+export type LocalNetworkTestFailure =
+  | "invalid-target"
+  | "blocked"
+  | "refused"
+  | "timeout"
+  | "unresolved"
+  | "unsupported"
+  | "background"
+  | "failed";
+
+export type LocalNetworkTestResult =
+  | { readonly ok: true; readonly host: string; readonly port: number; readonly testedAt: number }
+  | {
+      readonly ok: false;
+      readonly host: string;
+      readonly port: number;
+      readonly testedAt: number;
+      readonly failure: LocalNetworkTestFailure;
+    };
+
 export interface EidolonDesktop {
   /** Node's name for the OS the app runs on: "darwin" or "win32". */
   readonly platform: string;
@@ -205,6 +265,14 @@ export interface EidolonDesktop {
   readonly updateInstall?: () => Promise<void>;
   /** Skips the offered version so quiet launch checks stay silent about it. */
   readonly updateSkip?: () => Promise<void>;
+  /** OS permissions relevant to LAPLACE Eidolon on this computer. */
+  readonly permissions?: () => Promise<PermissionsState>;
+  /** Prompts macOS for access or opens the OS settings pane when already decided. */
+  readonly requestPermission?: (id: PermissionId) => Promise<PermissionRequestResult>;
+  /** Opens the OS settings pane for `id`. */
+  readonly openPermissionSettings?: (id: PermissionId) => Promise<boolean>;
+  /** Tests a LAN TCP connection via Electron's Node runtime. */
+  readonly testLocalNetwork?: (target: LocalNetworkTestRequest) => Promise<LocalNetworkTestResult>;
 }
 
 /** `window.eidolonCompanion`, on the desktop companion's page alone. */

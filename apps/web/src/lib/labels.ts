@@ -122,6 +122,7 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "invalid-model": msg`Eidolon can't use that model file.`,
   "unknown-model": msg`That model was removed. Reload to see her models.`,
   "subspace-unreachable": msg`Can't reach that Subspace server. Check that it's running and connected.`,
+  "local-network-blocked": msg`Can't reach that server on your local network. Check that it's running, or allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network.`,
   "invalid-pairing-code": msg`That pairing link or code isn't valid.`,
   "pairing-expired": msg`That pairing link has expired. Generate a fresh one on the host.`,
   "pairing-failed": msg`Pairing with the Subspace server failed.`,
