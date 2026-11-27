@@ -119,7 +119,7 @@ export function ShareCard() {
       {
         onSuccess: (next) => {
           onSaved?.();
-          if ((next?.share?.shareMode ?? share?.shareMode) !== "off") {
+          if ((next?.share?.shareMode ?? share?.shareMode) === "direct") {
             createOffer.mutate({ mode: "auto", address: value });
           }
         },
@@ -144,18 +144,26 @@ export function ShareCard() {
   }
 
   function generateOffer(rotate: boolean) {
-    if (!resolvedDirectHost) return;
-    createOffer.mutate({
-      mode: "auto",
-      address: resolvedDirectHost,
-      rotate,
-    });
+    if (resolvedDirectHost) {
+      createOffer.mutate({
+        mode: "auto",
+        address: resolvedDirectHost,
+        rotate,
+      });
+    } else if (signedInToRelay) {
+      createOffer.mutate({
+        mode: "relay",
+        rotate,
+      });
+    }
   }
 
   const offer = share.activeOffer;
   const directStatus =
     share.shareMode === "off"
-      ? t`Sharing is off. Generating a pairing link starts Direct sharing on your local network.`
+      ? share.grants.length > 0
+        ? t`New pairing links are off. Already paired devices stay connected until you revoke them.`
+        : t`Sharing is off. Generating a pairing link starts Direct sharing on your local network.`
       : share.listening && share.listeningPort !== null
         ? t`Listening directly on port ${ph({ port: String(share.listeningPort) })}.`
         : share.shareMode === "relay"
@@ -254,7 +262,7 @@ export function ShareCard() {
           <Button
             type="button"
             variant={offer ? "outline" : "default"}
-            disabled={busy || !resolvedDirectHost}
+            disabled={busy || (!resolvedDirectHost && !signedInToRelay)}
             onClick={() => generateOffer(Boolean(offer))}
           >
             {createOffer.isPending ? <Spinner /> : <QrCodeIcon />}

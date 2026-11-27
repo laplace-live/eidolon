@@ -16,6 +16,7 @@ export const MUX_FRAME = {
   CALL_UDP_CLOSE: 0x12,
   PING: 0x20,
   PONG: 0x21,
+  RELAY_UPDATE: 0x22,
 } as const;
 
 export type MuxFrameType = (typeof MUX_FRAME)[keyof typeof MUX_FRAME];
@@ -317,17 +318,31 @@ export class MuxEndpoint {
       readonly reject: (error: Error) => void;
     }
   >();
+  #onRelayUpdate: ((payload: unknown) => void) | undefined;
 
   constructor(options: {
     readonly sendFrame: (frame: Uint8Array) => Promise<void>;
     readonly host?: MuxHostHandlers;
+    readonly onRelayUpdate?: (payload: unknown) => void;
   }) {
     this.#sendFrame = options.sendFrame;
     this.#host = options.host;
+    this.#onRelayUpdate = options.onRelayUpdate;
   }
 
   get closed(): boolean {
     return this.#closed;
+  }
+
+  setOnRelayUpdate(handler: ((payload: unknown) => void) | undefined): void {
+    this.#onRelayUpdate = handler;
+  }
+
+  async sendRelayUpdate(relay: {
+    readonly url: string;
+    readonly relayHostId: string;
+  }): Promise<void> {
+    await this.#emit(MUX_FRAME.RELAY_UPDATE, 0, utf8Encode(JSON.stringify(relay)));
   }
 
   async request(input: {
@@ -560,6 +575,14 @@ export class MuxEndpoint {
           clientCall.closed = true;
           this.#clientCalls.delete(streamId);
           clientCall.onClose?.();
+        }
+        return;
+      }
+      case MUX_FRAME.RELAY_UPDATE: {
+        try {
+          this.#onRelayUpdate?.(JSON.parse(utf8Decode(payload)));
+        } catch {
+          // Ignore malformed relay update payloads.
         }
         return;
       }

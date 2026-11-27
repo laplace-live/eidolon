@@ -34,6 +34,7 @@ const GrantRecordSchema = z.object({
     .regex(/^[0-9a-f]{64}$/)
     .optional(),
   mode: z.enum(["direct", "relay"]),
+  supportsDirect: z.boolean().optional(),
   createdAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive().nullable(),
 });

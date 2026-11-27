@@ -22,7 +22,7 @@ import {
 } from "@eidolon/subspace";
 import { RELAY_CLOSE_CODE, RELAY_PATHS } from "@eidolon/subspace/relay-contract";
 import { serve } from "srvx";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import WebSocket from "ws";
 import { loadRelayConfig } from "../src/config.ts";
 import { createRelayTokenVerifier, RelayJwksUnavailableError } from "../src/jwks-verifier.ts";
@@ -931,7 +931,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     };
     try {
       process.env.EIDOLON_RELAY_PUBLIC_URL = " https://relay.example.com/ ";
-      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https://id.example.com/ ";
+      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https:/ID.Example.com/ ";
       process.env.EIDOLON_RELAY_AUTH_AUDIENCE = " eidolon-relay ";
       delete process.env.EIDOLON_RELAY_JWKS_URL;
       expect(loadRelayConfig()).toMatchObject({
@@ -1022,6 +1022,9 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
 
     // 3. Roaming: stop Direct listener -> Client A reconnects automatically via Relay and proxies requests.
     await hostMgr.host.stopDirect();
+    await vi.waitFor(async () => {
+      expect((await clientAMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+    });
     const resThroughRelay = await clientAMgr.proxyToActive(
       new Request("http://local/ping"),
       "/ping",
@@ -1061,5 +1064,111 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     expect(fallbackHand.transport).toBe("relay");
     fallbackHand.tunnel.mux.close();
     fallbackHand.tunnel.ws.close();
+  });
+
+  test("queued invite_revoke blocks copied Relay tickets after Relay reconnect and host_hello installs devices atomically", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-revoke", "alice"]]));
+    const dbFile = join(mkdtempSync(join(tmpdir(), "relay-revoke-db-")), "relay.sqlite");
+    cleanups.push(() => rmSync(join(dbFile, ".."), { recursive: true, force: true }));
+    const relayPort = await import("node:net").then((net) => {
+      const s = net.createServer();
+      return new Promise<number>((resolve) => {
+        s.listen(0, "127.0.0.1", () => {
+          const p = (s.address() as { port: number }).port;
+          s.close(() => resolve(p));
+        });
+      });
+    });
+
+    let relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
+    });
+    const revokeHostDir = mkdtempSync(join(tmpdir(), "relay-revoke-host-"));
+    const revokeClientDir = mkdtempSync(join(tmpdir(), "relay-revoke-client-"));
+    cleanups.push(() => rmSync(revokeHostDir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(revokeClientDir, { recursive: true, force: true }));
+
+    const revokeHostMgr = new SubspaceManager({
+      dataHome: revokeHostDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+      relayUrl: () => relay.url,
+    });
+    cleanups.push(() => revokeHostMgr.stop());
+    revokeHostMgr.store.saveRelayAuth({
+      authUrl: auth.url,
+      relayUrl: relay.url,
+      token: "sess-revoke",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    const dualOffer = await revokeHostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    const dualParsed = parsePairingInput(dualOffer.pairingUrl);
+    expect(dualParsed.ok).toBe(true);
+    if (!dualParsed.ok) return;
+
+    // Stop Relay while Direct consumes the dual invite, then bring Relay back up (clean memory DB too).
+    await relay.stop();
+    const revokeClientMgr = new SubspaceManager({
+      dataHome: revokeClientDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => revokeClientMgr.stop());
+    await revokeClientMgr.pairServer({ code: dualOffer.pairingUrl, activate: true });
+
+    relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
+    });
+    cleanups.push(() => relay.stop());
+
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    // Copied Relay invite must fail even though Relay was offline when Direct consumed it.
+    await expect(
+      performPairingHandshake({
+        ...dualParsed.offer,
+        mode: "relay",
+        endpoint: undefined,
+      }),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // Paired device must authenticate immediately on fresh Relay even with brand-new ephemeral DB via host_hello.devices.
+    await relay.stop();
+    relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    await revokeHostMgr.host.stopDirect();
+    await vi.waitFor(async () => {
+      expect((await revokeClientMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+    });
+    const ping = await revokeClientMgr.proxyToActive(new Request("http://local/ping"), "/ping");
+    expect(ping.status).toBe(200);
   });
 });

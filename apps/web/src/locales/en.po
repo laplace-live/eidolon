@@ -4034,6 +4034,10 @@ msgstr "New File"
 msgid "New Pairing Code"
 msgstr "New Pairing Code"
 
+#: src/features/subspace/share-card.tsx
+msgid "New pairing links are off. Already paired devices stay connected until you revoke them."
+msgstr "New pairing links are off. Already paired devices stay connected until you revoke them."
+
 #: src/components/persona-switcher.tsx
 #: src/features/home/persona-grid.tsx
 #: src/features/setup/new-persona.tsx

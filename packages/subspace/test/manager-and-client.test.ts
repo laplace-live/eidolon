@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebSocketServer } from "ws";
+import { hostTransportNeeds } from "../src/host.ts";
 import {
   completeDeviceAuthorization,
   computeRelayControlProof,
@@ -20,6 +21,7 @@ import {
   isMacLocalNetworkBlocked,
   mintRelayJwt,
   parsePairingInput,
+  performPairingHandshake,
   RELAY_CLOSE_CODE,
   RELAY_PATHS,
   SubspaceClient,
@@ -3076,7 +3078,7 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     const callClient = new SubspaceClient(savedHybrid, {}, undefined, {
       callBridgeIdleMs: 5_000,
       callProbeIntervalMs: 60_000,
-      directFallbackTimeoutMs: 50,
+      directFallbackTimeoutMs: 500,
     });
     cleanups.push(() => callClient.stop());
     await callClient.connect();
@@ -3122,5 +3124,287 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
       const s = await clientMgr.getState();
       expect(s.servers[0]?.activeTransport).toBe("direct");
     });
+  });
+
+  test("hostTransportNeeds separates Relay-only from Direct/hybrid grants, Direct sessions receive RELAY_UPDATE, stalled Direct E2EE falls back, and connect drops non-open sockets", async () => {
+    // 1. hostTransportNeeds matrix
+    expect(
+      hostTransportNeeds("off", [{ mode: "relay", relayTokenSha256: "a".repeat(64) }]),
+    ).toEqual({ needsDirect: false, needsRelay: true });
+    expect(
+      hostTransportNeeds("off", [
+        { mode: "relay", relayTokenSha256: "a".repeat(64), supportsDirect: true },
+      ]),
+    ).toEqual({ needsDirect: true, needsRelay: true });
+    expect(hostTransportNeeds("relay", [{ mode: "direct" }])).toEqual({
+      needsDirect: true,
+      needsRelay: true,
+    });
+
+    // Local mock Relay server for live push + backfill + fallback tests
+    const { WebSocketServer: RelayWsServer } = await import("ws");
+    const relayKp = await generateX25519KeyPair();
+    const installedDevices = new Map<string, string>();
+    const pendingData = new Map<string, import("ws").default>();
+    const onlineHosts = new Map<string, import("ws").default>();
+    const httpServer = createServer(async (req, res) => {
+      const u = new URL(req.url ?? "/", "http://127.0.0.1");
+      if (u.pathname === "/api/auth/token") {
+        res
+          .writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ token: "jwt-1", expiresAt: Date.now() + 600_000 }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const controlWss = new RelayWsServer({ noServer: true });
+    const dataWss = new RelayWsServer({ noServer: true });
+    controlWss.on("connection", (ws) => {
+      let relayHostId = "";
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        if (msg.type === "host_hello") {
+          relayHostId = String(msg.relayHostId);
+          for (const d of (msg.devices as { grantId: string; tokenHash: string }[] | undefined) ??
+            []) {
+            installedDevices.set(d.grantId, d.tokenHash);
+          }
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64: Buffer.from("ch-push-32bytes-0123456789abcdef").toString("base64"),
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          onlineHosts.set(relayHostId, ws);
+          ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+        } else if (msg.type === "invite_create") {
+          ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+        } else if (msg.type === "device_install") {
+          installedDevices.set(String(msg.grantId), String(msg.tokenHash));
+          ws.send(JSON.stringify({ type: "device_installed", grantId: msg.grantId }));
+        }
+      });
+    });
+    dataWss.on("connection", (ws, req) => {
+      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (path === RELAY_PATHS.CLIENT_CONNECT) {
+        ws.once("message", async (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as {
+            relayHostId?: string;
+            credential?: { kind?: string; grantId?: string; relayToken?: string };
+          };
+          if (msg.credential?.kind === "device") {
+            const hash = await sha256Hex(utf8Encode(String(msg.credential.relayToken ?? "")));
+            if (installedDevices.get(String(msg.credential.grantId)) !== hash) {
+              ws.close(RELAY_CLOSE_CODE.UNAUTHORIZED, "Revoked");
+              return;
+            }
+          }
+          const sessionId = `sess_${Date.now()}_${Math.random()}`;
+          pendingData.set(sessionId, ws);
+          onlineHosts.get(String(msg.relayHostId))?.send(
+            JSON.stringify({
+              type: "connection_open",
+              sessionId,
+              grantId: msg.credential?.grantId ?? null,
+            }),
+          );
+        });
+      } else if (path === RELAY_PATHS.HOST_DATA) {
+        ws.once("message", (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as { sessionId: string };
+          const clientWs = pendingData.get(msg.sessionId);
+          pendingData.delete(msg.sessionId);
+          if (!clientWs) return;
+          clientWs.send(JSON.stringify({ type: "relay_ready", sessionId: msg.sessionId }));
+          clientWs.on("message", (d, b) => ws.readyState === 1 && ws.send(d, { binary: b }));
+          ws.on("message", (d, b) => clientWs.readyState === 1 && clientWs.send(d, { binary: b }));
+        });
+      }
+    });
+    httpServer.on("upgrade", (req, socket, head) => {
+      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (path === RELAY_PATHS.HOST_CONTROL) {
+        controlWss.handleUpgrade(req, socket, head, (ws) => controlWss.emit("connection", ws, req));
+      } else {
+        dataWss.handleUpgrade(req, socket, head, (ws) => dataWss.emit("connection", ws, req));
+      }
+    });
+    await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+    const relayPort = (httpServer.address() as { port: number }).port;
+    const relayUrl = `http://127.0.0.1:${relayPort}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of [...controlWss.clients, ...dataWss.clients]) ws.terminate();
+          controlWss.close(() => dataWss.close(() => httpServer.close(() => resolve())));
+        }),
+    );
+
+    // 2. Live Direct client receives RELAY_UPDATE when host signs into Relay later, and roams cleanly.
+    const hostDir = tempDir("subspace-live-push-host-");
+    const clientDir = tempDir("subspace-live-push-client-");
+    const hostMgr = new SubspaceManager({
+      dataHome: hostDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async (req) => Response.json({ ok: true, path: new URL(req.url).pathname }),
+      relayUrl: () => relayUrl,
+    });
+    cleanups.push(() => hostMgr.stop());
+    const directOffer = await hostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    expect(directOffer.hasRelayFallback).toBe(false);
+
+    const clientMgr = new SubspaceManager({
+      dataHome: clientDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => clientMgr.stop());
+    const paired = await clientMgr.pairServer({ code: directOffer.pairingUrl, activate: true });
+    expect(paired.servers[0]?.relay).toBeNull();
+
+    // Host signs into Relay while Client stays connected over Direct -> receives RELAY_UPDATE without dropping Direct.
+    hostMgr.store.saveRelayAuth({
+      authUrl: relayUrl,
+      relayUrl,
+      token: "sess-alice",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    hostMgr.host.startRelay();
+    await vi.waitFor(async () => {
+      const s = await clientMgr.getState();
+      expect(s.servers[0]?.relay?.url).toBe(relayUrl);
+      expect(s.servers[0]?.activeTransport).toBe("direct");
+    });
+
+    // Stopping Direct switches connected client onto pushed Relay without manual re-pair.
+    await hostMgr.host.stopDirect();
+    await vi.waitFor(async () => {
+      expect((await clientMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+    });
+    const pushRes = await clientMgr.proxyToActive(
+      new Request("http://local/after-push"),
+      "/after-push",
+    );
+    expect(pushRes.status).toBe(200);
+    await expect(pushRes.json()).resolves.toEqual({ ok: true, path: "/after-push" });
+
+    // 3. Stalled Direct E2EE server (opens WS then never answers e2ee_hello) falls back in ~directFallbackTimeoutMs.
+    await hostMgr.host.startDirect(0);
+    const stallServer = createServer();
+    const stallWss = new WebSocketServer({ server: stallServer, path: "/v1/subspace" });
+    stallWss.on("connection", () => {
+      // Intentionally accept WebSocket and drop all E2EE frames without replying.
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of stallWss.clients) ws.terminate();
+          stallWss.close(() => stallServer.close(() => resolve()));
+        }),
+    );
+    const stallPort = (stallServer.address() as { port: number }).port;
+    const saved = clientMgr.store.readServers().servers[0]!;
+    const fallbackClient = new SubspaceClient(
+      { ...saved, endpoint: { host: "127.0.0.1", port: stallPort } },
+      {},
+      undefined,
+      { directFallbackTimeoutMs: 120 },
+    );
+    cleanups.push(() => fallbackClient.stop());
+    const started = performance.now();
+    const tunnel = await fallbackClient.connect();
+    expect(tunnel.transport).toBe("relay");
+    expect(performance.now() - started).toBeLessThan(3_000);
+
+    // 4. Legacy Direct grant backfilling relayTokenSha256 while shareMode === "off" starts Relay automatically.
+    const legDir = tempDir("subspace-legacy-off-");
+    const legStore = new SubspaceStore(legDir);
+    const legHost = new SubspaceHost({
+      store: legStore,
+      serverVersion: () => "0.22.0",
+      dispatch: async () => Response.json({ ok: true }),
+      relayUrl: () => relayUrl,
+    });
+    cleanups.push(() => legHost.stop());
+    const tmpOffer = await legHost.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    const legHand = await performPairingHandshake(tmpOffer);
+    legHand.tunnel.mux.close();
+    legHand.tunnel.ws.close();
+    const rawLegGrants = legStore.readGrants().map(({ relayTokenSha256: _r, ...rest }) => rest);
+    legStore.saveGrants(rawLegGrants);
+    legStore.saveIdentity({ ...(await legStore.loadOrCreateIdentity()), shareMode: "off" });
+    legStore.saveRelayAuth({
+      authUrl: relayUrl,
+      relayUrl,
+      token: "sess-leg",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    await legHost.stop();
+
+    const rebootHost = new SubspaceHost({
+      store: legStore,
+      serverVersion: () => "0.22.0",
+      dispatch: async () => Response.json({ ok: true }),
+      relayUrl: () => relayUrl,
+    });
+    cleanups.push(() => rebootHost.stop());
+    await rebootHost.ensureStartedFromDisk();
+    expect(rebootHost.relayConnected).toBe(false);
+
+    const legClient = new SubspaceClient({
+      id: "leg-srv",
+      name: "Legacy",
+      hostPublicKeyB64: legHand.tunnel.mux ? tmpOffer.hostPublicKeyB64 : "",
+      grantId: legHand.grantId,
+      deviceToken: legHand.deviceToken,
+      mode: "direct",
+      endpoint: { host: "127.0.0.1", port: rebootHost.directPort! },
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+      lastVersion: null,
+    });
+    cleanups.push(() => legClient.stop());
+    const legTunnel = await legClient.connect();
+    expect(legTunnel.transport).toBe("direct");
+    await vi.waitFor(() => expect(rebootHost.relayConnected).toBe(true), { timeout: 10_000 });
+    expect(legStore.readGrants()[0]?.relayTokenSha256).toMatch(/^[0-9a-f]{64}$/);
+
+    // 5. SubspaceClient.connect() drops a cached tunnel whose ws.readyState is no longer OPEN before close fires.
+    fallbackClient.stop();
+    const freshPort = await hostMgr.host.startDirect(0);
+    const liveSaved = clientMgr.store.readServers().servers[0]!;
+    const raceClient = new SubspaceClient(
+      { ...liveSaved, endpoint: { host: "127.0.0.1", port: freshPort } },
+      {},
+    );
+    cleanups.push(() => raceClient.stop());
+    const firstTunnel = await raceClient.connect();
+    expect(firstTunnel.transport).toBe("direct");
+    firstTunnel.ws.close(1000, "Simulate half-closed socket");
+    expect(firstTunnel.ws.readyState).not.toBe(1);
+    await hostMgr.host.stopDirect();
+    const resAfterHalfClose = await raceClient.proxyFetch(
+      new Request("http://local/after-half-close"),
+      "/after-half-close",
+    );
+    expect(resAfterHalfClose.status).toBe(200);
+    expect(raceClient.activeTransport).toBe("relay");
   });
 });

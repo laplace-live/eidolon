@@ -760,6 +760,24 @@ export class SubspaceManager {
     return this.#attachClient(server);
   }
 
+  #updateSavedServer(
+    serverId: string,
+    updater: (server: SubspaceSavedServer) => SubspaceSavedServer,
+  ): void {
+    const current = this.store.readServers();
+    let updatedServer: SubspaceSavedServer | null = null;
+    const servers = current.servers.map((s) => {
+      if (s.id !== serverId) return s;
+      const next = updater(s);
+      updatedServer = next;
+      return next;
+    });
+    this.store.saveServers({ activeHostId: current.activeHostId, servers });
+    if (updatedServer !== null) {
+      this.#clients.get(serverId)?.updateServer(updatedServer);
+    }
+  }
+
   #attachClient(
     server: SubspaceSavedServer,
     initialTunnel?: ConstructorParameters<typeof SubspaceClient>[2],
@@ -768,24 +786,18 @@ export class SubspaceManager {
       server,
       {
         onConnected: (info) => {
-          const current = this.store.readServers();
-          let upgradedServer: SubspaceSavedServer | null = null;
-          const servers = current.servers.map((s) => {
-            if (s.id !== server.id) return s;
+          this.#updateSavedServer(server.id, (s) => {
             const nextRelay = info.relay ?? s.relay;
-            const next: SubspaceSavedServer = {
+            return {
               ...s,
               ...(nextRelay !== undefined ? { relay: nextRelay } : {}),
               lastConnectedAt: Date.now(),
               lastVersion: info.version,
             };
-            upgradedServer = next;
-            return next;
           });
-          this.store.saveServers({ activeHostId: current.activeHostId, servers });
-          if (upgradedServer !== null) {
-            this.#clients.get(server.id)?.updateServer(upgradedServer);
-          }
+        },
+        onRelayUpdated: (relay) => {
+          this.#updateSavedServer(server.id, (s) => ({ ...s, relay }));
         },
       },
       initialTunnel,

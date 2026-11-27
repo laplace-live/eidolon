@@ -24,6 +24,16 @@ export const HostHelloSchema = z.object({
   relayHostId: RelayHostIdSchema,
   hostPublicKeyB64: z.string().min(1).max(256),
   hostName: z.string().trim().min(1).max(120),
+  devices: z
+    .array(
+      z.object({
+        grantId: z.string().min(1).max(64),
+        tokenHash: Sha256HexSchema,
+        clientName: z.string().trim().min(1).max(120),
+      }),
+    )
+    .max(512)
+    .optional(),
 });
 
 export const HostChallengeSchema = z.object({

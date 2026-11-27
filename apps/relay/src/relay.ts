@@ -398,6 +398,14 @@ export class RelayHub {
       }
 
       relayHostId = hello.relayHostId;
+      for (const device of hello.devices ?? []) {
+        this.#store.installDevice({
+          relayHostId,
+          grantId: device.grantId,
+          tokenSha256: device.tokenHash,
+          clientName: device.clientName,
+        });
+      }
       const previous = this.#hosts.get(relayHostId);
       if (previous !== undefined && previous.ws !== ws) {
         safeClose(previous.ws, 1000, "Replaced by newer host connection");

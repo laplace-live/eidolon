@@ -11,6 +11,7 @@ import {
   isPairingExpired,
   MuxEndpoint,
   type RelayEndpoint,
+  RelayEndpointSchema,
   type SubspacePairingOffer,
   startClientHandshake,
 } from "./protocol/index.ts";
@@ -230,12 +231,22 @@ async function dialAuthenticatedTunnel(input: {
     | { readonly kind: "device"; readonly grantId: string; readonly relayToken: string };
   readonly relayUnexpectedErrorCode: SubspaceConnectError["code"];
   readonly buildE2eeAuth: (authBinding: string) => E2eeAuthRequest;
-  readonly openTimeoutMs?: number;
+  readonly handshakeTimeoutMs?: number;
   readonly signal?: AbortSignal;
 }): Promise<{ readonly tunnel: ActiveTunnel; readonly authRes: E2eeAuthResponse }> {
   if (input.signal?.aborted) {
     throw new SubspaceConnectError("subspace-unreachable", "Disconnected");
   }
+  const deadline =
+    input.handshakeTimeoutMs !== undefined ? Date.now() + input.handshakeTimeoutMs : null;
+  const remainingTimeoutMs = (): number => {
+    if (deadline === null) return CONNECT_TIMEOUT_MS;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new SubspaceConnectError("subspace-unreachable", "Connection timed out");
+    }
+    return remaining;
+  };
   const mapConnectError = (err: Error): SubspaceConnectError | undefined =>
     isMacLocalNetworkBlocked(err, input.target.mode, input.target.endpoint?.host)
       ? new SubspaceConnectError(
@@ -248,12 +259,7 @@ async function dialAuthenticatedTunnel(input: {
   const onAbort = () => ws.terminate();
   input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    await waitForOpen(
-      ws,
-      input.openTimeoutMs ?? CONNECT_TIMEOUT_MS,
-      input.relayCredential.kind,
-      mapConnectError,
-    );
+    await waitForOpen(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError);
     if (input.target.mode === "relay") {
       await sendWs(
         ws,
@@ -265,7 +271,7 @@ async function dialAuthenticatedTunnel(input: {
         }),
       );
       const readyRaw = rawDataToText(
-        await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind, mapConnectError),
+        await nextMessage(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError),
       );
       const relayReady = JSON.parse(readyRaw) as RelayReadyMessage;
       if (relayReady.type !== "relay_ready") {
@@ -278,7 +284,7 @@ async function dialAuthenticatedTunnel(input: {
     const hs = await startClientHandshake(input.hostPublicKeyB64);
     await sendWs(ws, hs.helloRaw);
     const e2eeReady = rawDataToText(
-      await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind, mapConnectError),
+      await nextMessage(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError),
     );
     const session = await hs.finish(e2eeReady);
     await session.sendJson(input.buildE2eeAuth(session.authBinding), (sealed) =>
@@ -286,7 +292,7 @@ async function dialAuthenticatedTunnel(input: {
     );
     const authRes = await session.openJson<E2eeAuthResponse>(
       rawDataToUint8Array(
-        await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind, mapConnectError),
+        await nextMessage(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError),
       ),
     );
     const mux = new MuxEndpoint({
@@ -319,7 +325,7 @@ async function dialWithFallback(input: {
       return await dialAuthenticatedTunnel({
         ...input,
         target: { mode: "direct", endpoint },
-        openTimeoutMs: input.directFallbackTimeoutMs ?? DIRECT_FALLBACK_OPEN_TIMEOUT_MS,
+        handshakeTimeoutMs: input.directFallbackTimeoutMs ?? DIRECT_FALLBACK_OPEN_TIMEOUT_MS,
       });
     } catch (directErr) {
       if (input.signal?.aborted) throw directErr;
@@ -330,7 +336,6 @@ async function dialWithFallback(input: {
         return await dialAuthenticatedTunnel({
           ...input,
           target: { mode: "relay", relay },
-          openTimeoutMs: CONNECT_TIMEOUT_MS,
         });
       } catch (relayErr) {
         if (
@@ -350,7 +355,6 @@ async function dialWithFallback(input: {
   return await dialAuthenticatedTunnel({
     ...input,
     target: { mode: singleMode, endpoint, relay },
-    openTimeoutMs: CONNECT_TIMEOUT_MS,
   });
 }
 
@@ -424,6 +428,7 @@ export interface SubspaceClientConnectedInfo {
 
 export interface SubspaceClientEvents {
   readonly onConnected?: (info: SubspaceClientConnectedInfo) => void;
+  readonly onRelayUpdated?: (relay: RelayEndpoint) => void;
   readonly onStateChange?: () => void;
 }
 
@@ -647,7 +652,12 @@ export class SubspaceClient {
   }
 
   async connect(): Promise<ActiveTunnel> {
-    if (this.#tunnel !== null && !this.#tunnel.mux.closed) return this.#tunnel;
+    if (this.#tunnel !== null) {
+      if (!this.#tunnel.mux.closed && this.#tunnel.ws.readyState === WebSocket.OPEN) {
+        return this.#tunnel;
+      }
+      this.#failActiveTunnel(this.#tunnel, "Disconnected", null);
+    }
     if (this.#connecting !== null) return this.#connecting;
     this.#wanted = true;
     this.#revoked = false;
@@ -838,6 +848,10 @@ export class SubspaceClient {
   #attachTunnel(tunnel: ActiveTunnel): void {
     this.#dropTunnel("Replaced by new connection");
     this.#tunnel = tunnel;
+    tunnel.mux.setOnRelayUpdate((raw) => {
+      const parsed = RelayEndpointSchema.safeParse(raw);
+      if (parsed.success) this.#events.onRelayUpdated?.(parsed.data);
+    });
     this.#setState("connected", null);
     this.#pingTimer = setInterval(() => {
       void tunnel.mux

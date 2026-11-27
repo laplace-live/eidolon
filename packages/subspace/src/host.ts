@@ -71,6 +71,12 @@ function relayHostError(code: RelayHostErrorCode, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
+export function grantSupportsDirect(
+  grant: Pick<SubspaceGrantRecord, "mode" | "supportsDirect">,
+): boolean {
+  return grant.mode === "direct" || grant.supportsDirect === true;
+}
+
 export function grantSupportsRelay(
   grant: Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256">,
 ): boolean {
@@ -79,13 +85,10 @@ export function grantSupportsRelay(
 
 export function hostTransportNeeds(
   shareMode: SubspaceShareMode,
-  grants: readonly Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256">[],
+  grants: readonly Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256" | "supportsDirect">[],
 ): { readonly needsDirect: boolean; readonly needsRelay: boolean } {
-  const hasDirectOrDualGrant = grants.some(
-    (g) => g.mode === "direct" || g.relayTokenSha256 !== undefined,
-  );
   return {
-    needsDirect: shareMode === "direct" || (shareMode !== "relay" && hasDirectOrDualGrant),
+    needsDirect: shareMode === "direct" || grants.some(grantSupportsDirect),
     needsRelay: shareMode !== "off" || grants.some(grantSupportsRelay),
   };
 }
@@ -117,6 +120,7 @@ interface ActiveInvite {
 
 interface HostSessionHandle {
   grantId: string | null;
+  mux: MuxEndpoint | null;
   close(code?: number, reason?: string): void;
 }
 
@@ -210,7 +214,8 @@ export class SubspaceHost {
     readonly resolve: () => void;
     readonly reject: (err: Error) => void;
   }>();
-  readonly #inviteAckWaiters = new Map<string, () => void>();
+  readonly #inviteAckWaiters: { readonly inviteId: string; readonly resolve: () => void }[] = [];
+  readonly #pendingRelayInviteRevokes = new Map<string, number>();
   #shareEpoch = 0;
   #stopped = false;
 
@@ -400,6 +405,13 @@ export class SubspaceHost {
         this.#relayControlToken === auth.token &&
         this.#relayControlAuthUrl === auth.authUrl;
       if (sameTarget) return;
+      if (
+        this.#relayControlUrl !== null &&
+        desiredUrl !== null &&
+        desiredUrl !== this.#relayControlUrl
+      ) {
+        this.#pendingRelayInviteRevokes.clear();
+      }
       this.#relayAttemptId += 1;
       this.clearRelayInvites();
       this.#cachedRelayJwt = null;
@@ -429,42 +441,55 @@ export class SubspaceHost {
     this.#deleteInvites(mode);
   }
 
-  #revokeRelayInvites(inviteIds: readonly string[]): void {
-    if (inviteIds.length === 0) return;
+  #revokeRelayInvites(
+    invites: readonly { readonly id: string; readonly expiresAt: number }[],
+  ): void {
+    const now = Date.now();
+    for (const [inviteId, expiresAt] of this.#pendingRelayInviteRevokes) {
+      if (expiresAt <= now) this.#pendingRelayInviteRevokes.delete(inviteId);
+    }
+    const valid = invites.filter((inv) => inv.expiresAt > now);
+    if (valid.length === 0) return;
+    for (const inv of valid) {
+      this.#pendingRelayInviteRevokes.set(inv.id, inv.expiresAt);
+    }
     const ws = this.#relayWs;
     if (ws === null || ws.readyState !== WebSocket.OPEN || !this.#relayConnected) return;
-    for (const inviteId of inviteIds) {
-      void sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId })).catch(() => {});
+    for (const inv of valid) {
+      void sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId: inv.id })).catch(() => {});
     }
   }
 
   #resolveInviteAck(inviteId: string): void {
-    const notify = this.#inviteAckWaiters.get(inviteId);
-    if (notify === undefined) return;
-    this.#inviteAckWaiters.delete(inviteId);
-    notify();
+    for (let i = this.#inviteAckWaiters.length - 1; i >= 0; i -= 1) {
+      const waiter = this.#inviteAckWaiters[i]!;
+      if (waiter.inviteId === inviteId) {
+        this.#inviteAckWaiters.splice(i, 1);
+        waiter.resolve();
+      }
+    }
   }
 
   #deleteInvites(mode?: "direct" | "relay"): void {
-    const revokedRelayIds: string[] = [];
+    const revokedRelay: { readonly id: string; readonly expiresAt: number }[] = [];
     for (const [key, invite] of this.#invites) {
       const matches =
         mode === undefined ? true : mode === "direct" ? invite.allowDirect : invite.allowRelay;
       if (matches) {
-        if (invite.allowRelay) revokedRelayIds.push(key);
+        if (invite.allowRelay) revokedRelay.push({ id: key, expiresAt: invite.expiresAt });
         this.#invites.delete(key);
         this.#resolveInviteAck(key);
       }
     }
-    this.#revokeRelayInvites(revokedRelayIds);
+    this.#revokeRelayInvites(revokedRelay);
   }
 
   clearRelayInvites(): void {
     this.#shareEpoch += 1;
-    const revokedRelayIds: string[] = [];
+    const revokedRelay: { readonly id: string; readonly expiresAt: number }[] = [];
     for (const [key, invite] of this.#invites) {
       if (!invite.allowRelay) continue;
-      revokedRelayIds.push(key);
+      revokedRelay.push({ id: key, expiresAt: invite.expiresAt });
       if (!invite.allowDirect) {
         this.#invites.delete(key);
         this.#resolveInviteAck(key);
@@ -477,7 +502,7 @@ export class SubspaceHost {
         });
       }
     }
-    this.#revokeRelayInvites(revokedRelayIds);
+    this.#revokeRelayInvites(revokedRelay);
   }
 
   stopRelay(): void {
@@ -697,14 +722,19 @@ export class SubspaceHost {
       const ws = this.#relayWs;
       if (ws !== null && ws.readyState === WebSocket.OPEN && this.#relayConnected) {
         await new Promise<void>((resolve) => {
+          const entry = {
+            inviteId,
+            resolve: () => {
+              clearTimeout(timer);
+              resolve();
+            },
+          };
           const timer = setTimeout(() => {
-            this.#inviteAckWaiters.delete(inviteId);
+            const idx = this.#inviteAckWaiters.indexOf(entry);
+            if (idx >= 0) this.#inviteAckWaiters.splice(idx, 1);
             resolve();
           }, 3_000);
-          this.#inviteAckWaiters.set(inviteId, () => {
-            clearTimeout(timer);
-            resolve();
-          });
+          this.#inviteAckWaiters.push(entry);
           void sendWs(
             ws,
             JSON.stringify({
@@ -731,7 +761,7 @@ export class SubspaceHost {
     ) {
       if (inviteId !== undefined) {
         this.#invites.delete(inviteId);
-        this.#inviteAckWaiters.delete(inviteId);
+        this.#resolveInviteAck(inviteId);
       }
       throw new SubspaceConnectError(
         "pairing-failed",
@@ -773,8 +803,9 @@ export class SubspaceHost {
       waiter.reject(relayHostError("subspace-unreachable", "Subspace host stopped"));
     }
     this.#relayReadyWaiters.clear();
-    for (const resolve of this.#inviteAckWaiters.values()) resolve();
-    this.#inviteAckWaiters.clear();
+    for (const waiter of [...this.#inviteAckWaiters]) waiter.resolve();
+    this.#inviteAckWaiters.length = 0;
+    this.#pendingRelayInviteRevokes.clear();
     this.stopRelay();
     for (const session of [...this.#sessions]) session.close(1000, "Host stopped");
     this.#sessions.clear();
@@ -982,6 +1013,15 @@ export class SubspaceHost {
 
     ws.on("open", () => {
       if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
+      const initialDevices = this.#deps.store
+        .readGrants()
+        .filter(grantSupportsRelay)
+        .slice(0, 512)
+        .map((grant) => ({
+          grantId: grant.id,
+          tokenHash: grant.relayTokenSha256 ?? grant.tokenSha256,
+          clientName: grant.clientName,
+        }));
       void sendWs(
         ws,
         JSON.stringify({
@@ -990,6 +1030,7 @@ export class SubspaceHost {
           relayHostId,
           hostPublicKeyB64: identity.publicKeyB64,
           hostName: identity.hostName,
+          ...(initialDevices.length > 0 ? { devices: initialDevices } : {}),
         }),
       ).catch(() => {});
     });
@@ -1083,21 +1124,35 @@ export class SubspaceHost {
       case "host_hello_ack": {
         const installedGrantIds = new Set<string>();
         const restoredInviteIds = new Set<string>();
+        const sentRevokeIds = new Set<string>();
         while (
           this.#relayWs === ws &&
           ws.readyState === WebSocket.OPEN &&
           !this.#stopped &&
           this.#relayWanted
         ) {
-          const pendingGrants = this.#deps.store
-            .readGrants()
-            .filter((grant) => grantSupportsRelay(grant) && !installedGrantIds.has(grant.id));
+          const allGrants = this.#deps.store.readGrants().filter(grantSupportsRelay);
+          const pendingGrants = allGrants.filter((grant) => !installedGrantIds.has(grant.id));
           const now = Date.now();
+          for (const [id, expiresAt] of this.#pendingRelayInviteRevokes) {
+            if (expiresAt <= now || this.#invites.has(id)) {
+              this.#pendingRelayInviteRevokes.delete(id);
+            }
+          }
+          const pendingRevokes = [...this.#pendingRelayInviteRevokes.keys()].filter(
+            (id) => !sentRevokeIds.has(id),
+          );
           const pendingInvites = [...this.#invites.values()].filter(
             (invite) =>
               invite.allowRelay && invite.expiresAt > now && !restoredInviteIds.has(invite.id),
           );
-          if (pendingGrants.length === 0 && pendingInvites.length === 0) break;
+          if (
+            pendingGrants.length === 0 &&
+            pendingRevokes.length === 0 &&
+            pendingInvites.length === 0
+          ) {
+            break;
+          }
           await Promise.all([
             ...pendingGrants.map((grant) => {
               installedGrantIds.add(grant.id);
@@ -1110,6 +1165,12 @@ export class SubspaceHost {
                   clientName: grant.clientName,
                 }),
               ).catch(() => {});
+            }),
+            ...pendingRevokes.map((inviteId) => {
+              sentRevokeIds.add(inviteId);
+              return sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId })).catch(
+                () => {},
+              );
             }),
             ...pendingInvites.map(async (invite) => {
               restoredInviteIds.add(invite.id);
@@ -1136,6 +1197,24 @@ export class SubspaceHost {
         }
         this.#relayBackoffMs = 1_000;
         this.#setRelayState(true, null);
+        // Push Relay endpoint to already-connected Direct clients whose grant already supports Relay.
+        const relayEndpoint: RelayEndpoint = { url: binding.relayUrl, relayHostId };
+        const relayGrantIds = new Set(
+          this.#deps.store
+            .readGrants()
+            .filter(grantSupportsRelay)
+            .map((g) => g.id),
+        );
+        for (const session of this.#sessions) {
+          if (
+            session.grantId !== null &&
+            session.mux !== null &&
+            !session.mux.closed &&
+            relayGrantIds.has(session.grantId)
+          ) {
+            void session.mux.sendRelayUpdate(relayEndpoint);
+          }
+        }
         return;
       }
       case "connection_open": {
@@ -1147,6 +1226,8 @@ export class SubspaceHost {
         return;
       }
       case "invite_revoked":
+        this.#pendingRelayInviteRevokes.delete(parsed.inviteId);
+        return;
       case "device_installed":
       case "device_revoked":
         return;
@@ -1194,7 +1275,7 @@ export class SubspaceHost {
       if (allowed && constantTimeEqual(utf8Encode(invite.ticket), ticketBytes)) {
         this.#invites.delete(id);
         if (mode === "direct" && invite.allowRelay) {
-          this.#revokeRelayInvites([id]);
+          this.#revokeRelayInvites([{ id, expiresAt: invite.expiresAt }]);
         }
         return invite;
       }
@@ -1242,6 +1323,7 @@ export class SubspaceHost {
     };
     const sessionHandle: HostSessionHandle = {
       grantId: null,
+      mux: null,
       close: (code = 1000, reason = "Closed") => closeSocket(code, reason),
     };
 
@@ -1323,6 +1405,7 @@ export class SubspaceHost {
           tokenSha256,
           relayTokenSha256,
           mode,
+          ...(mode === "relay" && invite.allowDirect ? { supportsDirect: true } : {}),
           createdAt: Date.now(),
           lastSeenAt: Date.now(),
         });
@@ -1372,6 +1455,9 @@ export class SubspaceHost {
         }
         this.#deps.store.touchGrant(grantId, missingRelayHash);
         if (missingRelayHash !== undefined) {
+          if (!this.#relayWanted && this.#readRelayAuthSafe().auth !== null) {
+            this.startRelay();
+          }
           await this.#installDeviceOnRelay(grantId, missingRelayHash, grant.clientName);
         }
         await session.sendJson(
@@ -1486,6 +1572,7 @@ export class SubspaceHost {
         closeSocket(1001, "Server stopping");
         return;
       }
+      sessionHandle.mux = mux;
 
       ws.on("message", (raw) => {
         void (async () => {

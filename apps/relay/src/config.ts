@@ -35,7 +35,7 @@ function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: bool
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`${name} must use http or https (got ${JSON.stringify(raw)})`);
   }
-  return stripTrailingSlashes ? withoutTrailingSlashes(value) : value;
+  return stripTrailingSlashes ? withoutTrailingSlashes(parsed.href) : parsed.href;
 }
 
 function readNormalizedToken(name: string, raw: string): string {

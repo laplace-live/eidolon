@@ -1479,7 +1479,7 @@ describe("Subspace web UI regressions", () => {
     }
   });
 
-  test("subspaceQuery.refetchInterval tolerates partial fixtures without share and ShareCard handles relay-only shareMode", () => {
+  test("subspaceQuery.refetchInterval tolerates partial fixtures without share and ShareCard handles relay-only shareMode", async () => {
     const interval = subspaceQuery.refetchInterval as (query: {
       readonly state: { readonly data?: unknown };
     }) => number | false;
@@ -1519,6 +1519,103 @@ describe("Subspace web UI regressions", () => {
     );
     expect(html).toContain("Direct sharing is inactive in Relay-only mode.");
     expect(html).not.toContain("Starting direct listener");
+
+    // 2. Editing Network Address in Relay-only mode preserves Relay mode (does not call createOffer auto)
+    // and allows Generate Pairing Code on IPv6-only/empty-IPv4 hosts when signed into Relay.
+    mockCall.mockReset();
+    mockCall.mockImplementation(async (route) => {
+      if (route === "POST /api/local/subspace/share/settings") {
+        return makeState({
+          share: {
+            ...makeState().share,
+            shareMode: "relay",
+            directAddress: "100.64.0.9",
+            addresses: [],
+            listening: false,
+            listeningPort: null,
+            relayConnected: true,
+          },
+          relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+        });
+      }
+      return makeState();
+    });
+    const relayTestClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+    });
+    relayTestClient.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "relay",
+          directAddress: null,
+          addresses: [],
+          listening: false,
+          listeningPort: null,
+          relayConnected: true,
+        },
+        relayAuth: { ...makeState().relayAuth, status: "signed-in" },
+      }),
+    );
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client: relayTestClient }, createElement(ShareCard)),
+      ),
+    );
+    const relayGenBtn = buttonProps.findLast((b) => b.text === "Generate Pairing Code");
+    expect(relayGenBtn?.disabled).toBe(false);
+    await mounted.act(async () => {
+      relayGenBtn!.onClick!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/offer", {
+      body: { mode: "relay", rotate: false },
+    });
+
+    mockCall.mockClear();
+    await mounted.act(async () => {
+      selectValueHandler?.("100.64.0.9");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledTimes(1);
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/settings", {
+      body: { directAddress: "100.64.0.9" },
+    });
+    expect(mockCall).not.toHaveBeenCalledWith(
+      "POST /api/local/subspace/share/offer",
+      expect.anything(),
+    );
+    relayTestClient.clear();
+    const currentMount = mounted;
+    mounted = null;
+    await currentMount.unmount();
+
+    // 3. shareMode === "off" with paired grants informs user that existing grants remain active.
+    client.setQueryData(
+      subspaceQuery.queryKey,
+      makeState({
+        share: {
+          ...makeState().share,
+          shareMode: "off",
+          grants: [
+            { id: "g1", clientName: "Phone", mode: "direct", createdAt: 1, lastSeenAt: null },
+          ],
+        },
+      }),
+    );
+    const offWithGrantsHtml = renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+    expect(offWithGrantsHtml).toContain(
+      "Already paired devices stay connected until you revoke them.",
+    );
     client.clear();
   });
 });

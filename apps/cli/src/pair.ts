@@ -301,6 +301,7 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
 
   try {
     let result: Awaited<ReturnType<SubspaceManager["createShareOffer"]>>;
+    let requestedMode: "auto" | "direct" | "relay" = relay ? "relay" : "auto";
     try {
       if (name !== undefined) {
         const settingsRes = await fetch(`${server.baseUrl}/api/local/subspace/share/settings`, {
@@ -318,20 +319,27 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
         }
       }
 
-      const offerRes = await fetch(`${server.baseUrl}/api/local/subspace/share/offer`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${server.token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          mode: relay ? "relay" : "auto",
-          ...(address !== undefined ? { address } : {}),
-          ...(port !== undefined ? { port } : {}),
-          rotate,
-        }),
-        signal: deps.signal,
-      });
+      const requestOffer = async (mode: "auto" | "direct" | "relay") =>
+        await fetch(`${server.baseUrl}/api/local/subspace/share/offer`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${server.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode,
+            ...(address !== undefined ? { address } : {}),
+            ...(port !== undefined ? { port } : {}),
+            rotate,
+          }),
+          signal: deps.signal,
+        });
+      let offerRes = await requestOffer(requestedMode);
+      // Older running local servers only accept "direct" | "relay" and return 400 for "auto".
+      if (!relay && offerRes.status === 400) {
+        requestedMode = "direct";
+        offerRes = await requestOffer(requestedMode);
+      }
       if (!offerRes.ok) {
         err(`Could not generate pairing offer: ${await offerRes.text()}`);
         return 1;
@@ -348,7 +356,7 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
       out(
         JSON.stringify({
           event: "offer",
-          mode: relay ? "relay" : "auto",
+          mode: requestedMode,
           hasRelayFallback: Boolean(result.hasRelayFallback),
           hostName: result.state.share.hostName,
           pairingUrl: result.pairingUrl,
