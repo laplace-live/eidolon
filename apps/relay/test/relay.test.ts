@@ -1419,18 +1419,18 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     ]);
     expect(opened).toBe("connection_open");
 
-    // A newer host connection replaces an older pending overflow connection, and stalled sync times out.
-    const stallRelay = await startRelayServer({
+    // A newer host connection replaces an older pending overflow connection, and stalled sync times out separately.
+    const replaceRelay = await startRelayServer({
       host: "127.0.0.1",
       port: 0,
       authIssuer: syncAuth.issuer,
       authAudience: "eidolon-relay",
       jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
       dbPath: ":memory:",
-      syncTimeoutMs: 120,
+      syncTimeoutMs: 10_000,
     });
-    cleanups.push(() => stallRelay.stop());
-    const staleHostWs = await connectRawRelayHost(stallRelay.url, syncJwt, {
+    cleanups.push(() => replaceRelay.stop());
+    const staleHostWs = await connectRawRelayHost(replaceRelay.url, syncJwt, {
       keys: syncHostKeys,
       hostName: "StaleSync",
     });
@@ -1438,7 +1438,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     await staleHostWs.closed;
 
     const pendingSlowWs = new WebSocket(
-      `${stallRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      `${replaceRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
       { headers: { authorization: `Bearer ${syncJwt}` } },
     );
     cleanups.push(() => {
@@ -1479,16 +1479,26 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     await vi.waitFor(() => expect(pendingMsgs.some((m) => m.type === "host_hello_ack")).toBe(true));
 
     // Connecting a newer host for the same relayHostId closes the stale pending socket (code 1000).
-    const replacementHost = await connectRawRelayHost(stallRelay.url, syncJwt, {
+    const replacementHost = await connectRawRelayHost(replaceRelay.url, syncJwt, {
       keys: syncHostKeys,
       hostName: "NewHost",
     });
     expect((await pendingSlowClosed).code).toBe(1000);
-    expect(stallRelay.hub.onlineHostCount).toBe(1);
+    expect(replaceRelay.hub.onlineHostCount).toBe(1);
     replacementHost.ws.close();
     await replacementHost.closed;
 
     // Stalling before host_sync_ready terminates the socket on syncTimeoutMs.
+    const stallRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: syncAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${syncAuth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      syncTimeoutMs: 120,
+    });
+    cleanups.push(() => stallRelay.stop());
     const stallPendingWs = new WebSocket(
       `${stallRelay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
       { headers: { authorization: `Bearer ${syncJwt}` } },

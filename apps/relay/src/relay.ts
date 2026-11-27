@@ -481,6 +481,12 @@ export class RelayHub {
       }
 
       const handleControl = (raw: WebSocket.RawData) => {
+        if (
+          entry.superseded ||
+          (this.#hosts.get(relayHostId) !== entry && this.#pendingHosts.get(relayHostId) !== entry)
+        ) {
+          return;
+        }
         try {
           const msg = RelayHostControlInboundSchema.parse(JSON.parse(rawDataToText(raw)));
           switch (msg.type) {
