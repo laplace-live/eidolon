@@ -49,6 +49,20 @@ const HANDSHAKE_TIMEOUT_MS = 15_000;
 const ALLOWED_CALL_PORT_TTL_MS = 5 * 60 * 1000;
 const HOST_HOP_BY_HOP = new Set(["transfer-encoding", "connection", "keep-alive"]);
 
+type RelayHostErrorCode =
+  | "bad-request"
+  | "relay-auth-required"
+  | "relay-auth-expired"
+  | "relay-auth-rejected"
+  | "pairing-failed"
+  | "upstream-failed"
+  | "relay-unreachable"
+  | "subspace-unreachable";
+
+function relayHostError(code: RelayHostErrorCode, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
 interface ActiveInvite {
   readonly id: string;
   readonly mode: "direct" | "relay";
@@ -140,6 +154,7 @@ export class SubspaceHost {
   #relayAttemptId = 0;
   #relayConnected = false;
   #relayError: string | null = null;
+  #relayErrorCode: RelayHostErrorCode | null = null;
   #relayTimer: ReturnType<typeof setTimeout> | null = null;
   #cachedRelayJwt: {
     readonly authUrl: string;
@@ -609,7 +624,7 @@ export class SubspaceHost {
   async stop(): Promise<void> {
     this.#stopped = true;
     for (const waiter of [...this.#relayReadyWaiters]) {
-      waiter.reject(new Error("Subspace host stopped"));
+      waiter.reject(relayHostError("subspace-unreachable", "Subspace host stopped"));
     }
     this.#relayReadyWaiters.clear();
     for (const resolve of this.#inviteAckWaiters.values()) resolve();
@@ -646,30 +661,51 @@ export class SubspaceHost {
       };
       const timer = setTimeout(
         () =>
-          waiter.reject(new Error(this.#relayError || "Timed out connecting to Subspace Relay")),
+          waiter.reject(
+            relayHostError(
+              this.#relayErrorCode ?? "relay-unreachable",
+              this.#relayError || "Timed out connecting to Subspace Relay",
+            ),
+          ),
         timeoutMs,
       );
       this.#relayReadyWaiters.add(waiter);
     });
   }
 
-  #setRelayState(connected: boolean, error: string | null): void {
+  #setRelayState(
+    connected: boolean,
+    error: string | null,
+    errorCode: RelayHostErrorCode | null = null,
+  ): void {
+    const nextCode = connected || error === null ? null : (errorCode ?? "relay-unreachable");
     if (connected) {
       for (const waiter of [...this.#relayReadyWaiters]) waiter.resolve();
     } else if (error !== null && !this.#relayTimer) {
-      for (const waiter of [...this.#relayReadyWaiters]) waiter.reject(new Error(error));
+      for (const waiter of [...this.#relayReadyWaiters]) {
+        waiter.reject(relayHostError(nextCode!, error));
+      }
     }
-    if (this.#relayConnected === connected && this.#relayError === error) return;
+    if (
+      this.#relayConnected === connected &&
+      this.#relayError === error &&
+      this.#relayErrorCode === nextCode
+    ) {
+      return;
+    }
     this.#relayConnected = connected;
     this.#relayError = error;
+    this.#relayErrorCode = nextCode;
     this.#deps.onEvent?.({ type: "relay-state", connected, error });
   }
 
-  #scheduleRelayReconnect(): void {
+  #scheduleRelayReconnect(delayMs?: number): void {
     if (this.#stopped || !this.#relayWanted) return;
     if (this.#relayTimer !== null) return;
-    const delay = this.#relayBackoffMs;
-    this.#relayBackoffMs = Math.min(15_000, Math.round(this.#relayBackoffMs * 1.8));
+    const delay = delayMs ?? this.#relayBackoffMs;
+    if (delayMs === undefined) {
+      this.#relayBackoffMs = Math.min(15_000, Math.round(this.#relayBackoffMs * 1.8));
+    }
     this.#relayTimer = setTimeout(() => {
       this.#relayTimer = null;
       if (!this.#stopped && this.#relayWanted && this.#relayConnectTask === null) {
@@ -683,14 +719,16 @@ export class SubspaceHost {
     this.#relayTimer.unref?.();
   }
 
-  async #resolveRelayJwt(auth: SubspaceRelayAuthRecord): Promise<string> {
+  async #resolveRelayJwt(
+    auth: SubspaceRelayAuthRecord,
+  ): Promise<{ readonly jwt: string; readonly fromCache: boolean }> {
     if (
       this.#cachedRelayJwt !== null &&
       this.#cachedRelayJwt.authUrl === auth.authUrl &&
       this.#cachedRelayJwt.sessionToken === auth.token &&
       Date.now() < this.#cachedRelayJwt.expiresAt - 60_000
     ) {
-      return this.#cachedRelayJwt.jwt;
+      return { jwt: this.#cachedRelayJwt.jwt, fromCache: true };
     }
     const minted = await mintRelayJwt(auth.authUrl, auth.token);
     this.#cachedRelayJwt = {
@@ -699,7 +737,7 @@ export class SubspaceHost {
       jwt: minted.token,
       expiresAt: minted.expiresAt,
     };
-    return minted.token;
+    return { jwt: minted.token, fromCache: false };
   }
 
   #readRelayAuthSafe(): {
@@ -741,11 +779,11 @@ export class SubspaceHost {
     if (this.#stopped || !this.#relayWanted || attemptId !== this.#relayAttemptId) return;
     const { auth, error: authErr } = this.#readRelayAuthSafe();
     if (authErr !== null) {
-      this.#setRelayState(false, authErr);
+      this.#setRelayState(false, authErr, "bad-request");
       return;
     }
     if (auth === null) {
-      this.#setRelayState(false, "Sign in required");
+      this.#setRelayState(false, "Sign in required", "relay-auth-required");
       return;
     }
     let relayUrl: string;
@@ -754,7 +792,7 @@ export class SubspaceHost {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
       logger.warning(`[subspace] Relay control URL error: ${message}`);
-      this.#setRelayState(false, message);
+      this.#setRelayState(false, message, "bad-request");
       return;
     }
     this.#relayControlUrl = relayUrl;
@@ -762,18 +800,27 @@ export class SubspaceHost {
     this.#relayControlAuthUrl = auth.authUrl;
 
     let jwt: string;
+    let usedCachedJwt: boolean;
     try {
-      jwt = await this.#resolveRelayJwt(auth);
+      ({ jwt, fromCache: usedCachedJwt } = await this.#resolveRelayJwt(auth));
     } catch (error) {
       if (attemptId !== this.#relayAttemptId) return;
       if (error instanceof RelayAuthExpiredError) {
         this.#cachedRelayJwt = null;
-        this.#setRelayState(false, "Relay sign-in expired");
+        this.#setRelayState(
+          false,
+          "Relay sign-in expired — sign out and sign in again",
+          "relay-auth-expired",
+        );
         return;
       }
       logger.warning(`[subspace] Could not mint Relay JWT: ${errorText(error)}`);
       this.#scheduleRelayReconnect();
-      this.#setRelayState(false, "Could not reach Relay auth server");
+      this.#setRelayState(
+        false,
+        `Could not reach Relay auth server (${auth.authUrl})`,
+        "upstream-failed",
+      );
       return;
     }
     if (this.#stopped || !this.#relayWanted || attemptId !== this.#relayAttemptId) return;
@@ -790,13 +837,13 @@ export class SubspaceHost {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
       logger.warning(`[subspace] Relay control URL error: ${message}`);
-      this.#scheduleRelayReconnect();
-      this.#setRelayState(false, message);
+      this.#setRelayState(false, message, "bad-request");
       return;
     }
     guardWsErrors(ws);
     this.#relayWs = ws;
     const controlBinding = { ws, relayUrl, auth } as const;
+    let wsFailed = false;
 
     ws.on("open", () => {
       if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
@@ -830,21 +877,43 @@ export class SubspaceHost {
       const text = reason.toString("utf8");
       if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
         this.#cachedRelayJwt = null;
-        this.#setRelayState(false, "Relay sign-in expired");
+        if (usedCachedJwt && this.#relayWanted && !this.#stopped) {
+          this.#scheduleRelayReconnect(0);
+          this.#setRelayState(false, null);
+          return;
+        }
+        logger.warning(
+          `[subspace] Relay rejected freshly minted JWT (${relayUrl}): ${text || "4401"}`,
+        );
+        const detail = text ? `: ${text}` : "";
+        this.#setRelayState(
+          false,
+          `Relay rejected authentication (${relayUrl})${detail}`,
+          "relay-auth-rejected",
+        );
         return;
       }
       if (code === RELAY_CLOSE_CODE.HOST_OWNED_BY_OTHER) {
-        this.#setRelayState(false, text || "Host identity belongs to another Relay account");
+        this.#setRelayState(
+          false,
+          text || "Host identity belongs to another Relay account",
+          "pairing-failed",
+        );
         return;
       }
       if (this.#relayWanted && !this.#stopped) this.#scheduleRelayReconnect();
-      this.#setRelayState(false, text || (code === 1000 ? null : `Disconnected (${code})`));
+      const closeError =
+        text ||
+        (wsFailed ? this.#relayError : null) ||
+        (code === 1000 ? null : `Disconnected (${code})`);
+      this.#setRelayState(false, closeError, closeError === null ? null : "relay-unreachable");
     });
 
     ws.on("error", (err) => {
       if (this.#relayWs !== ws) return;
+      wsFailed = true;
       logger.warning(`[subspace] Relay control connection error: ${errorText(err)}`);
-      this.#setRelayState(false, "Relay connection failed");
+      this.#setRelayState(false, `Relay connection failed (${relayUrl})`, "relay-unreachable");
     });
   }
 
@@ -961,12 +1030,12 @@ export class SubspaceHost {
     },
   ): Promise<void> {
     if (this.#stopped || this.#relayWs !== binding.ws) return;
-    const jwt = await this.#resolveRelayJwt(binding.auth).catch(() => null);
-    if (jwt === null || this.#stopped || this.#relayWs !== binding.ws) return;
+    const resolved = await this.#resolveRelayJwt(binding.auth).catch(() => null);
+    if (resolved === null || this.#stopped || this.#relayWs !== binding.ws) return;
     let ws: WebSocket;
     try {
       const url = httpToWsUrl(binding.relayUrl, RELAY_PATHS.HOST_DATA);
-      ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+      ws = new WebSocket(url, { headers: { authorization: `Bearer ${resolved.jwt}` } });
     } catch {
       return;
     }

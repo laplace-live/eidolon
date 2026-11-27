@@ -13,19 +13,59 @@ export interface RelayConfig {
 export const DEFAULT_RELAY_AUTH_ISSUER = "https://id.laplace.live";
 export const DEFAULT_RELAY_AUTH_AUDIENCE = "eidolon-relay";
 
+function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: boolean): string {
+  const value = raw.trim();
+  // Reject shell line-continuation characters before URL() silently rewrites `\` to `/`.
+  if (value === "" || /[\s\\]/.test(value)) {
+    throw new Error(
+      `${name} must be a valid http(s) URL without whitespace or backslashes (got ${JSON.stringify(raw)})`,
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${name} must use http or https (got ${JSON.stringify(raw)})`);
+  }
+  return stripTrailingSlashes ? withoutTrailingSlashes(value) : value;
+}
+
+function readNormalizedToken(name: string, raw: string): string {
+  const value = raw.trim();
+  if (value === "" || /[\s\\]/.test(value)) {
+    throw new Error(
+      `${name} must not be empty or contain whitespace or backslashes (got ${JSON.stringify(raw)})`,
+    );
+  }
+  return value;
+}
+
 export function loadRelayConfig(): RelayConfig {
-  const host = envStr("EIDOLON_RELAY_HOST", "0.0.0.0");
+  const host = envStr("EIDOLON_RELAY_HOST", "0.0.0.0").trim() || "0.0.0.0";
   const port = envInt("EIDOLON_RELAY_PORT", 8788);
-  const publicUrl = withoutTrailingSlashes(
+  const publicUrl = readNormalizedUrl(
+    "EIDOLON_RELAY_PUBLIC_URL",
     envStr("EIDOLON_RELAY_PUBLIC_URL", `http://localhost:${port}`),
+    true,
   );
   const dbPath = envStr("EIDOLON_RELAY_DB_PATH", "./data/relay.sqlite");
-  const authIssuer = withoutTrailingSlashes(
+  const authIssuer = readNormalizedUrl(
+    "EIDOLON_RELAY_AUTH_ISSUER",
     envStr("EIDOLON_RELAY_AUTH_ISSUER", DEFAULT_RELAY_AUTH_ISSUER),
+    true,
   );
-  const authAudience = envStr("EIDOLON_RELAY_AUTH_AUDIENCE", DEFAULT_RELAY_AUTH_AUDIENCE);
+  const authAudience = readNormalizedToken(
+    "EIDOLON_RELAY_AUTH_AUDIENCE",
+    envStr("EIDOLON_RELAY_AUTH_AUDIENCE", DEFAULT_RELAY_AUTH_AUDIENCE),
+  );
   const explicitJwks = envOptional("EIDOLON_RELAY_JWKS_URL");
-  const jwksUrl = explicitJwks ?? `${authIssuer}/.well-known/jwks.json`;
+  const jwksUrl =
+    explicitJwks === undefined
+      ? `${authIssuer}/.well-known/jwks.json`
+      : readNormalizedUrl("EIDOLON_RELAY_JWKS_URL", explicitJwks, false);
 
   return {
     host,

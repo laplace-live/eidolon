@@ -713,7 +713,9 @@ export class SubspaceClient {
       const errorCode = error instanceof SubspaceConnectError ? error.code : "subspace-unreachable";
       this.#setState("error", message, errorCode);
       if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
-      throw error;
+      throw error instanceof SubspaceConnectError
+        ? error
+        : new SubspaceConnectError(errorCode, message);
     }
   }
 

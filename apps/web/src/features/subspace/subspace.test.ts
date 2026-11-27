@@ -200,6 +200,7 @@ const { ServersCard } = await import("./servers-card");
 const {
   resetHostCacheAndRoute,
   subspaceQuery,
+  useCreateShareOffer,
   usePairSubspaceServer,
   useRemoveSubspaceServer,
   useSubspaceHostEpoch,
@@ -1305,6 +1306,52 @@ describe("Subspace web UI regressions", () => {
       expect(renderServers("local-network-blocked")).toContain("Check Permissions");
     } finally {
       globalThis.eidolonDesktop = originalDesktop;
+    }
+  });
+
+  test("useCreateShareOffer invalidates subspaceQuery on error so relayError surfaces promptly", async () => {
+    const client = new QueryClient();
+    client.setQueryData(subspaceQuery.queryKey, makeState());
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    mockCall.mockRejectedValueOnce(new Error("Relay unreachable"));
+
+    let trigger: (() => Promise<void>) | undefined;
+    function Probe() {
+      const offer = useCreateShareOffer();
+      trigger = async () => {
+        await offer.mutateAsync({ mode: "relay" }).catch(() => {});
+      };
+      return null;
+    }
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    const history = createBrowserHistory(null);
+    try {
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(Probe),
+            ),
+          ),
+        ),
+      );
+      await mounted.act(async () => {
+        await trigger?.();
+        // Flush TanStack Query's batched notifyManager timer before unmount clears window.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["subspace"] });
+      expect(toastErrorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      client.clear();
+      history.dispose();
     }
   });
 });

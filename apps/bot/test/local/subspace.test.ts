@@ -507,6 +507,10 @@ describe("subspaceRoutes error handling", () => {
     const logs = captureLogs();
     cleanups.push(() => logs.restore());
 
+    let offerError: Error = Object.assign(
+      new Error("Relay connection failed (http://localhost:8788)"),
+      { code: "relay-unreachable" },
+    );
     const fakeManager = {
       getState: async () => {
         throw new Error("SQLITE_CANTOPEN: /secret/db/path");
@@ -525,6 +529,9 @@ describe("subspaceRoutes error handling", () => {
           "local-network-blocked",
           "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
         );
+      },
+      createShareOffer: async () => {
+        throw offerError;
       },
       startRelayAuth: async () => {
         throw Object.assign(new Error("connect ECONNREFUSED 10.9.8.7:4444"), {
@@ -624,6 +631,62 @@ describe("subspaceRoutes error handling", () => {
         code: "local-network-blocked",
         message:
           "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+      },
+    });
+
+    const relayOfferRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/share/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "relay" }),
+      }),
+      server,
+    );
+    expect(relayOfferRes.status).toBe(502);
+    expect((await relayOfferRes.json()) as ErrorBody).toEqual({
+      error: {
+        code: "relay-unreachable",
+        message: "Could not reach the Subspace Relay",
+      },
+    });
+
+    offerError = Object.assign(new Error("Relay sign-in expired — sign out and sign in again"), {
+      code: "relay-auth-expired",
+    });
+    const expiredOfferRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/share/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "relay" }),
+      }),
+      server,
+    );
+    expect(expiredOfferRes.status).toBe(409);
+    expect((await expiredOfferRes.json()) as ErrorBody).toEqual({
+      error: {
+        code: "relay-auth-expired",
+        message: "Your Subspace Relay session has expired; sign out and sign in again",
+      },
+    });
+
+    offerError = Object.assign(
+      new Error("Relay rejected authentication (https://eidolon-relay.vrp.moe): Unauthorized"),
+      { code: "relay-auth-rejected" },
+    );
+    const rejectedOfferRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/share/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "relay" }),
+      }),
+      server,
+    );
+    expect(rejectedOfferRes.status).toBe(502);
+    expect((await rejectedOfferRes.json()) as ErrorBody).toEqual({
+      error: {
+        code: "relay-auth-rejected",
+        message:
+          "The Subspace Relay rejected authentication; check the Relay server configuration or sign in again",
       },
     });
   });

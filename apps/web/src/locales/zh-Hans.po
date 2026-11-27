@@ -1464,6 +1464,10 @@ msgstr "连不上局域网里的这台服务器。请确认它正在运行，或
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "无法连接该亚空间服务器。请检查它是否正在运行并保持连接。"
 
+#: src/lib/labels.ts
+msgid "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
+msgstr "无法连接 Subspace 中继服务器。请确认中继服务正在运行且可访问。"
+
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
@@ -6998,6 +7002,10 @@ msgstr "网站拒绝了 yt-dlp 的请求，通常是因为 yt-dlp 版本过旧�
 msgid "The smallest allowed value is {min}."
 msgstr "最小值为 {min}。"
 
+#: src/lib/labels.ts
+msgid "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
+msgstr "亚空间中继拒绝了你的会话，请退出后重新登录，或检查中继服务器的认证配置。"
+
 #: src/components/settings-form/labels.ts
 msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
 msgstr "无法直连时用于跨网络配对和连接的亚空间中继服务器。"
@@ -8168,6 +8176,10 @@ msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1
 #: src/features/setup/done-step.tsx
 msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
 msgstr "设置已保存。你可以立即开始文字聊天，也可以随时再配置语音通话。"
+
+#: src/lib/labels.ts
+msgid "Your Subspace Relay session has expired. Sign out and sign in again."
+msgstr "你的亚空间中继登录已过期，请退出后重新登录。"
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"

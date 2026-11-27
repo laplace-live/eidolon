@@ -49,9 +49,12 @@ const STATUS_BY_CODE: Readonly<Partial<Record<ErrorCode, number>>> = {
   "pairing-expired": 410,
   "pairing-failed": 400,
   "subspace-unreachable": 502,
+  "relay-unreachable": 502,
   "local-network-blocked": 502,
   "upstream-failed": 502,
   "relay-auth-required": 409,
+  "relay-auth-expired": 409,
+  "relay-auth-rejected": 502,
   "unknown-subspace-server": 404,
   "unknown-subspace-grant": 404,
 };
@@ -64,10 +67,14 @@ const MESSAGE_BY_CODE: Readonly<Partial<Record<ErrorCode, string>>> = {
   "pairing-expired": "This pairing link has expired; ask the remote host for a new one",
   "pairing-failed": "Pairing with the remote Subspace server failed",
   "subspace-unreachable": "Could not reach the Subspace server",
+  "relay-unreachable": "Could not reach the Subspace Relay",
   "local-network-blocked":
     "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
   "upstream-failed": "Could not reach the Relay auth server",
   "relay-auth-required": "Sign in to the Subspace Relay first",
+  "relay-auth-expired": "Your Subspace Relay session has expired; sign out and sign in again",
+  "relay-auth-rejected":
+    "The Subspace Relay rejected authentication; check the Relay server configuration or sign in again",
   "unknown-subspace-server": "Unknown Subspace server",
   "unknown-subspace-grant": "Unknown Subspace device grant",
 };

@@ -17,6 +17,7 @@ import {
   importX25519PrivateKey,
   isAllowedAuthUrl,
   isMacLocalNetworkBlocked,
+  mintRelayJwt,
   parsePairingInput,
   RELAY_CLOSE_CODE,
   RELAY_PATHS,
@@ -322,6 +323,212 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     await host.createPairingOffer({ mode: "relay" });
     await new Promise((r) => setTimeout(r, 30));
     expect(inviteCreates).toHaveLength(1);
+  });
+
+  test("SubspaceHost createPairingOffer surfaces coded relay-unreachable, relay-auth-expired, and relay-auth-rejected errors", async () => {
+    const dir = tempDir("subspace-relay-error-codes-");
+    const store = new SubspaceStore(dir);
+
+    // 1. Auth server is up and mints a JWT, while Relay port is closed -> relay-unreachable.
+    type Mode = "ws-refused" | "ws-unauthorized" | "auth-401" | "auth-cf-403" | "cached-retry";
+    let mode: Mode = "ws-refused";
+    let tokenCalls = 0;
+    let firstJwt = "";
+    const seenWsAuths: (string | undefined)[] = [];
+    const activeControlSockets = new Set<import("ws").default>();
+    const relayKp = await generateX25519KeyPair();
+
+    const attachControlResponder = (ws: import("ws").default) => {
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString("utf8")) as {
+          type: string;
+          inviteId?: string;
+        };
+        if (msg.type === "host_hello") {
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64: Buffer.from("c").toString("base64"),
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          ws.send(
+            JSON.stringify({
+              type: "host_hello_ack",
+              relayHostId: "host_1234",
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "invite_create") {
+          ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+        }
+      });
+    };
+
+    const closedPortServer = createServer();
+    await new Promise<void>((resolve) => closedPortServer.listen(0, "127.0.0.1", resolve));
+    const closedAddr = closedPortServer.address();
+    if (!closedAddr || typeof closedAddr === "string") throw new Error("expected address");
+    const closedRelayUrl = `http://127.0.0.1:${closedAddr.port}`;
+    await new Promise<void>((resolve) => closedPortServer.close(() => resolve()));
+
+    const makeJwt = (label: string) => {
+      const exp = Math.floor(Date.now() / 1000) + 300;
+      const header = Buffer.from(JSON.stringify({ alg: "EdDSA", label })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString("base64url");
+      return `${header}.${payload}.sig`;
+    };
+
+    const authAndRelayServer = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        if (mode === "auth-401") {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "unauthorized" }));
+          return;
+        }
+        if (mode === "auth-cf-403") {
+          res.writeHead(403, {
+            "content-type": "text/html; charset=utf-8",
+            "cf-mitigated": "challenge",
+          });
+          res.end("<html><body>Just a moment...</body></html>");
+          return;
+        }
+        tokenCalls += 1;
+        const jwt = makeJwt(`jwt-${tokenCalls}`);
+        if (tokenCalls === 1) firstJwt = jwt;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: jwt }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    authAndRelayServer.on("upgrade", (req, socket, head) => {
+      if (req.url === RELAY_PATHS.HOST_CONTROL) {
+        seenWsAuths.push(req.headers.authorization);
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          if (mode === "ws-unauthorized") {
+            ws.close(RELAY_CLOSE_CODE.UNAUTHORIZED, "Unauthorized");
+            return;
+          }
+          if (mode === "cached-retry") {
+            if (req.headers.authorization === `Bearer ${firstJwt}`) {
+              // Accept the first connection for jwt-1 to warm #cachedRelayJwt, then reject jwt-1 after disconnect.
+              if (seenWsAuths.length === 1) {
+                activeControlSockets.add(ws);
+                attachControlResponder(ws);
+                return;
+              }
+              ws.close(RELAY_CLOSE_CODE.UNAUTHORIZED, "Stale JWT");
+              return;
+            }
+            attachControlResponder(ws);
+            return;
+          }
+        });
+        if (mode !== "ws-refused") return;
+      }
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => authAndRelayServer.listen(0, "127.0.0.1", resolve));
+    const authAddr = authAndRelayServer.address();
+    if (!authAddr || typeof authAddr === "string") throw new Error("expected auth address");
+    const serverBaseUrl = `http://127.0.0.1:${authAddr.port}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const client of wss.clients) client.terminate();
+          wss.close(() => authAndRelayServer.close(() => resolve()));
+        }),
+    );
+
+    store.saveRelayAuth({
+      authUrl: serverBaseUrl,
+      relayUrl: closedRelayUrl,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const hostUnreachable = new SubspaceHost({
+      store,
+      serverVersion: () => "0.22.0",
+      relayUrl: () => closedRelayUrl,
+      dispatch: async () => new Response("ok"),
+    });
+    cleanups.push(() => hostUnreachable.stop());
+
+    await expect(hostUnreachable.createPairingOffer({ mode: "relay" })).rejects.toMatchObject({
+      code: "relay-unreachable",
+    });
+    expect(hostUnreachable.relayError).toContain(closedRelayUrl);
+    await hostUnreachable.stop();
+
+    // 2. Freshly minted JWT rejected with UNAUTHORIZED (4401) -> relay-auth-rejected (not "Sign in first").
+    mode = "ws-unauthorized";
+    store.saveRelayAuth({
+      authUrl: serverBaseUrl,
+      relayUrl: serverBaseUrl,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const hostUnauthorized = new SubspaceHost({
+      store,
+      serverVersion: () => "0.22.0",
+      relayUrl: () => serverBaseUrl,
+      dispatch: async () => new Response("ok"),
+    });
+    cleanups.push(() => hostUnauthorized.stop());
+
+    await expect(hostUnauthorized.createPairingOffer({ mode: "relay" })).rejects.toMatchObject({
+      code: "relay-auth-rejected",
+    });
+    expect(hostUnauthorized.relayError).toContain("Relay rejected authentication");
+    expect(hostUnauthorized.relayError).toContain("Unauthorized");
+    await hostUnauthorized.stop();
+
+    // 3. /api/auth/token 401 -> relay-auth-expired; HTML/cf-mitigated 403 -> non-expired error.
+    mode = "auth-cf-403";
+    await expect(mintRelayJwt(serverBaseUrl, "sess-1")).rejects.toThrow(
+      "Could not mint relay JWT (403)",
+    );
+
+    mode = "auth-401";
+    const hostExpired = new SubspaceHost({
+      store,
+      serverVersion: () => "0.22.0",
+      relayUrl: () => serverBaseUrl,
+      dispatch: async () => new Response("ok"),
+    });
+    cleanups.push(() => hostExpired.stop());
+
+    await expect(hostExpired.createPairingOffer({ mode: "relay" })).rejects.toMatchObject({
+      code: "relay-auth-expired",
+    });
+    await hostExpired.stop();
+
+    // 4. Cached JWT rejected with 4401 re-mints once and connects without failing.
+    mode = "cached-retry";
+    tokenCalls = 0;
+    seenWsAuths.length = 0;
+    const hostCached = new SubspaceHost({
+      store,
+      serverVersion: () => "0.22.0",
+      relayUrl: () => serverBaseUrl,
+      dispatch: async () => new Response("ok"),
+    });
+    cleanups.push(() => hostCached.stop());
+
+    await hostCached.createPairingOffer({ mode: "relay" });
+    for (const sock of activeControlSockets) sock.close(1012, "Restart");
+    await vi.waitFor(() => expect(hostCached.relayConnected).toBe(false));
+    const retriedOffer = await hostCached.createPairingOffer({ mode: "relay", rotate: true });
+    expect(retriedOffer.mode).toBe("relay");
+    expect(tokenCalls).toBe(2);
+    expect(seenWsAuths).toHaveLength(3);
   });
 
   test("completeDeviceAuthorization uses a readable fallback instead of [object Object] on empty error_description", async () => {

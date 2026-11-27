@@ -22,6 +22,7 @@ import { RELAY_CLOSE_CODE, RELAY_PATHS } from "@eidolon/subspace/relay-contract"
 import { serve } from "srvx";
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
+import { loadRelayConfig } from "../src/config.ts";
 import { createRelayTokenVerifier, RelayJwksUnavailableError } from "../src/jwks-verifier.ts";
 import { openRelayDatabase, RelayStore } from "../src/relay-db.ts";
 import { startRelayServer } from "../src/server.ts";
@@ -910,5 +911,46 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       }),
     ]);
     expect(deviceOpen.grantId).toBe("grant-1");
+  });
+
+  test("loadRelayConfig trims surrounding spaces and rejects trailing backslashes or whitespace", () => {
+    const keys = [
+      "EIDOLON_RELAY_PUBLIC_URL",
+      "EIDOLON_RELAY_AUTH_ISSUER",
+      "EIDOLON_RELAY_AUTH_AUDIENCE",
+      "EIDOLON_RELAY_JWKS_URL",
+    ] as const;
+    const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    const restore = () => {
+      for (const k of keys) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    };
+    try {
+      process.env.EIDOLON_RELAY_PUBLIC_URL = " https://relay.example.com/ ";
+      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https://id.example.com/ ";
+      process.env.EIDOLON_RELAY_AUTH_AUDIENCE = " eidolon-relay ";
+      delete process.env.EIDOLON_RELAY_JWKS_URL;
+      expect(loadRelayConfig()).toMatchObject({
+        publicUrl: "https://relay.example.com",
+        authIssuer: "https://id.example.com",
+        authAudience: "eidolon-relay",
+        jwksUrl: "https://id.example.com/.well-known/jwks.json",
+      });
+
+      for (const [key, badValue] of [
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https://id.laplace.live \\"],
+        ["EIDOLON_RELAY_PUBLIC_URL", "https://eidolon-relay.vrp.moe \\"],
+        ["EIDOLON_RELAY_AUTH_AUDIENCE", "eidolon-relay \\"],
+        ["EIDOLON_RELAY_JWKS_URL", "https://id.laplace.live/.well-known/jwks.json \\"],
+      ] as const) {
+        for (const k of keys) delete process.env[k];
+        process.env[key] = badValue;
+        expect(() => loadRelayConfig()).toThrow(key);
+      }
+    } finally {
+      restore();
+    }
   });
 });

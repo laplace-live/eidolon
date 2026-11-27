@@ -1464,6 +1464,10 @@ msgstr "Can't reach that server on your local network. Check that it's running, 
 msgid "Can't reach that Subspace server. Check that it's running and connected."
 msgstr "Can't reach that Subspace server. Check that it's running and connected."
 
+#: src/lib/labels.ts
+msgid "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
+msgstr "Can't reach the Subspace Relay. Check that the Relay is running and reachable."
+
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
@@ -6998,6 +7002,10 @@ msgstr "The site refused yt-dlp, usually because it is out of date."
 msgid "The smallest allowed value is {min}."
 msgstr "The smallest allowed value is {min}."
 
+#: src/lib/labels.ts
+msgid "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
+msgstr "The Subspace Relay rejected your session. Sign out and sign in again, or check the Relay server's auth settings."
+
 #: src/components/settings-form/labels.ts
 msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
 msgstr "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
@@ -8168,6 +8176,10 @@ msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 #: src/features/setup/done-step.tsx
 msgid "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
 msgstr "Your setup is saved. You can start chatting right away, and set up voice calls anytime."
+
+#: src/lib/labels.ts
+msgid "Your Subspace Relay session has expired. Sign out and sign in again."
+msgstr "Your Subspace Relay session has expired. Sign out and sign in again."
 
 #: src/features/settings/skills-card.tsx
 msgid "Your switches can't be read"
