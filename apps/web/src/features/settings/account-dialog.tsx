@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -106,6 +106,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
   const [baseUrl, setBaseUrl] = useState("");
   const [options, setOptions] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
+  const [tried, setTried] = useState(false);
 
   // Every opening starts from the account as saved, or from nothing.
   useEffect(() => {
@@ -122,6 +123,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
       ),
     );
     setOutcome(null);
+    setTried(false);
   }, [open, account]);
 
   const check = useMutation({
@@ -180,16 +182,21 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
     },
   });
 
-  function submit(event: SubmitEvent) {
-    event.preventDefault();
-    save.mutate();
-  }
-
   const busy = save.isPending || removeKey.isPending;
   const keySource = account?.key.source ?? null;
   const takesKey = provider !== null && provider.credential !== null;
   const needsBase = provider !== null && provider.baseUrl === null && provider.baseUrlEnv !== null;
+  const inheritedBase =
+    account !== null && account.baseUrl.source !== "account" ? account.baseUrl.value : null;
+  const baseMissing = needsBase && baseUrl.trim() === "" && inheritedBase === null;
   const pages = provider === null ? undefined : keyPages(provider.id);
+
+  function submit(event: SubmitEvent) {
+    event.preventDefault();
+    setTried(true);
+    if (baseMissing) return;
+    save.mutate();
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -286,6 +293,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                     spellCheck={false}
                     className="font-mono md:text-[0.8125rem]"
                     value={baseUrl}
+                    aria-invalid={tried && baseMissing}
                     placeholder={
                       account?.baseUrl.source !== "account"
                         ? (account?.baseUrl.value ?? provider.baseUrl ?? "https://")
@@ -305,6 +313,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                           ? t`Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1.`
                           : t`Leave it empty for the provider's own API, or point it at a proxy or another region.`)}
                   </FieldDescription>
+                  {tried && baseMissing && <FieldError>{t`Required.`}</FieldError>}
                 </Field>
               )}
               {(provider.fields ?? []).map((field) => {
@@ -381,7 +390,10 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setProvider(null)}
+                onClick={() => {
+                  setProvider(null);
+                  setTried(false);
+                }}
                 disabled={busy}
               >
                 <ArrowLeftIcon data-icon="inline-start" />

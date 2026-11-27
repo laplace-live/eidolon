@@ -11,6 +11,7 @@ import { AccountKeyField, NoKeyField } from "@/components/settings-form/account-
 import {
   effectiveProvider,
   effectiveProviderType,
+  fallbackModel,
   REINDEX_PATHS,
 } from "@/components/settings-form/controls";
 import { PROVIDER_OFF_LABELS } from "@/components/settings-form/labels";
@@ -67,7 +68,7 @@ const ROLE_HINTS = {
 } satisfies Record<PickedRole, MessageDescriptor>;
 
 /** Which account fills one role, the recommended one marked, and the model it runs. */
-function RolePicker({
+export function RolePicker({
   role,
   rows,
   drafts,
@@ -93,10 +94,12 @@ function RolePicker({
   const locked = envLock(entry, rows);
   const current = effectiveProvider(entry, rows, drafts);
   const providerType = providerOfAccount(current, accounts);
+  const moved = effectiveProviderType(entry, rows, {}, accounts) !== providerType;
   const model = modelAfter(entry, rows, drafts, accounts);
+  const defaultModelId = fallbackModel(entry, rows, drafts, accounts);
   const modelRow = rows.find((row) => row.path === modelPath);
   const savedModel =
-    modelRow && modelRow.source !== "default" && typeof modelRow.value === "string"
+    !moved && modelRow && modelRow.source !== "default" && typeof modelRow.value === "string"
       ? modelRow.value
       : "";
   const offLabel = PROVIDER_OFF_LABELS[role];
@@ -141,19 +144,19 @@ function RolePicker({
             className="font-mono md:text-[0.8125rem]"
             autoComplete="off"
             spellCheck={false}
-            placeholder={model ?? t`Model ID`}
+            placeholder={defaultModelId ?? t`Model ID`}
             value={drafts[modelPath] ?? (customizable ? savedModel : "")}
             aria-invalid={invalid}
             onChange={(event) => onDraft(modelPath, event.target.value)}
             disabled={disabled}
           />
-          {model === null ? (
+          {defaultModelId === null ? (
             <FieldDescription className={invalid ? "text-destructive" : undefined}>
               {t`This account has no default model, so name the one to use.`}
             </FieldDescription>
           ) : (
             <FieldDescription>
-              {t`Default: ${model}. Leave blank to use it, or enter your server's model ID.`}
+              {t`Default: ${ph({ model: defaultModelId })}. Leave blank to use it, or enter your server's model ID.`}
             </FieldDescription>
           )}
         </>

@@ -5110,6 +5110,7 @@ msgid "Required Providers"
 msgstr "Required Providers"
 
 #: src/components/settings-form/account-key-field.tsx
+#: src/features/settings/account-dialog.tsx
 #: src/features/setup/persona-fields.tsx
 msgid "Required."
 msgstr "Required."
