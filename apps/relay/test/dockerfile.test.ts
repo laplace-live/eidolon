@@ -44,6 +44,7 @@ describe("apps/relay Docker image and CI workflow", () => {
     const dockerignore = readFileSync(join(ROOT, "apps/relay/Dockerfile.dockerignore"), "utf8");
     const relayYml = readFileSync(join(ROOT, ".github/workflows/relay.yml"), "utf8");
     const dockerYml = readFileSync(join(ROOT, ".github/workflows/docker.yml"), "utf8");
+    const tsYml = readFileSync(join(ROOT, ".github/workflows/ts.yml"), "utf8");
 
     for (const ws of workspaces.values()) {
       expect(dockerfile).toContain(`COPY ${ws.manifestPath} ${dirname(ws.manifestPath)}/`);
@@ -81,6 +82,11 @@ describe("apps/relay Docker image and CI workflow", () => {
     ]) {
       expect(
         dockerYml.match(new RegExp(ignored.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")),
+      ).toHaveLength(2);
+    }
+    for (const watchedByTs of ['".github/workflows/docker.yml"', '".github/workflows/relay.yml"']) {
+      expect(
+        tsYml.match(new RegExp(watchedByTs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")),
       ).toHaveLength(2);
     }
   });

@@ -20,6 +20,8 @@ on:
       - "AGENTS.md"
       - "docs/**"
       - ".claude/settings.json"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/relay.yml"
       - ".github/workflows/ts.yml"
   pull_request:
     branches:
@@ -40,6 +42,8 @@ on:
       - "AGENTS.md"
       - "docs/**"
       - ".claude/settings.json"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/relay.yml"
       - ".github/workflows/ts.yml"
   workflow_dispatch:
 

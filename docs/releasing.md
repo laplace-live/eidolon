@@ -149,8 +149,10 @@ tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
 - **Production follows `:edge`, not the tags.** Every push to `master` that `docker.yml` doesn't
   ignore rebuilds bot `:edge` (and Watchtower restarts the production bot from it;
   [AGENTS.md](../AGENTS.md#shipping-a-change)), while `relay.yml` rebuilds
-  `ghcr.io/laplace-live/eidolon-relay:edge` only when `apps/relay`, `packages/subspace`,
-  `packages/config`, or workspace manifests/lockfile change so bot and relay deploys stay isolated.
+  `ghcr.io/laplace-live/eidolon-relay` on qualifying `master` pushes when `apps/relay`,
+  `packages/subspace`, `packages/config`, workspace manifests/lockfile, `docker-bake.hcl`, or
+  `relay.yml` change (release tags and manual/webhook dispatches also trigger it) so bot and relay
+  `:edge` deploys stay isolated.
 
 ## Publishing to npm
 
