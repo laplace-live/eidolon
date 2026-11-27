@@ -1,7 +1,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -253,11 +253,14 @@ function DesktopUpdateDialog({ appVersion }: { readonly appVersion: string }) {
     updateState,
     updateState,
   );
+  // Keep the last open phase visible while Radix animates closed (e.g. Skip -> idle).
+  const [shown, setShown] = useState(update);
+  if (open && shown !== update) setShown(update);
   return (
     <UpdateDialog
       open={open}
       onOpenChange={setUpdateOpen}
-      update={update}
+      update={open ? update : shown}
       appVersion={appVersion}
     />
   );

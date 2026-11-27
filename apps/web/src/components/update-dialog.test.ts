@@ -7,7 +7,10 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { EidolonDesktop, ReleaseNoteEntry, UpdateState } from "@/lib/desktop";
+import { mountFakeDom } from "@/test/fake-dom";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
+
+let renderClosedDialog = false;
 
 const toastCalls = {
   loading: vi.fn(),
@@ -21,7 +24,9 @@ vi.doMock("@lingui/react/macro", linguiReactMacro);
 vi.doMock("sonner", () => ({ toast: toastCalls }));
 vi.doMock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { readonly open: boolean; readonly children?: ReactNode }) =>
-    open ? createElement("div", { "data-slot": "dialog" }, children) : null,
+    open || renderClosedDialog
+      ? createElement("div", { "data-slot": "dialog", "data-open": String(open) }, children)
+      : null,
   DialogContent: ({ children }: { readonly children?: ReactNode }) =>
     createElement("div", { "data-slot": "dialog-content" }, children),
   DialogHeader: ({ children }: { readonly children?: ReactNode }) =>
@@ -39,7 +44,7 @@ const { checkForUpdates, setUpdateOpen, subscribeUpdateOpen, updateOpen } = awai
   "@/lib/update-check"
 );
 const { UpdateVersion } = await import("./update-version");
-const { UpdateDialog } = await import("./update-dialog");
+const { UpdateDialog, UpdateDialogHost } = await import("./update-dialog");
 const { TooltipProvider } = await import("./ui/tooltip");
 
 const NOTES: readonly ReleaseNoteEntry[] = [
@@ -92,6 +97,7 @@ function fakeBridge(overrides: Partial<EidolonDesktop> = {}): EidolonDesktop {
 }
 
 afterEach(() => {
+  renderClosedDialog = false;
   globalThis.eidolonDesktop = undefined;
   setUpdateState({ phase: "unsupported" });
   setUpdateOpen(false);
@@ -232,5 +238,40 @@ describe("checkForUpdates", () => {
     setUpdateOpen(false);
     expect(seen).toEqual([true, false]);
     stop();
+  });
+});
+
+describe("UpdateDialogHost", () => {
+  test("retains the active update phase while the closing dialog animates out across a transition to idle", async () => {
+    renderClosedDialog = true;
+    globalThis.eidolonDesktop = fakeBridge();
+    setUpdateState({ phase: "available", version: "0.7.0", notes: NOTES });
+    setUpdateOpen(true);
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    const tree = () => createElement(I18nProvider, { i18n }, createElement(UpdateDialogHost));
+    const mounted = await mountFakeDom(tree());
+    try {
+      expect(mounted.container.innerHTML).toContain('data-open="true"');
+      expect(mounted.container.textContent).toContain("Update Available");
+
+      // Simulate Skip This Version closing the dialog while main transitions state to idle
+      // and a parent re-render occurs before Radix's closing animation unmounts content.
+      await mounted.act(() => {
+        setUpdateOpen(false);
+        setUpdateState({ phase: "idle" });
+      });
+      await mounted.render(tree());
+      expect(mounted.container.innerHTML).toContain('data-open="false"');
+      expect(mounted.container.textContent).toContain("Update Available");
+      expect(mounted.container.textContent).not.toContain("No Update in Progress");
+
+      await mounted.act(() => {
+        setUpdateOpen(true);
+      });
+      expect(mounted.container.innerHTML).toContain('data-open="true"');
+      expect(mounted.container.textContent).toContain("No Update in Progress");
+    } finally {
+      await mounted.unmount();
+    }
   });
 });

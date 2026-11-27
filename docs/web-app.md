@@ -438,7 +438,7 @@ has none of them, and without them nothing below happens.
   for a port to her page, and `feedingCompanion(feeding)`, whether a call she is on is up here;
   `onCompanionPick(callback)`, which hands the page her menu's picks for the call, `call`, `hang-up`,
   `mute` or `unmute`; and `onWindowShows(callback)`, whether the window shows, at once and at each
-  change. `connectDesktop` ignores promise rejections where appropriate, passes each pick to whoever
+  change. `connectDesktop` passes each pick to whoever
   listens through `subscribeCompanionPick` at that moment, and drops one nobody does, and keeps
   the window's showing as a store (`windowShows()`, `subscribeWindowShows`), true in a browser, by
   which the call's provider and Studio's preview hold their stages while the window doesn't show, and
