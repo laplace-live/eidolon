@@ -78,6 +78,6 @@ export class OpenAISpeech implements SpeechStream {
       const error = await response.text();
       throw new SpeechError(`Error getting audio (status: ${response.status}, error: ${error})`);
     }
-    yield* pcmBody(response.body);
+    yield* pcmBody(response.body, SAMPLE_RATE);
   }
 }

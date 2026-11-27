@@ -1405,6 +1405,8 @@ export interface ChatContents {
   readonly missingCallKeys: readonly string[];
   /** True when every participant has hearing or speech turned off without a realtime model. */
   readonly callsOff?: boolean;
+  /** Participants whose voice calls are turned off without a realtime model. */
+  readonly disabledCallPersonas?: readonly ParticipantId[];
   /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
   readonly call: ChatCallInfo | null;
   /**

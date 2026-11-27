@@ -1,5 +1,6 @@
 // Small WAV container helpers and URL normalization shared by HTTP speech and STT transports.
 import { withoutTrailingSlashes } from "@eidolon/config";
+import { SpeechError } from "./stream/http.ts";
 
 /** Strip trailing slashes and any accidental `/v1` suffix so callers can enter host or `/v1`. */
 export function fishSpeechRoot(baseUrl: string): string {
@@ -44,11 +45,17 @@ function appendBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   return out;
 }
 
+interface WavHeader {
+  readonly dataStart: number;
+  readonly dataBytes: number | null;
+}
+
 /**
- * Index past the `data` subchunk header once a RIFF/WAVE header is complete, -1 while the prefix
- * could still complete one, or null when the stream is not RIFF/WAVE.
+ * Locate the `data` subchunk once a RIFF/WAVE header is complete, return `-1` while more bytes
+ * are needed (within the 64 KiB cap), or `null` when the stream is not RIFF/WAVE. Validates the
+ * `fmt ` chunk when present so non-mono/non-PCM16 or mismatched-rate WAV streams fail loudly.
  */
-function wavHeaderEnd(bytes: Uint8Array): number | null {
+function wavHeaderEnd(bytes: Uint8Array, expectedRate?: number): WavHeader | -1 | null {
   const prefix = Math.min(bytes.length, RIFF.length);
   for (let i = 0; i < prefix; i++) {
     if (bytes[i] !== RIFF[i]) return null;
@@ -56,49 +63,94 @@ function wavHeaderEnd(bytes: Uint8Array): number | null {
   if (bytes.length < 12) return -1;
   if (readAscii(bytes, 8, 4) !== "WAVE") return null;
   let offset = 12;
+  let checkedFmt = false;
   while (offset + 8 <= bytes.length) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 8);
     const id = readAscii(bytes, offset, 4);
-    const size = new DataView(bytes.buffer, bytes.byteOffset + offset + 4, 4).getUint32(0, true);
+    const size = view.getUint32(4, true);
     const dataStart = offset + 8;
-    if (id === "data") return dataStart;
+    if (id === "fmt ") {
+      if (size < 16) throw new SpeechError(`Unsupported WAV fmt chunk size: ${size}`);
+      if (dataStart + 16 > bytes.length) {
+        return bytes.length > MAX_WAV_HEADER_BYTES ? null : -1;
+      }
+      if (!checkedFmt) {
+        checkedFmt = true;
+        const fmt = new DataView(bytes.buffer, bytes.byteOffset + dataStart, 16);
+        const audioFormat = fmt.getUint16(0, true);
+        const channels = fmt.getUint16(2, true);
+        const sampleRate = fmt.getUint32(4, true);
+        const bitsPerSample = fmt.getUint16(14, true);
+        if (audioFormat !== 1 || channels !== 1 || bitsPerSample !== 16) {
+          throw new SpeechError(
+            `Unsupported WAV format (format=${audioFormat}, channels=${channels}, bits=${bitsPerSample}; expected mono 16-bit PCM)`,
+          );
+        }
+        if (expectedRate !== undefined && sampleRate !== expectedRate) {
+          throw new SpeechError(
+            `Unsupported WAV sample rate (${sampleRate} Hz; expected ${expectedRate} Hz)`,
+          );
+        }
+      }
+    } else if (id === "data") {
+      // Streaming WAV servers emit 0xffffffff or 0x7fffffff when total length isn't known upfront.
+      const dataBytes = size === 0xffffffff || size === 0x7fffffff ? null : size;
+      return { dataStart, dataBytes };
+    }
     offset = dataStart + size + (size & 1);
   }
   return bytes.length > MAX_WAV_HEADER_BYTES ? null : -1;
 }
 
 /**
- * Strip a leading RIFF/WAVE header when an HTTP TTS server returns WAV-wrapped PCM instead of raw
- * samples. Passes raw PCM chunks through unchanged.
+ * Strip a leading RIFF/WAVE header (and any trailing RIFF subchunks past `data`) when an HTTP TTS
+ * server returns WAV-wrapped PCM instead of raw samples. Passes raw PCM chunks through unchanged.
  */
-export function stripWavHeader(chunk: Uint8Array): Uint8Array {
-  const end = wavHeaderEnd(chunk);
-  return end !== null && end > 0 ? chunk.subarray(end) : chunk;
+export function stripWavHeader(chunk: Uint8Array, expectedRate?: number): Uint8Array {
+  const header = wavHeaderEnd(chunk, expectedRate);
+  if (header === null || header === -1) return chunk;
+  const end =
+    header.dataBytes === null
+      ? chunk.length
+      : Math.min(chunk.length, header.dataStart + header.dataBytes);
+  return chunk.subarray(header.dataStart, end);
 }
 
 /** Yield raw PCM chunks from a fetch body, stripping a leading RIFF/WAVE header if present. */
 export async function* pcmBody(
   body: ReadableStream<Uint8Array> | null,
+  expectedRate?: number,
 ): AsyncGenerator<Uint8Array> {
   if (body === null) return;
   let probed = false;
   let pending: Uint8Array = EMPTY;
+  let remaining: number | null = null;
   for await (const chunk of body) {
     if (chunk.length === 0) continue;
+    let out: Uint8Array;
     if (probed) {
-      yield chunk;
-      continue;
+      out = chunk;
+    } else {
+      pending = appendBytes(pending, chunk);
+      const header = wavHeaderEnd(pending, expectedRate);
+      if (header === -1) continue;
+      probed = true;
+      if (header === null) {
+        out = pending;
+      } else {
+        remaining = header.dataBytes;
+        out = pending.subarray(header.dataStart);
+      }
+      pending = EMPTY;
     }
-    pending = appendBytes(pending, chunk);
-    const end = wavHeaderEnd(pending);
-    if (end === null) {
-      probed = true;
-      yield pending;
-      pending = EMPTY;
-    } else if (end > 0) {
-      probed = true;
-      const pcm = pending.subarray(end);
-      pending = EMPTY;
-      if (pcm.length > 0) yield pcm;
+    if (remaining === null) {
+      if (out.length > 0) yield out;
+    } else {
+      if (remaining === 0) return;
+      const slice = out.length > remaining ? out.subarray(0, remaining) : out;
+      remaining -= slice.length;
+      if (slice.length > 0) yield slice;
+      if (remaining === 0) return;
     }
   }
   if (!probed && pending.length > 0) yield pending;

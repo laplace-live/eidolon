@@ -187,11 +187,37 @@ test("HTTP Whisper STT closes events on signal abort and times out stalled reque
   expect(events.seen.at(-1)).toEqual({ type: "final", text: "恢复了", finalized: true });
 
   // Aborting caller signal ends the event stream without requiring explicit close().
-  const done = (async () => {
-    for await (const _ of stream.events) {
-      // drain until closed
-    }
-  })();
   controller.abort();
-  await done;
+  await events.ended;
+});
+
+test("HTTP Whisper STT rolls over long utterances into finalized=false segments before finalize", async () => {
+  let n = 0;
+  const server = await serveWs({
+    open() {},
+    async fetch() {
+      n += 1;
+      return Response.json({ text: `段${n}` });
+    },
+  });
+  stopServer = () => server.stop();
+
+  const stream = await openHttpWhisperStt(
+    compatibleSelection(`http://127.0.0.1:${server.port}/v1`),
+    null,
+    live(),
+    { maxUtteranceSamples: 3200 },
+  );
+  const events = watch(stream);
+
+  stream.speechStarted?.();
+  stream.send(new Int16Array(8400));
+  stream.finalize();
+  await events.until((e) => e.type === "finalized" || (e.type === "final" && e.finalized));
+  expect(events.seen).toEqual([
+    { type: "final", text: "段1", finalized: false },
+    { type: "final", text: "段2", finalized: false },
+    { type: "final", text: "段3", finalized: true },
+  ]);
+  await stream.close();
 });

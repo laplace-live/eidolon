@@ -319,13 +319,18 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                     {field.options ? (
                       <Select
                         value={
-                          options[field.key] ||
-                          account?.options[field.key]?.value ||
-                          field.default ||
-                          ""
+                          field.key in options && options[field.key] === ""
+                            ? "__default__"
+                            : options[field.key] ||
+                              account?.options[field.key]?.value ||
+                              field.default ||
+                              ""
                         }
                         onValueChange={(value) =>
-                          setOptions((current) => ({ ...current, [field.key]: value }))
+                          setOptions((current) => ({
+                            ...current,
+                            [field.key]: value === "__default__" ? "" : value,
+                          }))
                         }
                         disabled={busy}
                       >
@@ -333,6 +338,9 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          {account?.options[field.key]?.source === "account" && (
+                            <SelectItem value="__default__">{t`Use Default`}</SelectItem>
+                          )}
                           {field.options.map((option) => (
                             <SelectItem key={option} value={option}>
                               {optionLabels?.[option] ? t(optionLabels[option]) : option}

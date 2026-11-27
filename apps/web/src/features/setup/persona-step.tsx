@@ -118,6 +118,8 @@ export function PersonaStep({
   );
   const [viewerName, setViewerName] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  // Kept so retrying activation after creation succeeds doesn't POST a duplicate persona.
+  const [createdPersona, setCreatedPersona] = useState<PersonaRef | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
@@ -172,9 +174,11 @@ export function PersonaStep({
         if (skip) {
           let committed: PersonaRef;
           if (chosen === "create") {
-            let createdPersona = await createPersona(draft, null);
-            if (avatar) createdPersona = await addAvatar(createdPersona, avatar);
-            committed = createdPersona;
+            let created =
+              createdPersona?.id === draft.id ? createdPersona : await createPersona(draft, null);
+            if (created !== createdPersona && avatar) created = await addAvatar(created, avatar);
+            setCreatedPersona(created);
+            committed = created;
           } else if (existingPersona) {
             committed = existingPersona;
           } else {

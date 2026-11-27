@@ -27,6 +27,8 @@ export interface SttStream {
    * ElevenLabs and OpenAI answer a commit with no words with nothing.
    */
   readonly acknowledgesFinalize: boolean;
+  /** How long (ms) a finalized turn waits before timing out; defaults to `FINALIZE_ACK_CAP_MS`. */
+  readonly finalizeTimeoutMs?: number;
   /** Metered here; dropped while the socket isn't open. */
   send(pcm: Int16Array): void;
   /** Marks speech onset so chunked recognizers latch pre-roll for the coming utterance. */

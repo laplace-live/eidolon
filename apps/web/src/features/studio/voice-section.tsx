@@ -355,7 +355,9 @@ export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) 
           <AudioLinesIcon />
           <AlertTitle>{t`Speech is turned off`}</AlertTitle>
           <AlertDescription>
-            {t`She replies in text, and calls are off until a voice provider is chosen above.`}
+            {realtime !== null
+              ? t`She replies in text, and her realtime model still handles calls.`
+              : t`She replies in text, and calls are off until a voice provider is chosen above.`}
           </AlertDescription>
         </Alert>
       ) : (

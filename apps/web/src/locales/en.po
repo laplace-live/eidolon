@@ -1912,6 +1912,10 @@ msgstr "Default mem0/vectors in the data home."
 msgid "Default Opus Bitrate"
 msgstr "Default Opus Bitrate"
 
+#: src/features/setup/keys-step.tsx
+msgid "Default: {model}. Leave blank to use it, or enter your server's model ID."
+msgstr "Default: {model}. Leave blank to use it, or enter your server's model ID."
+
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete"
@@ -5657,6 +5661,10 @@ msgstr "She picks these up in your calls, and only she reads them: each persona 
 msgid "She replies in text, and calls are off until a voice provider is chosen above."
 msgstr "She replies in text, and calls are off until a voice provider is chosen above."
 
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and her realtime model still handles calls."
+msgstr "She replies in text, and her realtime model still handles calls."
+
 #: src/features/settings/desktop-notes.ts
 msgid "She shows as her picture until she has an active character model."
 msgstr "She shows as her picture until she has an active character model."
@@ -7350,6 +7358,10 @@ msgstr "Use a time zone name such as Asia/Shanghai."
 #: src/components/settings-form/labels.ts
 msgid "Use a two-letter language code such as zh, or none."
 msgstr "Use a two-letter language code such as zh, or none."
+
+#: src/features/settings/account-dialog.tsx
+msgid "Use Default"
+msgstr "Use Default"
 
 #: src/features/studio/voice-section.tsx
 msgid "Use It"

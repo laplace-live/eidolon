@@ -350,7 +350,7 @@ them and place no call, a chat's microphone is off, and her replies are text.
   provider the id or optional reference ID of a voice, plus **Skip for Now** when left empty. A new persona
   starts on the active persona's providers, so hers is that persona's voice provider, as it is in
   **New Persona** outside the wizard (where voice is also optional). The library needs no key.
-- **Done** offers to call her, or **Start Chatting** while calls are off or lack a key or voice.
+- **Done** offers to call her, or **Start Chatting** while calls are off, lack a key or voice, or have another call configuration problem (when her chat model is ready).
 
 ## The local viewer and memory
 

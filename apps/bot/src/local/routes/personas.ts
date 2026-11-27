@@ -6,7 +6,9 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { MAX_PARTICIPANTS } from "@eidolon/chat";
 import {
+  accountEntries,
   activePersona,
+  envVariable,
   isPlainObject,
   isValidTimeZone,
   personaHomeDir,
@@ -367,8 +369,15 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
             return localError(400, "bad-request", message);
           }
         }
+        // Starter settings inherit voice/hearing/mind/gate from active persona, while realtime only comes from env.
+        const envRealtime =
+          trySelect("realtime", {
+            read: envVariable,
+            env: envVariable,
+            accounts: accountEntries(),
+          }) !== null;
         const markup: Markup | null =
-          trySelect("realtime") !== null || voiceSelection === null
+          envRealtime || voiceSelection === null
             ? null
             : (modelInfo(voiceSelection.provider.id, "tts", voiceSelection.model)?.markup ?? null);
         try {

@@ -74,6 +74,7 @@ class Ear {
       clock: deps.clock,
       ttfsP99: deps.stt.ttfsP99,
       acknowledgesFinalize: deps.stt.acknowledgesFinalize,
+      finalizeTimeoutMs: deps.stt.finalizeTimeoutMs,
       join: deps.join,
       post,
       clearAnalyzer: () => deps.turn.clear(),
@@ -102,11 +103,13 @@ class Ear {
 
   async #listen(audio: AsyncIterable<Pcm>): Promise<void> {
     const { clock } = this.#deps;
+    const segmented = this.#deps.stt.speechStarted !== undefined;
     for await (const pcm of audio) {
       if (this.#stopped) return;
       this.#lastAudio = clock.now();
       this.#cancelIdle ??= clock.setTimer(AUDIO_IDLE_MS, () => this.#audioIdle());
-      this.#toStt.send(pcm);
+      // Streaming STTs receive frames immediately; segmented STTs wait inside `#frames` so PCM stays ordered with VAD edges.
+      if (!segmented) this.#toStt.send(pcm);
       this.#enqueue(() => this.#hear(pcm));
     }
     await this.#frames;
@@ -151,6 +154,7 @@ class Ear {
       this.#detector.speechStarted();
       this.#deps.stt.speechStarted?.();
     }
+    if (this.#deps.stt.speechStarted !== undefined) this.#toStt.send(pcm);
     if (vad.speaking && clock.now() - this.#lastActivity >= SPEECH_ACTIVITY_MS) {
       this.#lastActivity = clock.now();
       this.#post({ type: "user-speaking" });

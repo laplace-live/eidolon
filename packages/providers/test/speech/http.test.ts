@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { FishSpeechSelfHosted } from "../../src/speech/stream/fish-speech.ts";
+import { SpeechError } from "../../src/speech/stream/http.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
 import { OpenAISpeech } from "../../src/speech/stream/openai.ts";
@@ -488,4 +489,29 @@ test("pcmBody strips WAV headers across chunk boundaries and preserves raw PCM",
   expect(yielded.length).toBe(2);
   expect(yielded[0]?.length).toBe(oversize.length);
   expect(yielded[1]).toEqual(new Uint8Array([1, 2, 3, 4]));
+
+  // Trailing RIFF metadata subchunks past the `data` extent are discarded, and bad WAV formats reject.
+  const withTrailer = new Uint8Array(wav.length + 12);
+  withTrailer.set(wav, 0);
+  withTrailer.set([0x4c, 0x49, 0x53, 0x54, 4, 0, 0, 0, 1, 2, 3, 4], wav.length);
+  expect(stripWavHeader(withTrailer)).toEqual(wav.subarray(44));
+  expect(await collectBody([withTrailer.subarray(0, 48), withTrailer.subarray(48)])).toEqual([
+    ...wav.subarray(44),
+  ]);
+
+  const stereo = encodeWav(new Int16Array([1, 2]), 24000, 2);
+  await expect(collectBody([stereo])).rejects.toThrow(SpeechError);
+  const wrongRateBody = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(wav);
+      c.close();
+    },
+  });
+  await expect(
+    (async () => {
+      for await (const _ of pcmBody(wrongRateBody, 24000)) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow("Unsupported WAV sample rate");
 });

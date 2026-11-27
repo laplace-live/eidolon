@@ -18,6 +18,7 @@ class HttpWhisperStt implements SttStream {
   readonly inputRate = SAMPLE_RATE;
   readonly ttfsP99 = TTFS_P99;
   readonly acknowledgesFinalize = true;
+  readonly finalizeTimeoutMs: number;
   readonly events = new AsyncQueue<SttEvent>();
 
   readonly #url: string;
@@ -27,6 +28,7 @@ class HttpWhisperStt implements SttStream {
   readonly #secret: string;
   readonly #meter: Meter;
   readonly #timeoutMs: number;
+  readonly #maxUtteranceSamples: number;
   readonly #controller = new AbortController();
   readonly #signal: AbortSignal;
   readonly #detach: () => void;
@@ -44,6 +46,7 @@ class HttpWhisperStt implements SttStream {
     language: string | null,
     signal: AbortSignal,
     timeoutMs = REQUEST_TIMEOUT_MS,
+    maxUtteranceSamples = MAX_UTTERANCE_SAMPLES,
   ) {
     if (!selection.baseUrl) {
       throw new ProviderConfigError(`${selection.account.name} needs an API base`);
@@ -55,6 +58,8 @@ class HttpWhisperStt implements SttStream {
     this.#language = language;
     this.#meter = new Meter(selection);
     this.#timeoutMs = timeoutMs;
+    this.#maxUtteranceSamples = maxUtteranceSamples;
+    this.finalizeTimeoutMs = timeoutMs + 1_000;
     this.#signal = AbortSignal.any([signal, this.#controller.signal]);
     const onAbort = () => void this.close();
     if (signal.aborted) {
@@ -81,11 +86,20 @@ class HttpWhisperStt implements SttStream {
     if (this.#closed || pcm.length === 0) return;
     const copy = pcm.slice();
     if (this.#inSpeech) {
-      const remaining = MAX_UTTERANCE_SAMPLES - this.#utteranceSamples;
-      if (remaining <= 0) return;
-      const slice = copy.length > remaining ? copy.subarray(0, remaining) : copy;
-      this.#utterance.push(slice);
-      this.#utteranceSamples += slice.length;
+      let offset = 0;
+      while (offset < copy.length) {
+        const remaining = this.#maxUtteranceSamples - this.#utteranceSamples;
+        const slice =
+          copy.length - offset > remaining
+            ? copy.subarray(offset, offset + remaining)
+            : copy.subarray(offset);
+        this.#utterance.push(slice);
+        this.#utteranceSamples += slice.length;
+        offset += slice.length;
+        if (this.#utteranceSamples >= this.#maxUtteranceSamples) {
+          this.#flushUtterance(false);
+        }
+      }
       return;
     }
     this.#preRoll.push(copy);
@@ -106,22 +120,28 @@ class HttpWhisperStt implements SttStream {
   finalize(): void {
     if (this.#closed) return;
     const hadSpeech = this.#inSpeech;
-    const sampleCount = this.#utteranceSamples;
-    const chunks = this.#utterance;
-    this.#utterance = [];
-    this.#utteranceSamples = 0;
     this.#inSpeech = false;
-    if (!hadSpeech || sampleCount < MIN_SPEECH_SAMPLES) {
+    if (!hadSpeech || this.#utteranceSamples < MIN_SPEECH_SAMPLES) {
+      this.#utterance = [];
+      this.#utteranceSamples = 0;
       this.#chain = this.#chain.then(() => {
         if (!this.#closed) this.events.push({ type: "finalized" });
       });
       return;
     }
-    const samples = concatPcm(chunks, sampleCount);
-    this.#chain = this.#chain.then(() => this.#transcribe(samples));
+    this.#flushUtterance(true);
   }
 
-  async #transcribe(samples: Int16Array): Promise<void> {
+  #flushUtterance(finalized: boolean): void {
+    const sampleCount = this.#utteranceSamples;
+    const chunks = this.#utterance;
+    this.#utterance = [];
+    this.#utteranceSamples = 0;
+    const samples = concatPcm(chunks, sampleCount);
+    this.#chain = this.#chain.then(() => this.#transcribe(samples, finalized));
+  }
+
+  async #transcribe(samples: Int16Array, finalized: boolean): Promise<void> {
     if (this.#closed || this.#signal.aborted) return;
     const wav = encodeWav(samples, SAMPLE_RATE);
     const form = new FormData();
@@ -148,14 +168,15 @@ class HttpWhisperStt implements SttStream {
             message: `OpenAI-compatible STT error (${response.status}): ${body || response.statusText}`,
             fatal: false,
           });
-          this.events.push({ type: "finalized" });
+          if (finalized) this.events.push({ type: "finalized" });
         }
         return;
       }
       const parsed = (await response.json()) as { readonly text?: unknown };
       const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
       if (!this.#closed) {
-        this.events.push(text ? { type: "final", text, finalized: true } : { type: "finalized" });
+        if (text) this.events.push({ type: "final", text, finalized });
+        else if (finalized) this.events.push({ type: "finalized" });
       }
     } catch (error) {
       if (this.#closed || this.#signal.aborted) return;
@@ -167,7 +188,7 @@ class HttpWhisperStt implements SttStream {
         message,
         fatal: false,
       });
-      this.events.push({ type: "finalized" });
+      if (finalized) this.events.push({ type: "finalized" });
     }
   }
 
@@ -195,7 +216,13 @@ export async function openHttpWhisperStt(
   selection: Selection,
   language: string | null,
   signal: AbortSignal,
-  options?: { readonly timeoutMs?: number },
+  options?: { readonly timeoutMs?: number; readonly maxUtteranceSamples?: number },
 ): Promise<SttStream> {
-  return new HttpWhisperStt(selection, language, signal, options?.timeoutMs);
+  return new HttpWhisperStt(
+    selection,
+    language,
+    signal,
+    options?.timeoutMs,
+    options?.maxUtteranceSamples,
+  );
 }

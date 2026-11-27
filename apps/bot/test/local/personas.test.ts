@@ -289,6 +289,28 @@ describe("listing and creating", () => {
     }
   });
 
+  test("new persona prompt follows env realtime rather than active persona's own realtime setting", async () => {
+    const rt = await call("PUT", "/settings", {
+      scope: "persona",
+      persona: MILKY,
+      values: { "realtime.provider": "openai" },
+    });
+    expect(rt.status).toBe(200);
+    const localTts = await call("POST", "/personas", { ...NEW_PERSONA, id: "aria-cues" });
+    expect(localTts.status).toBe(201);
+    expect(readFileSync(join(personaHomeDir("aria-cues"), "prompt.md"), "utf8")).toContain(
+      "## Delivery cues / 表演提示",
+    );
+
+    saved.set("REALTIME_PROVIDER", process.env.REALTIME_PROVIDER);
+    process.env.REALTIME_PROVIDER = "openai";
+    const envRt = await call("POST", "/personas", { ...NEW_PERSONA, id: "aria-env-rt" });
+    expect(envRt.status).toBe(201);
+    expect(readFileSync(join(personaHomeDir("aria-env-rt"), "prompt.md"), "utf8")).not.toContain(
+      "## Delivery cues / 表演提示",
+    );
+  });
+
   test("refuses a bad slug, a route word, a taken id, no name, bad voice or known zone", async () => {
     for (const [change, status, code] of [
       [{ id: "Aria" }, 400, "invalid-persona-id"],

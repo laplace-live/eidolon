@@ -92,8 +92,10 @@ function RolePicker({
   const modelPath = `${entry.path}.model`;
   const locked = envLock(entry, rows);
   const current = effectiveProvider(entry, rows, drafts);
+  const providerType = providerOfAccount(current, accounts);
   const model = modelAfter(entry, rows, drafts, accounts);
   const offLabel = PROVIDER_OFF_LABELS[role];
+  const customizable = providerType === "openai-compatible";
   return (
     <Field>
       <FieldLabel htmlFor={id}>{t(ROLE_LABELS[role])}</FieldLabel>
@@ -119,7 +121,9 @@ function RolePicker({
         <FieldDescription>
           {t`Set by ${ph({ env: locked.env })} in the environment, which wins over the value saved here. Change it there.`}
         </FieldDescription>
-      ) : current === OFF_PROVIDER ? null : model !== null && drafts[modelPath] === undefined ? (
+      ) : current === OFF_PROVIDER ? null : model !== null &&
+        drafts[modelPath] === undefined &&
+        !customizable ? (
         <FieldDescription>
           <Trans>
             Model: <code className="font-mono text-foreground/80">{model}</code>
@@ -132,15 +136,21 @@ function RolePicker({
             className="font-mono md:text-[0.8125rem]"
             autoComplete="off"
             spellCheck={false}
-            placeholder={t`Model ID`}
+            placeholder={model ?? t`Model ID`}
             value={drafts[modelPath] ?? ""}
             aria-invalid={invalid}
             onChange={(event) => onDraft(modelPath, event.target.value)}
             disabled={disabled}
           />
-          <FieldDescription className={invalid ? "text-destructive" : undefined}>
-            {t`This account has no default model, so name the one to use.`}
-          </FieldDescription>
+          {model === null ? (
+            <FieldDescription className={invalid ? "text-destructive" : undefined}>
+              {t`This account has no default model, so name the one to use.`}
+            </FieldDescription>
+          ) : (
+            <FieldDescription>
+              {t`Default: ${model}. Leave blank to use it, or enter your server's model ID.`}
+            </FieldDescription>
+          )}
         </>
       )}
     </Field>

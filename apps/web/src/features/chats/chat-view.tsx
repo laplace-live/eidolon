@@ -339,6 +339,7 @@ export function ChatView({ id }: { readonly id: string }) {
           personas={personas}
           groupCall={chat.data.groupCall}
           disabled={inCall}
+          disabledPersonas={chat.data.disabledCallPersonas}
           unavailable={
             view.elsewhere ? t`You're already in a call. Hang up first.` : (callsOffNote ?? keyless)
           }

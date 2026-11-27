@@ -1912,6 +1912,10 @@ msgstr "默认为数据目录中的 mem0/vectors。"
 msgid "Default Opus Bitrate"
 msgstr "默认 Opus 码率"
 
+#: src/features/setup/keys-step.tsx
+msgid "Default: {model}. Leave blank to use it, or enter your server's model ID."
+msgstr "默认：{model}。留空将使用该模型，或填写你的服务端模型 ID。"
+
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Delete"
@@ -5657,6 +5661,10 @@ msgstr "这些是她在你们的通话里记下的，只有她会读到：每个
 msgid "She replies in text, and calls are off until a voice provider is chosen above."
 msgstr "她会用文字回复；在上方选择语音提供方之前，通话保持关闭。"
 
+#: src/features/studio/voice-section.tsx
+msgid "She replies in text, and her realtime model still handles calls."
+msgstr "她会用文字回复，实时模型仍可用于语音通话。"
+
 #: src/features/settings/desktop-notes.ts
 msgid "She shows as her picture until she has an active character model."
 msgstr "在设好当前形象之前，她会以头像出现。"
@@ -7350,6 +7358,10 @@ msgstr "请使用时区名称，例如 Asia/Shanghai。"
 #: src/components/settings-form/labels.ts
 msgid "Use a two-letter language code such as zh, or none."
 msgstr "请使用两个字母的语言代码，例如 zh，或填写 none。"
+
+#: src/features/settings/account-dialog.tsx
+msgid "Use Default"
+msgstr "使用默认值"
 
 #: src/features/studio/voice-section.tsx
 msgid "Use It"

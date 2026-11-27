@@ -32,6 +32,8 @@ export function VoiceDialog({
     onSuccess: async (_, voice) => {
       await refreshPersonas(queryClient);
       toast.success(t`Voice set to ${ph({ voice: voice.title })}.`);
+      save.reset();
+      byId.reset();
       onOpenChange(false);
     },
   });
@@ -40,6 +42,8 @@ export function VoiceDialog({
     onSuccess: async (_, id) => {
       await refreshPersonas(queryClient);
       toast.success(t`Voice set to ${id}.`);
+      save.reset();
+      byId.reset();
       onOpenChange(false);
     },
   });

@@ -93,7 +93,7 @@ export function Component() {
                   }}
                   onSkipVoice={(done, made) => {
                     setVoiceSkipped(true);
-                    if (made) setCreated(true);
+                    setCreated(made);
                     setTarget({ kind: "existing", persona: done });
                     setPersona(done);
                     setStep("memory");
@@ -106,8 +106,8 @@ export function Component() {
                   onBack={back}
                   onDone={(done) => {
                     // She exists now: going back to this step must not create her a second time.
+                    setCreated(voiceTarget.kind === "create");
                     if (voiceTarget.kind === "create") {
-                      setCreated(true);
                       setTarget({ kind: "existing", persona: done });
                     }
                     setPersona(done);

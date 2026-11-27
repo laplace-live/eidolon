@@ -101,9 +101,16 @@ export function NewPersonaDialog({
     onOpenChange(next);
   }
 
+  const voiceOptional = voiceOff || provider === "openai-compatible" || provider === "fish-speech";
+
   function submit() {
     setShowErrors(true);
-    if (Object.keys(personaErrors(draft, taken)).length > 0) return;
+    if (
+      Object.keys(personaErrors(draft, taken)).length > 0 ||
+      (!voiceOptional && voiceId === null)
+    ) {
+      return;
+    }
     create.mutate({ voiceId });
   }
 

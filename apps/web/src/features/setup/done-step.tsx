@@ -33,7 +33,10 @@ export function DoneStep({
     () => (status.data ? verdict(readiness(status.data, formatsFor(lang))) : null),
     [status.data, lang],
   );
-  const keyless = status.data !== undefined && callBlocker(status.data) !== null;
+  const keyless =
+    status.data !== undefined &&
+    callBlocker(status.data) !== null &&
+    !status.data.call.roles.some((role) => role.role === "mind" && role.problem !== null);
   return (
     <StepCard
       title={t`You're all set`}

@@ -207,7 +207,11 @@ export function AccountKeyField({
                 onValueChange={(value) => keys.setOption(need.account, field.key, value)}
                 disabled={keys.saving}
               >
-                <SelectTrigger id={`${id}-${field.key}`} className="w-full">
+                <SelectTrigger
+                  id={`${id}-${field.key}`}
+                  className="w-full"
+                  aria-invalid={missing.includes(field.key)}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

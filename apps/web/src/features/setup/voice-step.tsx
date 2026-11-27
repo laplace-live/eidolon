@@ -120,7 +120,7 @@ export function VoiceStep({
             <Button
               variant="ghost"
               onClick={() => void next(true)}
-              disabled={busy || (provider === null && settings.isPending)}
+              disabled={busy || (provider === null && (settings.isPending || accounts.isPending))}
             >
               {t`Skip for Now`}
             </Button>

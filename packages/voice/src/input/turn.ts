@@ -26,6 +26,8 @@ export interface TurnDetectorOptions {
    * FINALIZE_ACK_CAP_MS means no words. One that doesn't may still send words later.
    */
   readonly acknowledgesFinalize: boolean;
+  /** Overrides FINALIZE_ACK_CAP_MS for slower HTTP batch recognizers. */
+  readonly finalizeTimeoutMs?: number;
   readonly join: JoinSegments;
   readonly post: (event: EarEvent) => void;
   /** Smart Turn forgets the turn's speech when the turn ends. */
@@ -82,23 +84,27 @@ export class TurnDetector {
   /** The VAD's stop edge, before Smart Turn's verdict on it (`analyzed`). */
   speechStopped(): void {
     this.#vadSpeaking = false;
-    this.#activity();
     this.#stopSecs = VAD_STOP_SECS;
     this.#vadStopped = true;
     // The p99 counts from when speech ended, which the VAD reports its stop delay later.
     this.#sttDeadline = this.#options.clock.now() + (this.#options.ttfsP99 - this.#stopSecs) * 1000;
     // The Ear has just called finalize(): a recognizer that answers every one and is silent past
     // the cap has nothing to add.
-    if (!this.#options.acknowledgesFinalize) return;
-    this.#unanswered++;
-    this.#cancelAckCap?.();
-    this.#cancelAckCap = this.#options.clock.setTimer(FINALIZE_ACK_CAP_MS, () => {
-      this.#cancelAckCap = null;
-      // An answer still owed was lost, as a reconnect loses them.
-      this.#unanswered = 0;
-      // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
-      if (!this.#wordsPending) this.#acknowledge();
-    });
+    if (this.#options.acknowledgesFinalize) {
+      this.#unanswered++;
+      this.#cancelAckCap?.();
+      this.#cancelAckCap = this.#options.clock.setTimer(
+        this.#options.finalizeTimeoutMs ?? FINALIZE_ACK_CAP_MS,
+        () => {
+          this.#cancelAckCap = null;
+          // An answer still owed was lost, as a reconnect loses them.
+          this.#unanswered = 0;
+          // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
+          if (!this.#wordsPending) this.#acknowledge();
+        },
+      );
+    }
+    this.#activity();
   }
 
   analyzed(state: EndOfTurn): void {
@@ -137,7 +143,11 @@ export class TurnDetector {
     if (finalized && this.#unanswered === 0) {
       this.#acknowledge();
       if (!this.#inTurn) return;
-    } else if (this.#timeoutExpired && this.#turnComplete) {
+    } else if (
+      this.#timeoutExpired &&
+      this.#turnComplete &&
+      (this.#unanswered === 0 || this.#options.finalizeTimeoutMs === undefined)
+    ) {
       this.#stop();
       return;
     }
@@ -234,8 +244,12 @@ export class TurnDetector {
    */
   #activity(): void {
     if (!this.#inTurn) return;
+    const timeoutMs =
+      this.#vadStopped && this.#unanswered > 0 && this.#options.finalizeTimeoutMs !== undefined
+        ? Math.max(STOP_TIMEOUT_MS, this.#options.finalizeTimeoutMs + 1_000)
+        : STOP_TIMEOUT_MS;
     this.#cancelWatchdog?.();
-    this.#cancelWatchdog = this.#options.clock.setTimer(STOP_TIMEOUT_MS, () => {
+    this.#cancelWatchdog = this.#options.clock.setTimer(timeoutMs, () => {
       this.#cancelWatchdog = null;
       this.#stop();
     });

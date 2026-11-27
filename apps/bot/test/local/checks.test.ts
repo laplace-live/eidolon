@@ -7,7 +7,8 @@ import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { afterEach, describe, expect, test } from "vitest";
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
-import { callsDisabled } from "../../src/local/chats/call-keys.ts";
+import { callsDisabled, disabledCallPersonas } from "../../src/local/chats/call-keys.ts";
+import { groupCallRefusal } from "../../src/local/chats/group.ts";
 import { type CheckDeps, type CheckOutcome, checkProvider } from "../../src/local/checks.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { credentialsRoutes } from "../../src/local/routes/credentials.ts";
@@ -612,5 +613,23 @@ describe("POST credentials/check", () => {
       delete process.env.TTS_PROVIDER;
       resetSettings();
     }
+  });
+
+  test("disabledCallPersonas and groupCallRefusal reject groups where a persona's voice is off", () => {
+    const kuro = join(dataHome(), "personas", "kuro");
+    mkdirSync(kuro, { recursive: true });
+    writeFileSync(
+      join(kuro, "persona.yaml"),
+      "identity:\n  name: 茶茶\nvoice:\n  provider: none\n",
+    );
+    writeFileSync(join(kuro, "prompt.md"), "你是茶茶。\n");
+    resetSettings();
+    installSettings();
+    expect(disabledCallPersonas(["milky-green", "kuro"])).toEqual(["kuro"]);
+    expect(callsDisabled(["milky-green", "kuro"])).toBe(false);
+    expect(groupCallRefusal(["milky-green", "kuro"])).toMatchObject({
+      status: 400,
+      code: "bad-request",
+    });
   });
 });
