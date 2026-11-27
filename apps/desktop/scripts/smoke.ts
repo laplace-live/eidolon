@@ -91,6 +91,8 @@ const UNINSTALL_MS = 120_000;
 const TERMINAL_MS = 60_000;
 /** The shim's runs, on the stand-in and then for real, pnpm dlx's first install among them. */
 const SHIM_MS = 180_000;
+/** Ends a wedged run cleanly inside desktop-build.yml's 20 min so logs upload and no pipe stays open. */
+const SMOKE_WATCHDOG_MS = 15 * 60_000;
 /** The node shim's npx, run without the binary the backend names. */
 const NO_NODE = "npx: EIDOLON_NODE isn't set: Eidolon sets it for the MCP servers it starts";
 /** Timings the results keep, in ms unless named otherwise. */
@@ -144,10 +146,11 @@ async function collect(
   options: SpawnOptions,
   timeoutMs: number,
 ): Promise<Output> {
-  const { child } = smoke.processes.spawn(what, command, args, {
+  const running = smoke.processes.spawn(what, command, args, {
     ...options,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const { child } = running;
   let stdout = "";
   let stderr = "";
   child.stdout?.setEncoding("utf8").on("data", (data: string) => {
@@ -156,12 +159,28 @@ async function collect(
   child.stderr?.setEncoding("utf8").on("data", (data: string) => {
     stderr += data;
   });
-  const timer = setTimeout(() => {
-    if (child.pid !== undefined) killTree(child.pid);
-  }, timeoutMs);
-  const code = await new Promise<number | null>((done) => child.once("close", done));
-  clearTimeout(timer);
-  return { code, stdout, stderr };
+  const drained = Promise.all([
+    new Promise<void>((done) => {
+      if (child.stdout === null || child.stdout.readableEnded) done();
+      else child.stdout.once("end", () => done());
+    }),
+    new Promise<void>((done) => {
+      if (child.stderr === null || child.stderr.readableEnded) done();
+      else child.stderr.once("end", () => done());
+    }),
+  ]);
+  let exit = await within(running.exited, timeoutMs);
+  const timedOut = exit === null;
+  if (timedOut) {
+    if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+      killTree(child.pid, { wait: true });
+    }
+    exit = await within(running.exited, 5000);
+  }
+  await within(drained, 500);
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  return { code: timedOut ? null : (exit?.code ?? null), stdout, stderr };
 }
 
 /** Runs the app's binary in node mode, tracked, and collects what it prints. */
@@ -465,7 +484,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   });
   const server = smoke.server();
   if (!shown || server === null) return;
-  await smoke.processes.adopt("backend", server.pid);
+  const adoptedBackend = await smoke.processes.adopt("backend", server.pid);
 
   if (!smoke.args.headful) {
     // The run's home has no model, so she draws as her picture.
@@ -485,7 +504,8 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   const BACKEND =
     "its backend is the app's binary in node mode on the payload's server, under main";
   await checks.step(BACKEND, async () => {
-    const row = (await processTable()).find((candidate) => candidate.pid === server.pid);
+    const row =
+      adoptedBackend ?? (await processTable()).find((candidate) => candidate.pid === server.pid);
     const runs =
       row !== undefined && runsOnBinary(row.command, layout.binary, serverScript(layout));
     checks.add(
@@ -671,8 +691,8 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
         left(),
       );
       // Tracked from here, it fails the run if it outlives the backend.
-      await smoke.processes.snapshot();
-      const row = (await processTable()).find(
+      const table = await smoke.processes.snapshot();
+      const row = table.find(
         (candidate) =>
           candidate.ppid === server.pid &&
           runsOnBinary(candidate.command, layout.binary, cliScript(layout)),
@@ -856,23 +876,33 @@ async function install(
   setup: string,
   binary: string,
   numbers: Numbers,
-): Promise<void> {
+): Promise<boolean> {
   const folder = dirname(binary);
   const INSTALL = "the NSIS setup installs the app silently, for this user";
+  let passed = false;
   await smoke.checks.step(INSTALL, async () => {
     const at = Date.now();
     const running = smoke.processes.spawn("setup", setup, ["/S"], { stdio: "ignore" });
     const exit = await within(running.exited, INSTALL_MS);
+    if (
+      exit === null &&
+      running.child.pid !== undefined &&
+      running.child.exitCode === null &&
+      running.child.signalCode === null
+    ) {
+      killTree(running.child.pid, { wait: true });
+    }
     numbers.installSeconds = Math.round((Date.now() - at) / 100) / 10;
     const entry = (await uninstallEntries()).find((candidate) =>
       namesUninstaller(candidate, folder),
     );
-    smoke.checks.add(
+    passed = smoke.checks.add(
       INSTALL,
       exit?.code === 0 && existsSync(binary) && existsSync(join(folder, UNINSTALLER)) && !!entry,
       `${basename(setup)} exited ${exit === null ? `not within ${INSTALL_MS / 1000} s` : (exit.code ?? exit.signal)} after ${numbers.installSeconds} s; ${binary} ${existsSync(binary) ? "is there" : "is missing"}; HKCU's uninstall entry: ${entry?.UninstallString ?? "none for its uninstaller"}`,
     );
   });
+  return passed;
 }
 
 /** A few of what `folder` still holds, by path from it; or why it can't be read, as it goes. */
@@ -936,6 +966,14 @@ async function uninstall(
     const at = Date.now();
     const running = smoke.processes.spawn("uninstaller", command, args, { stdio: "ignore" });
     const exit = await within(running.exited, left());
+    if (
+      exit === null &&
+      running.child.pid !== undefined &&
+      running.child.exitCode === null &&
+      running.child.signalCode === null
+    ) {
+      killTree(running.child.pid, { wait: true });
+    }
     // NSIS's uninstaller returns at once and removes the app from a copy of itself in %TEMP%.
     await until(
       () => existsSync(folder),
@@ -998,13 +1036,54 @@ const numbers: Numbers = {};
 console.log(
   `${LABEL}: ${planned.setup ?? planned.binary} on ${TARGET}, ${smoke.args.headful ? "headful" : "in background mode"}; the run's folder is ${smoke.run.root}`,
 );
+const writeResults = (passed: boolean): string => {
+  mkdirSync(smoke.run.root, { recursive: true, mode: 0o700 });
+  const results = join(smoke.run.root, "results.json");
+  writeFileSync(
+    results,
+    `${JSON.stringify(
+      {
+        smoke: LABEL,
+        target: TARGET,
+        app: planned.binary,
+        setup: planned.setup,
+        background: !smoke.args.headful,
+        startedAt: startedAt.toISOString(),
+        seconds: Math.round((Date.now() - startedAt.getTime()) / 100) / 10,
+        passed,
+        numbers,
+        checks: smoke.checks.list,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return results;
+};
+
+const watchdog = setTimeout(() => {
+  const last = smoke.checks.list.at(-1)?.name ?? "starting";
+  smoke.checks.add(
+    `${LABEL} ran to its end`,
+    false,
+    `timed out after ${SMOKE_WATCHDOG_MS / 60_000} min (last finished check: ${last})`,
+  );
+  smoke.processes.killAllSync();
+  const results = writeResults(false);
+  console.error(`${LABEL}: timed out; the results are in ${results}`);
+  process.exit(1);
+}, SMOKE_WATCHDOG_MS);
+watchdog.unref();
+
 try {
   if (planned.setup === null) await walk(smoke, appLayout(planned.binary), numbers);
   else {
     const marked = markDefaultHome();
     try {
-      await install(smoke, planned.setup, planned.binary, numbers);
-      if (existsSync(planned.binary)) await walk(smoke, appLayout(planned.binary), numbers);
+      const installed = await install(smoke, planned.setup, planned.binary, numbers);
+      if (installed && existsSync(planned.binary)) {
+        await walk(smoke, appLayout(planned.binary), numbers);
+      }
     } finally {
       if (existsSync(dirname(planned.binary))) {
         await uninstall(smoke, planned.binary, numbers, marked);
@@ -1017,27 +1096,8 @@ try {
   smoke.checks.add(`${LABEL} ran to its end`, false, text.split("\n").slice(0, 4).join(" | "));
 }
 const code = await smoke.finish();
+clearTimeout(watchdog);
 // A pass removed the run's folder; its results come back into it alone.
-mkdirSync(smoke.run.root, { recursive: true, mode: 0o700 });
-const results = join(smoke.run.root, "results.json");
-writeFileSync(
-  results,
-  `${JSON.stringify(
-    {
-      smoke: LABEL,
-      target: TARGET,
-      app: planned.binary,
-      setup: planned.setup,
-      background: !smoke.args.headful,
-      startedAt: startedAt.toISOString(),
-      seconds: Math.round((Date.now() - startedAt.getTime()) / 100) / 10,
-      passed: code === 0,
-      numbers,
-      checks: smoke.checks.list,
-    },
-    null,
-    2,
-  )}\n`,
-);
+const results = writeResults(code === 0);
 console.log(`${LABEL}: the results are in ${results}`);
 process.exit(code);

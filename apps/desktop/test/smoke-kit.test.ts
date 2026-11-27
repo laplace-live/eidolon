@@ -328,7 +328,8 @@ setInterval(() => {}, 1000);`;
       const childPid = await new Promise<number>((done) => {
         parent.child.stdout?.once("data", (data: Buffer) => done(Number(String(data).trim())));
       });
-      await processes.snapshot();
+      const table = await processes.snapshot();
+      expect(table.some((row) => row.pid === childPid)).toBe(true);
       expect(await processes.ours(childPid)).toBe(true);
       expect((await processes.running()).length).toBe(2);
       await processes.stopAll();

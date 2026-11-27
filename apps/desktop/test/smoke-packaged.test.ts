@@ -53,6 +53,7 @@ import {
   windowsArgs,
   withVariables,
 } from "../scripts/smoke/packaged.ts";
+import { powershellEnv, runCommandOutput } from "../scripts/smoke/processes.ts";
 
 const MAC_APP = "/Users/runner/work/eidolon/apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app";
 const MAC_BINARY = `${MAC_APP}/Contents/MacOS/LAPLACE Eidolon`;
@@ -360,22 +361,80 @@ describe("where a library was mapped from", () => {
 });
 
 describe("PowerShell", () => {
-  test("runs one pipeline encoded, quiet, in UTF-8, with its output as JSON", () => {
-    const [command, args] = powershellCommand("Get-Item 'C:\\x y'");
-    expect(command).toBe("powershell.exe");
-    expect(args.slice(0, 5)).toEqual([
+  test("runs one pipeline encoded, quiet, without reading stdin, on SystemRoot's powershell.exe", () => {
+    const [command, args] = powershellCommand("Get-Item 'C:\\x y'", { SystemRoot: "D:\\Windows" });
+    expect(command).toBe("D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+    expect(args.slice(0, 7)).toEqual([
       "-NoProfile",
       "-NonInteractive",
+      "-InputFormat",
+      "None",
       "-ExecutionPolicy",
       "Bypass",
       "-EncodedCommand",
     ]);
-    const script = Buffer.from(args[5] as string, "base64").toString("utf16le");
+    const script = Buffer.from(args[7] as string, "base64").toString("utf16le");
     expect(script.split("\n")).toEqual([
       '$ProgressPreference = "SilentlyContinue"',
       "[Console]::OutputEncoding = [Text.Encoding]::UTF8",
       "Get-Item 'C:\\x y' | ConvertTo-Json -Compress -Depth 4",
     ]);
+  });
+
+  test("strips PSModulePath regardless of case so PowerShell 5.1 never scans PowerShell 7 modules", () => {
+    expect(
+      powershellEnv({
+        SystemRoot: "C:\\Windows",
+        PSModulePath: "C:\\Program Files\\PowerShell\\7\\Modules",
+        psmodulepath: "C:\\other",
+      }),
+    ).toEqual({ SystemRoot: "C:\\Windows" });
+  });
+
+  test("closes stdin immediately and kills a hung command and pipe-holding children at timeout", async () => {
+    // A child reading stdin until EOF finishes at once because stdin is "ignore", not an open pipe.
+    const eof = await runCommandOutput(
+      process.execPath,
+      ["-e", "process.stdin.resume(); process.stdin.on('end', () => console.log('closed'));"],
+      { timeoutMs: 5000 },
+    );
+    expect(eof.trim()).toBe("closed");
+
+    // A missing executable rejects on the next tick instead of waiting out timeoutMs + GRACE_MS.
+    const missingAt = Date.now();
+    await expect(
+      runCommandOutput(join(tmpdir(), `eidolon-missing-bin-${process.pid}`), [], {
+        timeoutMs: 10_000,
+      }),
+    ).rejects.toThrow(/ENOENT/);
+    expect(Date.now() - missingAt).toBeLessThan(1000);
+
+    // A hung command that also spawns a detached child inheriting stdout/stderr must reject promptly.
+    const pidFile = join(tmpdir(), `eidolon-smoke-sub-${process.pid}-${Date.now()}.pid`);
+    const script = [
+      'const { spawn } = require("node:child_process");',
+      'const { writeFileSync } = require("node:fs");',
+      'const sub = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], { detached: true, stdio: "inherit" });',
+      `writeFileSync(${JSON.stringify(pidFile)}, String(sub.pid));`,
+      "setTimeout(() => {}, 5000);",
+    ].join(" ");
+    const started = Date.now();
+    try {
+      await expect(
+        runCommandOutput(process.execPath, ["-e", script], { timeoutMs: 600 }),
+      ).rejects.toThrow(/timed out after 0\.6 s/);
+      expect(Date.now() - started).toBeLessThan(4000);
+    } finally {
+      if (existsSync(pidFile)) {
+        const subPid = Number(readFileSync(pidFile, "utf8").trim());
+        rmSync(pidFile, { force: true });
+        try {
+          process.kill(subPid, "SIGKILL");
+        } catch {
+          // Already stopped by killTree on Windows.
+        }
+      }
+    }
   });
 
   test("its JSON as a list, whether it printed nothing, one object bare, or several", () => {

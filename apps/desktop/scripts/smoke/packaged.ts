@@ -1,7 +1,6 @@
 // What only the packaged smoke (scripts/smoke.ts) reads of a packaged app and its processes, and how
 // it runs the app's launchers as a terminal would. Paths and command lines follow the platform
 // passed in, so Windows' rules are tested on any OS.
-import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -15,11 +14,15 @@ import {
 } from "node:fs";
 import { type AddressInfo, createServer } from "node:net";
 import { dirname, join, posix, win32 } from "node:path";
-import { promisify } from "node:util";
 import { BACKEND_RUNTIME_ARGS } from "../../src/main/controller.ts";
-import { type ProcessRow, parseTable, processTable } from "./processes.ts";
-
-const execFileAsync = promisify(execFile);
+import { powershellExe } from "../../src/main/update-signature.ts";
+import {
+  type ProcessRow,
+  parseTable,
+  powershellEnv,
+  processTable,
+  runCommandOutput,
+} from "./processes.ts";
 
 /** Where a packaged app's parts are, from its binary. */
 export interface AppLayout {
@@ -265,10 +268,9 @@ export async function mappedNatives(
     const modules = await powershellJson<{ readonly FileName?: string }>(modulesScript(pid));
     return modules.flatMap((module) => (module.FileName ? [module.FileName] : []));
   }
-  const { stdout } = await execFileAsync("lsof", ["-p", String(pid)], {
-    encoding: "utf8",
+  const stdout = await runCommandOutput("lsof", ["-p", String(pid)], {
     env: { ...process.env, LC_ALL: "C" },
-    maxBuffer: 16 * 1024 * 1024,
+    timeoutMs: 15_000,
   });
   return lsofLibraries(stdout).filter((path) => NATIVE.test(posix.basename(path)));
 }
@@ -282,24 +284,32 @@ export function jsonList<T>(text: string): T[] {
 }
 
 /** The command that runs `script`, one pipeline, with its output as JSON, sent encoded. */
-export function powershellCommand(script: string): readonly [string, readonly string[]] {
+export function powershellCommand(
+  script: string,
+  env: NodeJS.ProcessEnv = process.env,
+): readonly [string, readonly string[]] {
   // Redirected, PowerShell writes progress records to stderr as CLIXML.
   const text = `$ProgressPreference = "SilentlyContinue"\n[Console]::OutputEncoding = [Text.Encoding]::UTF8\n${script} | ConvertTo-Json -Compress -Depth 4`;
   const encoded = Buffer.from(text, "utf16le").toString("base64");
   return [
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
+    powershellExe(env),
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-InputFormat",
+      "None",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-EncodedCommand",
+      encoded,
+    ],
   ];
 }
 
 /** Runs a PowerShell pipeline and reads what it prints as a JSON list. */
-export async function powershellJson<T>(script: string): Promise<T[]> {
+export async function powershellJson<T>(script: string, timeoutMs = 30_000): Promise<T[]> {
   const [command, args] = powershellCommand(script);
-  const { stdout } = await execFileAsync(command, args, {
-    encoding: "utf8",
-    windowsHide: true,
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  const stdout = await runCommandOutput(command, args, { env: powershellEnv(), timeoutMs });
   return jsonList<T>(stdout);
 }
 
@@ -413,11 +423,8 @@ export async function processesNaming(
   platform: NodeJS.Platform = process.platform,
 ): Promise<ProcessRow[]> {
   if (platform !== "darwin") return [];
-  const [{ stdout }, plain] = await Promise.all([
-    execFileAsync("ps", ["-axwwE", "-o", "pid=,ppid=,command="], {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    }),
+  const [stdout, plain] = await Promise.all([
+    runCommandOutput("ps", ["-axwwE", "-o", "pid=,ppid=,command="], { timeoutMs: 15_000 }),
     processTable(platform),
   ]);
   const naming = new Set(

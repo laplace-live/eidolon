@@ -15,6 +15,7 @@ import { readPe } from "./pe.ts";
 import { DESKTOP, installedBinary, installer, runsFolder, sleep } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
 import { jsonList, powershellCommand } from "./smoke/packaged.ts";
+import { powershellEnv } from "./smoke/processes.ts";
 import { MICROSOFT_SIGNERS, stageDir, TARGETS, UNSIGNED_PE_FILE } from "./stage-backend.ts";
 
 /** One check's verdict, printed as the smokes print theirs. */
@@ -740,6 +741,9 @@ function authenticode(files: readonly string[]): Authenticode[] {
     const [command, args] = powershellCommand(authenticodeScript(list));
     const result = spawnSync(command, args, {
       encoding: "utf8",
+      env: powershellEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120_000,
       windowsHide: true,
       maxBuffer: 16 * 1024 * 1024,
     });
