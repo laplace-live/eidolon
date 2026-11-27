@@ -33,7 +33,8 @@ LAPLACE Eidolon (main process)
 apps/desktop/
   electron-builder.yml   the packaging config: fuses, targets, the payload as an extra resource
   electron-builder.release.ts
-                         the release overlay: notarization, the requirement, Windows' Azure signing
+                         the release overlay: notarization, the requirement, macOS signIgnore,
+                         Windows' Azure signing
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
                          requirement release builds carry (designated-requirement.mac)
   assets/                what main loads at run time through process.resourcesPath: the tray's icons
@@ -41,7 +42,7 @@ apps/desktop/
   node-shim/             the node shim's launchers, which the stage copies into the payload
   dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
   scripts/               build.ts, dev.ts, package.ts; after-pack.ts with macho.ts;
-                         stage-backend.ts with lockfile.ts, pe.ts,
+                         stage-backend.ts with lockfile.ts, macho.ts, pe.ts,
                          zip.ts, natives.ts and node-shim.ts; signed-check.ts, the signed
                          build's checks; vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
@@ -879,6 +880,13 @@ failed staging step removes its partial stage.
   copy can't win. The copies shadow System32's, and Windows Update never services them: each
   release refreshes them. The stage test checks their file version is at least the natives' linker
   version.
+- **The macOS signing list.** `.stage/darwin-arm64/mac-sign.json` names, relative to `Contents/`,
+  every non-symlink Mach-O binary and nested `.app`/`.framework` bundle in Electron's darwin zip,
+  the payload, `assets/`, `launchers/mac` and `native/mac_notify.node`, so `mac.signIgnore` in
+  `electron-builder.release.ts` skips `@electron/osx-sign`'s per-file `codesign --timestamp` calls
+  on framework symlinks and non-Mach-O data files (which `_CodeSignature/CodeResources` seals when
+  the enclosing bundle is signed). Once packaged, the stage test verifies the unpacked `.app`'s
+  actual Mach-O and bundle set matches the list.
 - **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
   `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
   packs (`electron_wer.dll` under its packaged name, `LAPLACE Eidolon_wer.dll`), for a signed release to
@@ -1032,7 +1040,8 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   lock, and `extraMetadata.name` `eidolon`, which names the per-user install folder,
   `%LOCALAPPDATA%\Programs\eidolon`. Upgrades keep the first install's folder, so the name is fixed.
 - **The asar** holds `dist/` and `package.json`, without source maps; `npmRebuild` is off, since
-  main and the preload are bundles and the app has no dependencies. The output is `.out`, and build
+  main and the preload are bundles and the app has no dependencies; `electronLanguages` keeps only
+  `en-US` and `zh-CN`, dropping ~215 unused Chromium locale packs. The output is `.out`, and build
   resources are in `resources/`, since the root `.gitignore` ignores `build/` at any depth.
 - **The payload** is an extra resource, outside the asar so onnxruntime and Zvec open real files:
   `LAPLACE Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `LAPLACE Eidolon.exe`. Its source
@@ -1073,8 +1082,10 @@ what electron-builder's own loader and schema make of it:
   `APPLE_API_ISSUER` (notarizing staples the app); `forceCodeSigning`, so a build that finds no
   Developer ID fails rather than ships ad hoc; `requirements`, the designated requirement in
   `resources/designated-requirement.mac`, whose name has no `.txt`: GitHub's dependency graph read
-  `requirements.mac.txt` as a package list and failed on it; and when `APPLE_PROVISIONING_PROFILE`
-  is set, `provisioningProfile` alongside `resources/entitlements.mac.release.plist` (adding
+  `requirements.mac.txt` as a package list and failed on it; `signIgnore`, compiled from
+  `.stage/darwin-arm64/mac-sign.json` ([The payload](#the-payload)), without which it throws on
+  macOS; and when `APPLE_PROVISIONING_PROFILE` is set, `provisioningProfile` alongside
+  `resources/entitlements.mac.release.plist` (adding
   `com.apple.developer.usernotifications.communication`, which macOS `amfid` refuses without an
   embedded profile). The DMG stays unsigned and unnotarized: electron-builder notarizes and staples
   only the app inside it, and updates take the zip.
@@ -1105,9 +1116,9 @@ changelog. The tag runs `desktop.yml` in the tagged commit:
    unsigned build gets, the packaged smoke of the signed app included. Once all of them passed, the
    leg keeps its installers, the macOS zip, the blockmaps and `latest*.yml` as `<OS>-installers`,
    for 90 days.
-3. **The upload,** a job of its own after both legs, so that a re-run sends the very bytes the legs
-   signed, where re-running a leg would sign new ones. Through the S3 API, to the `downloads`
-   bucket that `https://downloads.vrp.moe` serves:
+3. **The upload,** a job of its own after both legs and `electron-node`, so that a re-run sends the
+   very bytes the legs signed, where re-running a leg would sign new ones. Through the S3 API, to
+   the `downloads` bucket that `https://downloads.vrp.moe` serves:
    - each installer and blockmap once, to `eidolon/v<version>/`, cached for a year as immutable. It
      reads the SHA-256 the first upload stored with the key, and fails when another object is
      there: Cloudflare would keep serving the first, and electron-updater rejects other bytes on
@@ -1170,7 +1181,8 @@ runs before a change reaches master.
   tag has it: the fix reaches only the next release. The failed one keeps what went up under
   `v<version>/`, which `releases.json` lists, and the flat feed and links wait for the next.
 - **A failed leg** uploaded nothing: "Re-run failed jobs" builds and signs it again, then uploads
-  both legs.
+  both legs; when only `electron-node` failed, "Re-run failed jobs" re-runs it and uploads without
+  re-signing.
 - **A missing tag,** when the Release workflow failed before it pushed one: re-running that workflow
   tags it ([releasing.md](releasing.md)).
 - **A bad release** is withdrawn by shipping a higher version, since electron-updater never offers a
@@ -1484,7 +1496,7 @@ shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its launch
 with the checkout's pnpm and a fake registry, the shim the stage writes, its `.cmd` launchers where
 cross-spawn's own test takes them for cmd-shims, and how many times cmd.exe reads the words npx
 starts a batch file with, on made-up cmd-shims and folders; the logs' rotation and link filter;
-stage-backend's parts on made-up lockfiles, PE files and zips; the release overlay through
+stage-backend's parts on made-up lockfiles, Mach-O and PE files, and zips; the release overlay through
 electron-builder's own loader, and signed-check's reading of codesign, Gatekeeper, stapler and
 Authenticode output; the release notes' parsing, slice and text; the smokes' kit and parts, the
 fakes over real loopback requests included; the update test's feed over real loopback requests and
@@ -1507,9 +1519,11 @@ process mapped coming from the payload: `payloadLibraries()` picks them by file 
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
 launchers in `node-shim/node_modules/.bin`, the payload's one `.bin`, equal to their sources in
 `apps/desktop/node-shim`, the sh ones executable, its pnpm and target `@pnpm/exe.*` at `pnpm-lock.yaml`'s
-pin, licensed, with no foreign natives in pnpm's `dist/` and no other `.exe`), on a Windows stage the VC++ copies and the
-signers, and, once the app was packaged after the stage, that the packaged payload holds the same
-files. A target with no stage skips, and so does one staged from another
+pin, licensed, with no foreign natives in pnpm's `dist/` and no other `.exe`), on a macOS stage
+`mac-sign.json` (and in the packaged app, the Mach-O/bundle set and pruned locales), on a Windows
+stage the VC++ copies and the signers, and, once the app was packaged after the stage, that the
+packaged payload holds the same files. A target with no stage skips, and so does one staged from
+another
 version or `pnpm-lock.yaml`, whose title then says to run `pnpm build:desktop`.
 `EIDOLON_REQUIRE_STAGE=1` requires this machine's stage, current, and fails with that hint when it
 isn't:
@@ -1796,17 +1810,20 @@ platform with its secrets alone ([Secrets](#secrets)):
 2. **Install:** `pnpm install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
    build step needs a package's install script, and the signing step must follow none.
 3. **Build:** `pnpm build:desktop` stages the runner's backend and builds `dist/`.
-4. **Package:** unsigned, `pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false`,
-   at `0.0.0-dev`, ad hoc on macOS (stored uncompressed) and never with a keychain identity, an
-   NSIS setup on Windows at level-1 7z compression (`ELECTRON_BUILDER_COMPRESSION_LEVEL=1`) without
-   a differential blockmap, which packs and installs faster than level-9 LZMA2 or a stored 650 MB
-   setup. From a tag or a `sign` dispatch, signed instead: electron-builder with the release overlay
-   and that leg's secrets ([Secrets](#secrets)), then [the signed build's
-   checks](#the-signed-builds-checks).
+4. **Package:** unsigned, `pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false`
+   (plus `--mac dmg --arm64` on macOS, since dev runs upload no zip), at `0.0.0-dev`, ad hoc on
+   macOS (stored uncompressed) and never with a keychain identity, an NSIS setup on Windows at
+   level-1 7z compression (`ELECTRON_BUILDER_COMPRESSION_LEVEL=1`) without a differential blockmap,
+   which packs and installs faster than level-9 LZMA2 or a stored 650 MB setup. From a tag or a
+   `sign` dispatch, signed instead: electron-builder with the release overlay and that leg's secrets
+   ([Secrets](#secrets)), then [the signed build's checks](#the-signed-builds-checks).
 5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
-   instead of skipping; run after packaging, it also holds the app's payload to the stage.
-6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
-   Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
+   instead of skipping; run after packaging, it also holds the app's payload and macOS signing list
+   to the stage.
+6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project in `desktop.yml`'s
+   parallel `electron-node` job on macOS (gating `upload` on tag pushes without blocking signing or
+   receiving signing secrets), and on Windows inside `desktop-build.yml` for the `node`-project
+   tests of `ts.yml`'s Windows job, with its filters.
 7. **The packaged smoke,** in background mode, within 20 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
@@ -1820,8 +1837,10 @@ platform with its secrets alone ([Secrets](#secrets)):
    It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
 9. **The installers:** unsigned, the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and
    kept 14 days; not the macOS zip, which only updates read. Signed, once every check passed, the
-   installers, the zip, the blockmaps and `latest*.yml`: a tag's as `<OS>-installers` for the
-   upload, a `sign` dispatch's as `<OS>-installers-signed-unreleased`.
+   installers, the zip, the blockmaps and `latest*.yml` (`compression-level: 0`, since they are
+   already compressed): a tag's as `<OS>-installers` for the upload (which uploads the immutable
+   `v<version>/` installers and final links in parallel), a `sign` dispatch's as
+   `<OS>-installers-signed-unreleased`.
 
 Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
 push to a pull request cancels the run it replaces, a tag's run is never cancelled, and a dispatch
@@ -1973,7 +1992,8 @@ fake microphone, or background mode denies it ([above](#driving-it-in-background
 - **Unpackaged,** after `pnpm build:desktop` (or only its Vite builds) and `pnpm build:web`,
   `"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --user-data-dir=<profile>`
   runs it with its backend from source serving `apps/web/dist`; the `tail` drops the line the first
-  `require` prints as it downloads the binary, which neither build fetches on macOS. Playwright's
+  `require` prints before unpacking the binary into `node_modules/electron` (staging only caches its
+  zip, and Vite builds don't fetch it). Playwright's
   `_electron` drives it the same way.
 - **Packaged,** run `"apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon"
   --user-data-dir=<profile>` (`".out\win-unpacked\LAPLACE Eidolon.exe"` on Windows), and drive its backend
@@ -1992,13 +2012,13 @@ fake microphone, or background mode denies it ([above](#driving-it-in-background
 A bump moves the backend's Node and V8 as well as the shell, so it is a backend change too.
 
 1. Change `electron` in `apps/desktop/package.json`, an exact pin, and `electronVersion` in
-   `electron-builder.yml` together: a Windows stage refuses Electron's zip when they differ.
+   `electron-builder.yml` together: staging refuses Electron's zip when they differ.
    `packages/config/test/electron.ts` names the version `asElectron()` reports.
 2. `pnpm-workspace.yaml`'s `minimumReleaseAge` holds back any release younger than 3 hours, at
    install as well as at resolution: give the new one an exact `minimumReleaseAgeExclude` entry
    (`electron@<version>`), and drop it, and any old one, once the gate passes it. Add no
    `allowBuilds` entry: Electron's package has no install script (the binary downloads on the first
-   `require("electron")`, or through electron-builder when packaging).
+   `require("electron")`, and its zip through `@electron/get` when staging or packaging).
 3. `pnpm install` rewrites `pnpm-lock.yaml`, which `docker.yml` doesn't skip, so merging any
    Electron or electron-builder bump restarts production: merge it at a quiet time.
 4. Recheck what Electron decides for the app:
@@ -2014,7 +2034,9 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
      24 assume, and its system minimums, which this doc and [README.md](../README.md#system-requirements)
      state (update the `<!-- Electron 45 floors … -->` marker in `README.md` alongside any
      floor changes so `pnpm doc-check` passes);
-   - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
+   - the stage's signing lists, which read Electron's entries from its zips: `mac-sign.json` on
+     macOS (Electron's Mach-O binaries and bundles) and `unsigned-pe.json` on Windows (Electron's
+     unsigned DLLs).
 5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `pnpm test
    apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both
    [smokes](#the-smokes), `pnpm smoke:desktop` and, on macOS, `pnpm smoke:desktop:dev`.

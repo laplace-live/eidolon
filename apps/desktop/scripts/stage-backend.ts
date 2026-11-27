@@ -1,9 +1,10 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
 // (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to pnpm-lock.yaml and pruned, and the node shim (node-shim.ts). On Windows the natives
-// also get the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files
-// the release signs.
+// pinned to pnpm-lock.yaml and pruned, and the node shim (node-shim.ts). On macOS
+// .stage/darwin-arm64/mac-sign.json lists the Mach-O and bundle paths to codesign; on Windows the
+// natives get the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE
+// files the release signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -26,9 +27,10 @@ import {
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readPnpmLock } from "./lockfile.ts";
+import { isMacho } from "./macho.ts";
 import { NODE_SHIM, shimPnpm, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
-import { readZip } from "./zip.ts";
+import { withZip } from "./zip.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 const ROOT = resolve(DESKTOP, "../..");
@@ -51,6 +53,8 @@ export type Target = keyof typeof TARGETS;
 
 /** In the payload: the licenses of the third-party code and data it holds, for the Licenses item. */
 export const LICENSES_FILE = "THIRD_PARTY_LICENSES.txt";
+/** Beside darwin-arm64's payload: the Contents/-relative Mach-O and bundle paths to codesign. */
+export const MAC_SIGN_FILE = "mac-sign.json";
 /** Beside win32-x64's payload: the names of its unsigned PE files, and Electron's, for signExts. */
 export const UNSIGNED_PE_FILE = "unsigned-pe.json";
 /**
@@ -261,20 +265,88 @@ export function peFilesIn(dir: string): PeFile[] {
  * renames electron_wer.dll after the executable, `<productName>_wer.dll`.
  */
 export function peFilesInZip(zip: string, productName: string): PeFile[] {
-  const archive = readZip(zip);
-  return archive.entries
-    .filter((entry) => /\.(node|dll)$/i.test(entry.name))
-    .flatMap((entry) => {
-      const pe = readPe(archive.read(entry));
-      const name = basename(entry.name);
-      if (pe === null) return [];
-      return [[name === "electron_wer.dll" ? `${productName}_wer.dll` : name, pe] as const];
-    });
+  return withZip(zip, (archive) =>
+    archive.entries
+      .filter((entry) => /\.(node|dll)$/i.test(entry.name))
+      .flatMap((entry) => {
+        const pe = readPe(archive.read(entry));
+        const name = basename(entry.name);
+        if (pe === null) return [];
+        return [[name === "electron_wer.dll" ? `${productName}_wer.dll` : name, pe] as const];
+      }),
+  );
 }
 
 /** The names of the files among `pes` whose certificate table is empty, once each. */
 export function unsignedNames(pes: readonly PeFile[]): string[] {
   return [...new Set(pes.filter(([, pe]) => !pe.signed).map(([name]) => name))].sort();
+}
+
+const MAC_HELPER_PATH =
+  /^(Frameworks\/(?=Electron Helper)|Library\/LoginItems\/(?=Electron Login Helper))Electron( Helper[^/]*| Login Helper)\.app(?:(\/Contents\/MacOS\/)Electron\2)?(?=\/|$)/;
+
+function renameMacElectronPath(rel: string, productName: string): string {
+  if (rel === "MacOS/Electron") return `MacOS/${productName}`;
+  return rel.replace(
+    MAC_HELPER_PATH,
+    (_, dir: string, suffix: string, macos?: string) =>
+      `${dir}${productName}${suffix}.app${macos ? `${macos}${productName}${suffix}` : ""}`,
+  );
+}
+
+/**
+ * Every non-symlink Mach-O file and `.app`/`.framework` bundle under `dir`, named under `prefix`
+ * with `/`: `@electron/osx-sign` walks symlinks via `fs.stat` and flags every binary resource via
+ * `isbinaryfile`, spending ~0.2 s per file on Apple's timestamp server unless ignored.
+ */
+export function macSignPathsInDir(dir: string, prefix = ""): string[] {
+  if (!existsSync(dir)) return [];
+  const found: string[] = [];
+  const visit = (current: string, relPrefix: string): void => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
+      const full = join(current, entry.name);
+      const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (/\.(app|framework)$/.test(entry.name)) found.push(rel);
+        visit(full, rel);
+      } else if (entry.isFile() && isMacho(full)) {
+        found.push(rel);
+      }
+    }
+  };
+  visit(dir, prefix);
+  return [...new Set(found)].sort();
+}
+
+/**
+ * The same of Electron's darwin zip at `zip`, relative to `<productName>.app/Contents/` under the
+ * names electron-builder gives the main and helper bundles (`electronMac.js`).
+ */
+export function macSignPathsInZip(zip: string, productName: string): string[] {
+  return withZip(zip, (archive) => {
+    const contentsPrefix = "Electron.app/Contents/";
+    const symlinks = archive.entries
+      .filter((entry) => entry.symlink && entry.name.startsWith(contentsPrefix))
+      .map((entry) => entry.name.slice(contentsPrefix.length).replace(/\/$/, ""));
+    const underSymlink = (rel: string) =>
+      symlinks.some((link) => rel === link || rel.startsWith(`${link}/`));
+    const found: string[] = [];
+    for (const entry of archive.entries) {
+      if (!entry.name.startsWith(contentsPrefix) || entry.symlink) continue;
+      const rel = entry.name.slice(contentsPrefix.length);
+      if (!rel || underSymlink(rel)) continue;
+      if (rel.endsWith("/")) {
+        const trimmed = rel.slice(0, -1);
+        if (/\.(app|framework)$/.test(trimmed)) {
+          found.push(renameMacElectronPath(trimmed, productName));
+        }
+      } else if (entry.uncompressedSize >= 4 && isMacho(archive.readHead(entry, 8))) {
+        found.push(renameMacElectronPath(rel, productName));
+      }
+    }
+    return [...new Set(found)].sort();
+  });
 }
 
 interface ElectronGet {
@@ -288,10 +360,11 @@ interface ElectronGet {
 }
 
 /**
- * The Electron zip electron-builder packs for win32-x64, from @electron/get's cache or downloaded
+ * The Electron zip electron-builder packs for `target`, from @electron/get's cache or downloaded
  * into it, checked against the electron package's checksums as its own install checks them.
  */
-export async function electronZip(): Promise<string> {
+export async function electronZip(target: Target = "win32-x64"): Promise<string> {
+  const { os: platform, cpu: arch } = TARGETS[target];
   const electron = dirname(createRequire(import.meta.url).resolve("electron/package.json"));
   const { version } = JSON.parse(readFileSync(join(electron, "package.json"), "utf8")) as {
     version: string;
@@ -305,11 +378,24 @@ export async function electronZip(): Promise<string> {
   const { downloadArtifact } = (await import(pathToFileURL(get).href)) as ElectronGet;
   return downloadArtifact({
     version,
-    platform: "win32",
-    arch: "x64",
+    platform,
+    arch,
     artifactName: "electron",
     checksums: JSON.parse(readFileSync(join(electron, "checksums.json"), "utf8")),
   });
+}
+
+/** The Contents/-relative Mach-O and bundle paths a packaged macOS app signs. */
+export async function macSignPaths(payload: string): Promise<string[]> {
+  return [
+    ...new Set([
+      ...macSignPathsInZip(await electronZip("darwin-arm64"), "LAPLACE Eidolon"),
+      ...macSignPathsInDir(payload, "Resources/eidolon"),
+      ...macSignPathsInDir(join(DESKTOP, "assets"), "Resources/assets"),
+      ...macSignPathsInDir(join(DESKTOP, "launchers", "mac"), "Resources/bin"),
+      "Resources/native/mac_notify.node",
+    ]),
+  ].sort();
 }
 
 /** Every package folder under `modules`, by name, nested node_modules included. */
@@ -519,6 +605,10 @@ export async function stageBackend(
     stageNodeShim(payload, { os, cpu });
     dropUnpacked(payload);
     let vcRuntime: VcRedist | null = null;
+    if (target === "darwin-arm64") {
+      const macSign = await macSignPaths(payload);
+      writeFileSync(join(stageDir(target), MAC_SIGN_FILE), `${JSON.stringify(macSign, null, 2)}\n`);
+    }
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
       copyVcRuntime(payload, vcRuntime.dir);

@@ -69,6 +69,42 @@ jobs:
           UPDATE_TEST: ${{ inputs.update_test }}
           RELEASE_INDEX: ${{ inputs.release_index }}
 
+  # The backend's Vitest `node` project on Electron's Node, beside the macOS leg rather than
+  # inside it: neither PR packaging nor signed notarization waits four minutes on the suite, and no
+  # signing secret reaches the runner that runs the tests.
+  electron-node:
+    name: Electron's Node
+    needs: inputs
+    if: >-
+      github.event_name == 'pull_request'
+      || (github.event_name == 'push' && github.ref_type == 'tag')
+      || (github.event_name == 'workflow_dispatch' && !(inputs.release_index || inputs.update_test))
+    runs-on: macos-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+
+      - uses: actions/setup-node@v7
+        timeout-minutes: 5
+        with:
+          node-version: 24
+
+      - timeout-minutes: 10
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: The backend's tests on Electron's Node
+        timeout-minutes: 30
+        run: node apps/desktop/scripts/test-on-electron.ts
+
   # Unsigned: a pull request, or a dispatch that only builds. No secret reaches these runners.
   build:
     name: ${{ matrix.target }}
@@ -123,12 +159,12 @@ jobs:
       AZURE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
       AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
 
-  # Its own job, after both legs: a re-run sends the very bytes the build signed, where a re-run of a
-  # leg would sign new ones. One release's at a time, queued: two at once could both find R2 serving
-  # neither, and the older write the flat files last.
+  # Its own job, after both legs and electron-node: a re-run sends the very bytes the build signed,
+  # where a re-run of a leg would sign new ones. One release's at a time, queued: two at once could
+  # both find R2 serving neither, and the older write the flat files last.
   upload:
     name: Upload to R2
-    needs: [signed-mac, signed-win]
+    needs: [signed-mac, signed-win, electron-node]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     concurrency:
       group: desktop-r2-upload
@@ -210,6 +246,13 @@ jobs:
             echo "::error::reading $R2_PREFIX/$1 from R2: $found" >&2
             return 1
           }
+          pids=()
+          wait_pids() {
+            local pid failed=0
+            for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+            pids=()
+            (( failed == 0 )) || exit 1
+          }
           cd release
           # nullglob makes a pattern that matches nothing an empty list, which the counts below fail.
           shopt -s nullglob
@@ -226,7 +269,11 @@ jobs:
             echo "::error::expected one DMG, one zip, one setup and their two blockmaps, found: ${installers[*]}"
             exit 1
           fi
-          for file in "${installers[@]}"; do put_once "$file" "$R2_PREFIX/v$version/$file"; done
+          for file in "${installers[@]}"; do
+            put_once "$file" "$R2_PREFIX/v$version/$file" &
+            pids+=("$!")
+          done
+          wait_pids
           mkdir -p feed
           for name in "${manifests[@]}"; do
             { sed -E "s#^([[:space:]]*(- )?(url|path): )#\1v$version/#" "$name"; printf '%s\n' "$notes"; } \
@@ -242,9 +289,10 @@ jobs:
             fi
           done
           for name in "${manifests[@]}"; do s3 "feed/$name" "$R2_PREFIX/$name" no-cache; done
-          s3 "${dmg[0]}" "$R2_PREFIX/Eidolon-mac-arm64.dmg" no-cache
-          s3 "${setup[0]}" "$R2_PREFIX/Eidolon-win-x64.exe" no-cache
-          s3 ../changelog.json "$R2_PREFIX/changelog.json" no-cache --content-type application/json
+          s3 "${dmg[0]}" "$R2_PREFIX/Eidolon-mac-arm64.dmg" no-cache & pids+=("$!")
+          s3 "${setup[0]}" "$R2_PREFIX/Eidolon-win-x64.exe" no-cache & pids+=("$!")
+          s3 ../changelog.json "$R2_PREFIX/changelog.json" no-cache --content-type application/json & pids+=("$!")
+          wait_pids
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
