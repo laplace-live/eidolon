@@ -10,11 +10,13 @@ import { fileURLToPath } from "node:url";
  */
 export const PUBLISHER_NAMES: readonly string[] = ["Sparanoid, Inc.", "LAPLACE Live LLC"];
 
+const MAC_SIGN = fileURLToPath(new URL("./.stage/darwin-arm64/mac-sign.json", import.meta.url));
 const UNSIGNED_PE = fileURLToPath(new URL("./.stage/win32-x64/unsigned-pe.json", import.meta.url));
 
 export interface ReleaseConfigOptions {
   readonly platform?: NodeJS.Platform;
   readonly env?: NodeJS.ProcessEnv;
+  readonly macSign?: string;
   readonly unsignedPe?: string;
 }
 
@@ -25,6 +27,7 @@ export interface ReleaseConfig {
     readonly notarize: boolean;
     readonly forceCodeSigning: boolean;
     readonly requirements: string;
+    readonly signIgnore?: string[];
     readonly provisioningProfile?: string;
     readonly entitlements?: string;
   };
@@ -40,25 +43,33 @@ export interface ReleaseConfig {
   };
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * The basenames of the stage's unsigned .node and .dll files, Electron's included. Names only: a
- * positive signExts entry wins before any "!" one, so an extension would re-sign onnxruntime's,
- * the VC++ runtime's and Electron's d3dcompiler_47.dll over Microsoft's signatures.
+ * Regexes for mac.signIgnore that skip @electron/osx-sign's per-file codesign on framework
+ * symlinks and non-Mach-O resources (sealed by _CodeSignature/CodeResources instead) while keeping
+ * every listed Mach-O and bundle directory, plus the outer .app bundle.
  */
-function unsignedPeNames(list: string): string[] {
+export function macSignIgnore(paths: readonly string[]): string[] {
+  const prefix = `/${escapeRegExp("LAPLACE Eidolon.app")}/Contents/`;
+  if (paths.length === 0) return [prefix];
+  return [`${prefix}(?!(?:${paths.map(escapeRegExp).join("|")})$)`];
+}
+
+function signingList(list: string, description: string): string[] {
   if (!existsSync(list)) {
-    throw new Error(
-      `electron-builder.release.ts: no ${list}, the PE files to sign; stage the backend first ` +
-        "(pnpm build:desktop, on Windows)",
-    );
+    throw new Error(`electron-builder.release.ts: no ${list}, ${description}`);
   }
   return JSON.parse(readFileSync(list, "utf8")) as string[];
 }
 
-/** The overlay for `platform`; Windows' block reads the Azure names from `env`. */
+/** The overlay for `platform`; each platform's signing list comes from its stage. */
 export function releaseConfig({
   platform = process.platform,
   env = process.env,
+  macSign = MAC_SIGN,
   unsignedPe = UNSIGNED_PE,
 }: ReleaseConfigOptions = {}): ReleaseConfig {
   const provisioningProfile = env.APPLE_PROVISIONING_PROFILE?.trim() || undefined;
@@ -72,6 +83,14 @@ export function releaseConfig({
       forceCodeSigning: true,
       // electron-builder stamps it on every file it signs, so it names no identifier.
       requirements: "resources/designated-requirement.mac",
+      ...(platform === "darwin" && {
+        signIgnore: macSignIgnore(
+          signingList(
+            macSign,
+            "the Mach-O paths to sign; stage the backend first (pnpm build:desktop)",
+          ),
+        ),
+      }),
       ...(provisioningProfile === undefined
         ? {}
         : {
@@ -91,7 +110,13 @@ export function releaseConfig({
           publisherName: PUBLISHER_NAMES[0] as string,
         },
         forceCodeSigning: true,
-        signExts: unsignedPeNames(unsignedPe),
+        // Basenames only: a positive signExts entry wins before any "!" one, so an extension would
+        // re-sign onnxruntime's, the VC++ runtime's and Electron's d3dcompiler_47.dll over
+        // Microsoft's signatures.
+        signExts: signingList(
+          unsignedPe,
+          "the PE files to sign; stage the backend first (pnpm build:desktop, on Windows)",
+        ),
       },
     }),
   };

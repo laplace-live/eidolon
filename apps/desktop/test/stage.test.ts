@@ -10,6 +10,7 @@ import { isDeepStrictEqual } from "node:util";
 import { describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import { PLATFORMS, VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
+import { macSignIgnore } from "../electron-builder.release.ts";
 import {
   lockDrift,
   lockedTree,
@@ -32,7 +33,10 @@ import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   electronZip,
   LICENSES_FILE,
+  MAC_SIGN_FILE,
   MICROSOFT_SIGNERS,
+  macSignPaths,
+  macSignPathsInDir,
   npmLs,
   payloadDir,
   peFilesIn,
@@ -416,6 +420,40 @@ for (const target of Object.keys(TARGETS) as Target[]) {
     const packaged = join(PACKAGED[target], "eidolon");
     const repackaged =
       staged && existsSync(packaged) && statSync(packaged).mtimeMs >= statSync(payload).mtimeMs;
+
+    test.skipIf(target !== "darwin-arm64")(
+      "lists every Mach-O and bundle to sign on macOS, and the packaged app matches it",
+      async () => {
+        const listed: string[] = JSON.parse(
+          readFileSync(join(stageDir(target), MAC_SIGN_FILE), "utf8"),
+        );
+        expect(listed).toEqual(await macSignPaths(payload));
+
+        if (repackaged) {
+          const appBundle = dirname(dirname(PACKAGED[target]));
+          const contents = join(appBundle, "Contents");
+          expect(macSignPathsInDir(contents)).toEqual(listed);
+          const ignore = macSignIgnore(listed).map((pattern) => new RegExp(pattern));
+          const skipped = (file: string) => ignore.some((re) => re.test(file));
+          expect(skipped(appBundle)).toBe(false);
+          for (const rel of listed) {
+            expect([rel, skipped(join(contents, rel))]).toEqual([rel, false]);
+          }
+          expect(skipped(join(contents, "Resources/app.asar"))).toBe(true);
+          expect(skipped(join(contents, "Resources/eidolon/data/models/silero_vad.onnx"))).toBe(
+            true,
+          );
+          const fwResources = join(
+            contents,
+            "Frameworks/Electron Framework.framework/Versions/A/Resources",
+          );
+          const locales = readdirSync(fwResources).filter((name) => name.endsWith(".lproj"));
+          expect(locales.every((name) => /^(en|zh_CN)/i.test(name))).toBe(true);
+        }
+      },
+      120_000,
+    );
+
     test.skipIf(!repackaged)("is what the app packaged after it holds, file for file", () => {
       expect(listing(packaged).files).toEqual(listing(payload).files);
       if (process.platform !== "win32") {

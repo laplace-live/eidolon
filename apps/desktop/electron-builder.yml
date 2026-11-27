@@ -10,6 +10,11 @@ extraMetadata:
 # Main and the preload are bundles: the app has no dependencies to rebuild or collect.
 npmRebuild: false
 asar: true
+# The shell and web app ship in English and Simplified Chinese; drops ~215 unused Chromium locale
+# packs (~45 MB).
+electronLanguages:
+  - en-US
+  - zh-CN
 directories:
   output: .out
   # The root .gitignore ignores build/ at any depth.

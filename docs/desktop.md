@@ -879,6 +879,13 @@ failed staging step removes its partial stage.
   copy can't win. The copies shadow System32's, and Windows Update never services them: each
   release refreshes them. The stage test checks their file version is at least the natives' linker
   version.
+- **The macOS signing list.** `.stage/darwin-arm64/mac-sign.json` names, relative to `Contents/`,
+  every non-symlink Mach-O binary and nested `.app`/`.framework` bundle in Electron's darwin zip,
+  the payload, `assets/`, `launchers/mac` and `native/mac_notify.node`, so `mac.signIgnore` in
+  `electron-builder.release.ts` skips `@electron/osx-sign`'s per-file `codesign --timestamp` calls
+  on framework symlinks and non-Mach-O data files (which `_CodeSignature/CodeResources` seals when
+  the enclosing bundle is signed). Once packaged, the stage test verifies the unpacked `.app`'s
+  actual Mach-O and bundle set matches the list.
 - **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
   `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
   packs (`electron_wer.dll` under its packaged name, `LAPLACE Eidolon_wer.dll`), for a signed release to
@@ -1032,7 +1039,8 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   lock, and `extraMetadata.name` `eidolon`, which names the per-user install folder,
   `%LOCALAPPDATA%\Programs\eidolon`. Upgrades keep the first install's folder, so the name is fixed.
 - **The asar** holds `dist/` and `package.json`, without source maps; `npmRebuild` is off, since
-  main and the preload are bundles and the app has no dependencies. The output is `.out`, and build
+  main and the preload are bundles and the app has no dependencies; `electronLanguages` keeps only
+  `en-US` and `zh-CN`, dropping ~215 unused Chromium locale packs. The output is `.out`, and build
   resources are in `resources/`, since the root `.gitignore` ignores `build/` at any depth.
 - **The payload** is an extra resource, outside the asar so onnxruntime and Zvec open real files:
   `LAPLACE Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `LAPLACE Eidolon.exe`. Its source
@@ -1073,8 +1081,10 @@ what electron-builder's own loader and schema make of it:
   `APPLE_API_ISSUER` (notarizing staples the app); `forceCodeSigning`, so a build that finds no
   Developer ID fails rather than ships ad hoc; `requirements`, the designated requirement in
   `resources/designated-requirement.mac`, whose name has no `.txt`: GitHub's dependency graph read
-  `requirements.mac.txt` as a package list and failed on it; and when `APPLE_PROVISIONING_PROFILE`
-  is set, `provisioningProfile` alongside `resources/entitlements.mac.release.plist` (adding
+  `requirements.mac.txt` as a package list and failed on it; `signIgnore`, compiled from
+  `.stage/darwin-arm64/mac-sign.json` ([The payload](#the-payload)), without which it throws on
+  macOS; and when `APPLE_PROVISIONING_PROFILE` is set, `provisioningProfile` alongside
+  `resources/entitlements.mac.release.plist` (adding
   `com.apple.developer.usernotifications.communication`, which macOS `amfid` refuses without an
   embedded profile). The DMG stays unsigned and unnotarized: electron-builder notarizes and staples
   only the app inside it, and updates take the zip.
@@ -1796,17 +1806,20 @@ platform with its secrets alone ([Secrets](#secrets)):
 2. **Install:** `pnpm install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
    build step needs a package's install script, and the signing step must follow none.
 3. **Build:** `pnpm build:desktop` stages the runner's backend and builds `dist/`.
-4. **Package:** unsigned, `pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false`,
-   at `0.0.0-dev`, ad hoc on macOS (stored uncompressed) and never with a keychain identity, an
-   NSIS setup on Windows at level-1 7z compression (`ELECTRON_BUILDER_COMPRESSION_LEVEL=1`) without
-   a differential blockmap, which packs and installs faster than level-9 LZMA2 or a stored 650 MB
-   setup. From a tag or a `sign` dispatch, signed instead: electron-builder with the release overlay
-   and that leg's secrets ([Secrets](#secrets)), then [the signed build's
-   checks](#the-signed-builds-checks).
+4. **Package:** unsigned, `pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false`
+   (plus `--mac dmg --arm64` on macOS, since dev runs upload no zip), at `0.0.0-dev`, ad hoc on
+   macOS (stored uncompressed) and never with a keychain identity, an NSIS setup on Windows at
+   level-1 7z compression (`ELECTRON_BUILDER_COMPRESSION_LEVEL=1`) without a differential blockmap,
+   which packs and installs faster than level-9 LZMA2 or a stored 650 MB setup. From a tag or a
+   `sign` dispatch, signed instead: electron-builder with the release overlay and that leg's secrets
+   ([Secrets](#secrets)), then [the signed build's checks](#the-signed-builds-checks).
 5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
-   instead of skipping; run after packaging, it also holds the app's payload to the stage.
-6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
-   Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
+   instead of skipping; run after packaging, it also holds the app's payload and macOS signing list
+   to the stage.
+6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project in `desktop.yml`'s
+   parallel `electron-node` job on macOS (gating `upload` on tag pushes without blocking signing or
+   receiving signing secrets), and on Windows inside `desktop-build.yml` for the `node`-project
+   tests of `ts.yml`'s Windows job, with its filters.
 7. **The packaged smoke,** in background mode, within 20 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
@@ -1820,8 +1833,10 @@ platform with its secrets alone ([Secrets](#secrets)):
    It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
 9. **The installers:** unsigned, the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and
    kept 14 days; not the macOS zip, which only updates read. Signed, once every check passed, the
-   installers, the zip, the blockmaps and `latest*.yml`: a tag's as `<OS>-installers` for the
-   upload, a `sign` dispatch's as `<OS>-installers-signed-unreleased`.
+   installers, the zip, the blockmaps and `latest*.yml` (`compression-level: 0`, since they are
+   already compressed): a tag's as `<OS>-installers` for the upload (which uploads the immutable
+   `v<version>/` installers and final links in parallel), a `sign` dispatch's as
+   `<OS>-installers-signed-unreleased`.
 
 Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
 push to a pull request cancels the run it replaces, a tag's run is never cancelled, and a dispatch

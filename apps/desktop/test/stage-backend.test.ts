@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,11 +26,22 @@ import {
   readPnpmLock,
   supports,
 } from "../scripts/lockfile.ts";
+import {
+  FAT_MAGIC,
+  FAT_MAGIC_64,
+  isMacho,
+  MH_CIGAM,
+  MH_CIGAM_64,
+  MH_MAGIC,
+  MH_MAGIC_64,
+} from "../scripts/macho.ts";
 import { NODE_SHIM } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   copyVcRuntime,
   dropUnpacked,
+  macSignPathsInDir,
+  macSignPathsInZip,
   newestVcRedist,
   parseTarget,
   peFilesIn,
@@ -249,12 +261,14 @@ function pe(spec: PeSpec = {}): Buffer {
   return file;
 }
 
-/** A zip of `entries`, deflated or stored. */
-function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[]): Buffer {
+/** A zip of `entries`, deflated or stored, with optional Unix symlink mode. */
+function zip(
+  entries: readonly { name: string; data: Buffer; deflate: boolean; symlink?: boolean }[],
+): Buffer {
   const parts: Buffer[] = [];
   const directory: Buffer[] = [];
   let offset = 0;
-  for (const { name, data, deflate } of entries) {
+  for (const { name, data, deflate, symlink } of entries) {
     const body = deflate ? deflateRawSync(data) : data;
     const nameBytes = Buffer.from(name);
     const local = Buffer.alloc(30);
@@ -267,13 +281,14 @@ function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[
     local.writeUInt16LE(nameBytes.length, 26);
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(symlink ? 0x0314 : 20, 4);
     central.writeUInt16LE(20, 6);
     central.writeUInt16LE(deflate ? 8 : 0, 10);
     central.writeUInt32LE(crc32(data), 16);
     central.writeUInt32LE(body.length, 20);
     central.writeUInt32LE(data.length, 24);
     central.writeUInt16LE(nameBytes.length, 28);
+    if (symlink) central.writeUInt32LE((0o120777 << 16) >>> 0, 38);
     central.writeUInt32LE(offset, 42);
     parts.push(local, nameBytes, body);
     directory.push(central, nameBytes);
@@ -846,6 +861,136 @@ describe("the unsigned-PE list", () => {
       ["LAPLACE Eidolon_wer.dll", null],
     ]);
     expect(unsignedNames(pes)).toEqual(["LAPLACE Eidolon_wer.dll", "ffmpeg.dll"]);
+  });
+});
+
+describe("the macOS signing list", () => {
+  function macho64(): Buffer {
+    const buf = Buffer.alloc(32);
+    buf.writeUInt32LE(MH_MAGIC_64, 0);
+    return buf;
+  }
+
+  test("detects 32/64-bit and universal Mach-O headers, and rejects Java .class and data files", () => {
+    for (const magic of [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]) {
+      const buf = Buffer.alloc(8);
+      buf.writeUInt32BE(magic, 0);
+      expect([magic.toString(16), isMacho(buf)]).toEqual([magic.toString(16), true]);
+    }
+    for (const magic of [FAT_MAGIC, FAT_MAGIC_64]) {
+      const fat = Buffer.alloc(8);
+      fat.writeUInt32BE(magic, 0);
+      fat.writeUInt32BE(2, 4);
+      expect([magic.toString(16), isMacho(fat)]).toEqual([magic.toString(16), true]);
+    }
+    // Java 8 .class header: 0xcafebabe, minor 0, major 52.
+    const javaClass = Buffer.from([0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x34]);
+    expect(isMacho(javaClass)).toBe(false);
+    expect(isMacho(Buffer.from([0xca, 0xfe, 0xba, 0xbe]))).toBe(false);
+    expect(isMacho(Buffer.from("not macho"))).toBe(false);
+    expect(isMacho(Buffer.alloc(0))).toBe(false);
+
+    const dir = temp();
+    const bin = put(join(dir, "pnpm"), macho64());
+    const onnx = put(join(dir, "silero_vad.onnx"), Buffer.from([0x08, 0x07, 0x12, 0x00]));
+    expect([isMacho(bin), isMacho(onnx)]).toEqual([true, false]);
+  });
+
+  test("collects Mach-O files and bundles in a directory without following symlinks", () => {
+    const root = temp();
+    put(join(root, "node_modules/@zvec/bindings-darwin-arm64/zvec.node"), macho64());
+    put(join(root, "node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm"), macho64());
+    put(join(root, "Vendor.framework/Versions/A/Vendor"), macho64());
+    put(join(root, "data/models/silero_vad.onnx"), Buffer.from([0x08, 0x07, 0x12, 0x00]));
+    if (process.platform !== "win32") {
+      symlinkSync("A", join(root, "Vendor.framework/Versions/Current"));
+      symlinkSync("Versions/Current/Vendor", join(root, "Vendor.framework/Vendor"));
+    }
+    expect(macSignPathsInDir(root, "Resources/eidolon")).toEqual([
+      "Resources/eidolon/Vendor.framework",
+      "Resources/eidolon/Vendor.framework/Versions/A/Vendor",
+      "Resources/eidolon/node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm",
+      "Resources/eidolon/node_modules/@zvec/bindings-darwin-arm64/zvec.node",
+    ]);
+  });
+
+  test("reads Electron's darwin zip, skipping symlinks and data while renaming main and helpers", () => {
+    const file = put(
+      join(temp(), "electron-v45.5.0-darwin-arm64.zip"),
+      zip([
+        { name: "version", data: Buffer.from("45.5.0"), deflate: false },
+        { name: "Electron.app/", data: Buffer.alloc(0), deflate: false },
+        { name: "Electron.app/Contents/MacOS/Electron", data: macho64(), deflate: true },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Helper.app/",
+          data: Buffer.alloc(0),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Helper.app/Contents/MacOS/Electron Helper",
+          data: macho64(),
+          deflate: true,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Helper (GPU).app/",
+          data: Buffer.alloc(0),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Helper (GPU).app/Contents/MacOS/Electron Helper (GPU)",
+          data: macho64(),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Framework.framework/",
+          data: Buffer.alloc(0),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Framework.framework/Electron Framework",
+          data: Buffer.from("Versions/Current/Electron Framework"),
+          deflate: false,
+          symlink: true,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/Current",
+          data: Buffer.from("A"),
+          deflate: false,
+          symlink: true,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework",
+          data: macho64(),
+          deflate: true,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/en.lproj/locale.pak",
+          data: Buffer.from([0x05, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]),
+          deflate: true,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Squirrel.framework/",
+          data: Buffer.alloc(0),
+          deflate: false,
+        },
+        {
+          name: "Electron.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt",
+          data: macho64(),
+          deflate: true,
+        },
+      ]),
+    );
+    expect(macSignPathsInZip(file, "LAPLACE Eidolon")).toEqual([
+      "Frameworks/Electron Framework.framework",
+      "Frameworks/Electron Framework.framework/Versions/A/Electron Framework",
+      "Frameworks/LAPLACE Eidolon Helper (GPU).app",
+      "Frameworks/LAPLACE Eidolon Helper (GPU).app/Contents/MacOS/LAPLACE Eidolon Helper (GPU)",
+      "Frameworks/LAPLACE Eidolon Helper.app",
+      "Frameworks/LAPLACE Eidolon Helper.app/Contents/MacOS/LAPLACE Eidolon Helper",
+      "Frameworks/Squirrel.framework",
+      "Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt",
+      "MacOS/LAPLACE Eidolon",
+    ]);
   });
 });
 

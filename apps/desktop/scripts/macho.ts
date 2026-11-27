@@ -3,12 +3,45 @@
 import { createHash } from "node:crypto";
 import { closeSync, fstatSync, openSync, readSync, writeSync } from "node:fs";
 
+export const MH_MAGIC = 0xfeedface;
+export const MH_CIGAM = 0xcefaedfe;
 export const MH_MAGIC_64 = 0xfeedfacf;
+export const MH_CIGAM_64 = 0xcffaedfe;
+export const FAT_MAGIC = 0xcafebabe;
+export const FAT_MAGIC_64 = 0xcafebabf;
 export const MH_EXECUTE = 2;
 export const LC_UUID = 0x1b;
 export const LC_UUID_CMDSIZE = 24;
 /** Prebuilt Electron binaries linked with lld carry LC_UUIDs starting with "4c4c44" ("LLD"). */
 export const STOCK_LLD_UUID_PREFIX = "4c4c44";
+
+function isMachoHeader(header: Buffer): boolean {
+  if (header.length < 4) return false;
+  const magic = header.readUInt32BE(0);
+  if (magic === MH_MAGIC || magic === MH_CIGAM || magic === MH_MAGIC_64 || magic === MH_CIGAM_64) {
+    return true;
+  }
+  // Java .class files share 0xcafebabe with fat_header, with major_version >= 45 in bytes 6..7.
+  if (magic === FAT_MAGIC || magic === FAT_MAGIC_64) {
+    if (header.length < 8) return false;
+    const nfat = header.readUInt32BE(4);
+    return nfat >= 1 && nfat <= 20;
+  }
+  return false;
+}
+
+/** Whether `file` starts with a 32/64-bit or universal Mach-O header. */
+export function isMacho(file: string | Buffer): boolean {
+  if (Buffer.isBuffer(file)) return isMachoHeader(file);
+  const fd = openSync(file, "r");
+  try {
+    const header = Buffer.alloc(8);
+    const bytesRead = readSync(fd, header, 0, 8, 0);
+    return isMachoHeader(header.subarray(0, bytesRead));
+  } finally {
+    closeSync(fd);
+  }
+}
 
 interface Source {
   readonly size: number;

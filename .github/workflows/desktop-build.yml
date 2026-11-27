@@ -99,15 +99,18 @@ jobs:
         timeout-minutes: 20
         run: pnpm build:desktop
 
-      # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
-      # (scripts/package.ts), NSIS on Windows. differentialPackage off skips the unused blockmap and
-      # 7za's level-9 LZMA2 override; level-1 on Windows packs fast without a 650 MB uncompressed setup.
+      # Unsigned, at 0.0.0-dev: ad hoc on macOS (DMG only, since dev builds upload no zip) and
+      # never with a keychain identity (scripts/package.ts), NSIS on Windows. differentialPackage
+      # off skips the unused blockmap and 7za's level-9 LZMA2 override; level-1 on Windows packs
+      # fast without a 650 MB uncompressed setup.
       - id: package
         if: env.SIGNED != 'true'
         timeout-minutes: 20
         run: |
+          args=(-c.compression=store -c.nsis.differentialPackage=false)
+          if [[ $RUNNER_OS == macOS ]]; then args+=(--mac dmg --arm64); fi
           if [[ $RUNNER_OS == Windows ]]; then export ELECTRON_BUILDER_COMPRESSION_LEVEL=1; fi
-          pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false
+          pnpm package:desktop "${args[@]}"
 
       # electron-builder's notarization reads the App Store Connect key from a file.
       - name: Materialize the App Store Connect key
@@ -175,13 +178,8 @@ jobs:
         env:
           EIDOLON_REQUIRE_STAGE: "1"
 
-      - name: The backend's tests on Electron's Node
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'macOS' }}
-        timeout-minutes: 30
-        run: node apps/desktop/scripts/test-on-electron.ts
-
-      # The whole suite doesn't run on Windows: these are the node-project tests ts.yml's windows job
-      # runs there.
+      # The whole suite runs in desktop.yml's parallel electron-node job on macOS; on Windows only
+      # the node-project tests ts.yml's windows job runs there.
       - name: Windows' own tests on Electron's Node
         if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
         timeout-minutes: 20
@@ -259,4 +257,5 @@ jobs:
             apps/desktop/.out/dev*.yml
           include-hidden-files: true
           if-no-files-found: error
+          compression-level: 0
           retention-days: ${{ github.event_name == 'push' && 90 || 1 }}
