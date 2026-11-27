@@ -1,4 +1,5 @@
 // Home's readiness list: what calls and builds need, read from GET status, each with its fix.
+import { RECOMMENDED_ROLES } from "@/features/setup/first-run";
 import type { IndexTable, MemoryStatus, Status } from "@/lib/api";
 import { formatCount, formatDateTime } from "@/lib/format";
 import { studioPath } from "@/lib/paths";
@@ -53,15 +54,33 @@ export function formatsFor(lang: Lang): Formats {
 /** Below this, home warns: a few videos' audio fills it. */
 export const LOW_DISK_BYTES = 10e9;
 
-function voiceItem(persona: Status["persona"]): Item {
+function voiceItem(persona: Status["persona"], voiceKeyMissing: boolean): Item {
   const { voice } = persona;
+  if (voice.provider === null) {
+    return {
+      id: "voice",
+      tone: "info",
+      text: "home.ready.voice.off",
+      fix: { kind: "link", to: studioPath(persona.id, "voice"), label: "home.fix.voice" },
+    };
+  }
   // Only Fish's voices are looked up; another provider's voice is its own to know.
   if (voice.provider !== "fish") {
     const vars = { provider: providerName(voice.provider), id: voice.id ?? "" };
     const fix: Fix = { kind: "link", to: studioPath(persona.id, "voice"), label: "home.fix.voice" };
-    return voice.id === null
-      ? { id: "voice", tone: "error", text: "home.ready.voice.providerNone", vars, fix }
-      : { id: "voice", tone: "ok", text: "home.ready.voice.provider", vars, fix };
+    if (voice.id !== null) {
+      return { id: "voice", tone: "ok", text: "home.ready.voice.provider", vars, fix };
+    }
+    if (voice.provider === "openai-compatible" || voice.provider === "fish-speech") {
+      return { id: "voice", tone: "ok", text: "home.ready.voice.providerDefault", vars, fix };
+    }
+    return {
+      id: "voice",
+      tone: voiceKeyMissing ? "info" : "error",
+      text: voiceKeyMissing ? "home.ready.voice.noneTextOnly" : "home.ready.voice.providerNone",
+      vars,
+      fix,
+    };
   }
   const inherited = voice.source === "env";
   // An inherited voice is changed in her studio, which says where it comes from; her own, in place.
@@ -72,8 +91,8 @@ function voiceItem(persona: Status["persona"]): Item {
   if (voice.id === null) {
     return {
       id: "voice",
-      tone: "error",
-      text: "home.ready.voice.none",
+      tone: voiceKeyMissing ? "info" : "error",
+      text: voiceKeyMissing ? "home.ready.voice.noneTextOnly" : "home.ready.voice.none",
       fix: pick("home.fix.pickVoice"),
     };
   }
@@ -183,13 +202,16 @@ export function readiness(status: Status, format: Formats): Item[] {
     }
   }
   const missing = status.keys.filter((key) => !key.set);
+  const requiredMissing = missing.filter((key) =>
+    key.roles.some((role) => !RECOMMENDED_ROLES.has(role)),
+  );
   if (missing.length > 0) {
     const names = missing.map((key) => key.name).join(", ");
     const fix: Fix = { kind: "link", to: "/setup", label: "home.fix.setup" };
     items.push({
       id: "keys",
-      tone: "error",
-      text: "home.ready.keys.missing",
+      tone: requiredMissing.length > 0 ? "error" : "info",
+      text: requiredMissing.length > 0 ? "home.ready.keys.missing" : "home.ready.keys.callOnly",
       vars: { names },
       fix,
     });
@@ -199,7 +221,19 @@ export function readiness(status: Status, format: Formats): Item[] {
     const names = status.keys.map((key) => key.name).join(", ");
     items.push({ id: "keys", tone: "ok", text: "home.ready.keys.ok", vars: { names } });
   }
-  if (!status.call.realtime) items.push(voiceItem(status.persona));
+  if (!status.call.realtime) {
+    const hearing = status.call.roles.find((role) => role.role === "hearing");
+    if (hearing && hearing.provider === null && hearing.problem === null) {
+      items.push({
+        id: "models-hearing",
+        tone: "info",
+        text: "home.ready.hearing.off",
+        fix: { kind: "link", to: studio("models"), label: "home.fix.models" },
+      });
+    }
+    const voiceKeyMissing = missing.some((key) => key.roles.includes("voice"));
+    items.push(voiceItem(status.persona, voiceKeyMissing));
+  }
   items.push(memoryItem(status.memory));
   const table = (name: IndexTable["table"]) => status.index.tables.find((t) => t.table === name);
   items.push(indexItem("facts", table("persona_facts"), studio("knowledge"), format));

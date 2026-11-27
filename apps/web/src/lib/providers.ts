@@ -6,6 +6,7 @@ import {
   defaultModel,
   defaultVoice,
   modelInfo,
+  OFF_PROVIDER,
   PROVIDERS,
   type Provider,
   providerById,
@@ -23,6 +24,7 @@ export {
   defaultModel,
   defaultVoice,
   modelInfo,
+  OFF_PROVIDER,
   PROVIDERS,
   providerById,
   providersFor,
@@ -51,6 +53,6 @@ export function providerOfAccount(
   id: string | null,
   accounts: readonly { readonly id: string; readonly provider: string }[] | undefined,
 ): string | null {
-  if (id === null) return null;
+  if (id === null || id === OFF_PROVIDER) return null;
   return accounts?.find((account) => account.id === id)?.provider ?? (providerById(id) ? id : null);
 }

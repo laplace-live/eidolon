@@ -7,6 +7,7 @@ import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { afterEach, describe, expect, test } from "vitest";
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
+import { callsDisabled } from "../../src/local/chats/call-keys.ts";
 import { type CheckDeps, type CheckOutcome, checkProvider } from "../../src/local/checks.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { credentialsRoutes } from "../../src/local/routes/credentials.ts";
@@ -565,6 +566,47 @@ describe("POST credentials/check", () => {
       expect(status.persona.voice.ok).toBeNull();
     } finally {
       rmSync(credentials, { force: true });
+    }
+  });
+
+  test("checks self-hosted Fish Speech health without requiring an API key and strips /v1", async () => {
+    const keyless = await check("fish-speech", {
+      "GET http://127.0.0.1:8080/v1/health": json(200, { status: "ok" }),
+    });
+    expect(verdict(keyless.result)).toEqual([true, "ok", []]);
+    expect(keyless.sent).toEqual([
+      { method: "GET", url: "http://127.0.0.1:8080/v1/health", authorization: null },
+    ]);
+
+    const normalized = await check(
+      "fish-speech",
+      { "GET http://127.0.0.1:9090/v1/health": json(200, { status: "ok" }) },
+      { FISH_SPEECH_BASE_URL: "http://127.0.0.1:9090/v1/" },
+      "fs-secret",
+    );
+    expect(verdict(normalized.result)).toEqual([true, "ok", []]);
+    expect(normalized.sent).toEqual([
+      { method: "GET", url: "http://127.0.0.1:9090/v1/health", authorization: "Bearer fs-secret" },
+    ]);
+
+    const refused = await check("fish-speech", {
+      "GET http://127.0.0.1:8080/v1/health": json(401, {}),
+    });
+    expect(verdict(refused.result)).toEqual([false, "invalid-key", []]);
+  });
+
+  test("callsDisabled is true only when hearing or voice is off without realtime", () => {
+    resetSettings();
+    installSettings();
+    expect(callsDisabled(["milky-green"])).toBe(false);
+
+    process.env.TTS_PROVIDER = "none";
+    installSettings();
+    try {
+      expect(callsDisabled(["milky-green"])).toBe(true);
+    } finally {
+      delete process.env.TTS_PROVIDER;
+      resetSettings();
     }
   });
 });

@@ -324,12 +324,11 @@ her hearing's and her voice's, can wait: until they're added, `/call` and a chat
 them and place no call, a chat's microphone is off, and her replies are text.
 
 - **Keys** picks an account for each role, in three groups: Required Providers, her mind, which
-  every chat runs on; Recommended Providers, her hearing and voice, which calls and voice messages
-  need; and Optional Providers, embeddings, for every persona, and her retrieval gate's decision
+  every chat runs on; Recommended Providers, her hearing and voice, which can be set to `Off` for
+  text-only chats; and Optional Providers, embeddings, for every persona, and her retrieval gate's decision
   model. Each offers every provider in the catalog that fills the role
   ([providers.md](providers.md#roles)), its default marked Recommended, and the other accounts
-  Settings → Providers has. An OpenAI-compatible
-  endpoint is listed once an account of it has an API base, and a pick with no default model asks
+  Settings → Providers has, plus `Off` on optional roles (`hearing` and `voice`). Custom endpoints (`openai-compatible` and self-hosted `fish-speech`) show inline **API Base** (and **Speech Recognition Transport** for `openai-compatible` hearing) and optional API key fields directly in the step, and a pick with no default model asks
   for one. A role whose provider or model the environment sets is locked, naming the variable:
   the environment's model would go to whichever provider took the role. Then it asks for one key per
   account the picks name, and the accounts her reranking (unless turned off), Assistant Mode and
@@ -342,13 +341,16 @@ them and place no call, a chat's microphone is off, and her replies are text.
   replaced providers owned, asks before another embedding provider on an install that isn't new,
   then saves and checks every key. A persona on a realtime model is asked for its account's key in
   place of the three, as a required one.
-- **Persona** keeps the active persona, takes the demo, or creates one.
+- **Persona** keeps the active persona, takes the demo, or creates one. The wizard skips the Voice
+  step automatically when realtime is active, `voice` is off, or the chosen voice account requires
+  a key that hasn't been configured yet.
 - **Voice** offers the voices of the provider she speaks through: on Fish Audio, the voices of her
-  account, private ones included, beside the public library, opening on hers once there are any;
-  one of OpenAI's fixed set; or for another provider the id of a voice in its library. A new persona
+  account, private ones included, beside the public library (plus entry by raw voice ID, with no
+  eager library prefetch before switching to it); one of OpenAI's fixed set; or for another
+  provider the id or optional reference ID of a voice, plus **Skip for Now** when left empty. A new persona
   starts on the active persona's providers, so hers is that persona's voice provider, as it is in
-  **New Persona** outside the wizard. The library needs no key.
-- **Done** offers to call her, or **Start Chatting** while her calls lack a key.
+  **New Persona** outside the wizard (where voice is also optional). The library needs no key.
+- **Done** offers to call her, or **Start Chatting** while calls are off or lack a key or voice.
 
 ## The local viewer and memory
 

@@ -80,19 +80,19 @@ export function VoiceStep({
   const picked = chosen?.trim() ?? "";
   const voiceId = picked === "" ? fallback : picked;
 
-  async function next() {
-    if (voiceId === null) return;
+  async function next(skip = false) {
+    if (!skip && voiceId === null) return;
     setBusy(true);
     setFailure(null);
     try {
       let persona: PersonaRef;
       if (target.kind === "create") {
-        persona = created ?? (await createPersona(target.draft, voiceId));
+        persona = created ?? (await createPersona(target.draft, skip ? null : voiceId));
         if (created === null && target.avatar) persona = await addAvatar(persona, target.avatar);
         setCreated(persona);
       } else {
         persona = target.persona;
-        if (picked !== "" && picked !== current) await saveVoice(persona.id, picked);
+        if (!skip && picked !== "" && picked !== current) await saveVoice(persona.id, picked);
       }
       if (personas.data?.active !== persona.id) await activatePersona(persona.id);
       await refreshPersonas(queryClient);
@@ -115,10 +115,21 @@ export function VoiceStep({
       onBack={onBack}
       busy={busy}
       footer={
-        <Button onClick={() => void next()} disabled={busy || voiceId === null}>
-          {busy && <Spinner />}
-          {target.kind === "create" ? t`Create Her` : t`Continue`}
-        </Button>
+        <>
+          {voiceId === null && (
+            <Button
+              variant="ghost"
+              onClick={() => void next(true)}
+              disabled={busy || (provider === null && settings.isPending)}
+            >
+              {t`Skip for Now`}
+            </Button>
+          )}
+          <Button onClick={() => void next()} disabled={busy || voiceId === null}>
+            {busy && <Spinner />}
+            {target.kind === "create" ? t`Create Her` : t`Continue`}
+          </Button>
+        </>
       }
     >
       {inherited !== null && row && (

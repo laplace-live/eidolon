@@ -3,6 +3,7 @@
 // endpoint here is free: listings, key lookups and the Fish wallet, never a model call.
 import { isPlainObject } from "@eidolon/config";
 import {
+  fishSpeechRoot,
   type KeyCheck,
   LEGACY_VOICE_ENV,
   type Provider,
@@ -470,7 +471,10 @@ export async function checkAccount(
     if (takesKey(provider) || base === undefined) {
       return { result: finish(fail("missing"), envOverride) };
     }
-    return { result: finish(await checkListing(deps, undefined, base), envOverride) };
+    const at = provider.id === "fish-speech" ? fishSpeechRoot(base) : base;
+    return {
+      result: finish(await checkListing(deps, undefined, at, provider.check), envOverride),
+    };
   }
   const check = KEY_CHECKS[provider.id] ?? catalogCheck;
   const verdict = await check({ ...target, apiKey: key }, deps);
@@ -498,6 +502,14 @@ const catalogCheck: KeyCheckRun = async ({ provider, apiKey, baseUrl }, deps) =>
 const KEY_CHECKS: { readonly [P in ProviderId]?: KeyCheckRun } = {
   soniox: ({ apiKey, baseUrl }, deps) => checkSoniox(deps, apiKey, baseUrl),
   fish: ({ apiKey, account }, deps) => checkFish(deps, apiKey, account),
+  // Self-hosted Fish Speech accepts `/v1` bases in config, but serves `/v1/health` at the root.
+  "fish-speech": ({ provider, apiKey, baseUrl }, deps) =>
+    checkListing(
+      deps,
+      apiKey,
+      fishSpeechRoot(baseUrl ?? (provider.baseUrl as string)),
+      provider.check,
+    ),
   openrouter: ({ apiKey, baseUrl }, deps) => {
     const at = baseUrl ?? OPENROUTER_BASE;
     return isOpenRouter(at) ? checkOpenRouterKey(deps, apiKey, at) : checkListing(deps, apiKey, at);

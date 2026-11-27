@@ -210,6 +210,8 @@ export const FLAG_LABELS = {
 
 /** An optional role's default, where it has none: what being off means. */
 export const PROVIDER_OFF_LABELS: Readonly<Partial<Record<RoleId, MessageDescriptor>>> = {
+  hearing: msg`Off: No Speech Recognition`,
+  voice: msg`Off: Text Only`,
   realtime: msg`Off: Three Models`,
 };
 

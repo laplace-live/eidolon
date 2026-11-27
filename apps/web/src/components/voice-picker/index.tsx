@@ -4,7 +4,7 @@
 // home's voice dialog and the studio's voice tab use it; samples play only through <audio src>.
 
 import { useLingui } from "@lingui/react/macro";
-import { useInfiniteQuery, usePrefetchInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { type SyntheticEvent, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Voice } from "@/lib/api";
@@ -13,7 +13,7 @@ import { useLang } from "@/locales/i18n";
 import { type LibraryFilter, LibraryPanel } from "./library";
 import { MinePanel, type OwnFilter } from "./mine";
 import { type ListProps, ResultsSkeleton } from "./parts";
-import { libraryQuery, ownVoicesQuery } from "./queries";
+import { ownVoicesQuery } from "./queries";
 import { DEFAULT_SEARCH_LANGUAGE, openingSource, type VoiceSource } from "./voices";
 
 export interface VoicePickerProps {
@@ -48,8 +48,6 @@ export function VoicePicker({
     ...ownVoicesQuery(account ?? "", "", ""),
     enabled: account !== null,
   });
-  // So the library is ready if it turns out to be where the picker opens.
-  usePrefetchInfiniteQuery(libraryQuery("", DEFAULT_SEARCH_LANGUAGE));
 
   // One sample at a time: starting another pauses the one playing.
   function onPlay(event: SyntheticEvent<HTMLAudioElement>) {

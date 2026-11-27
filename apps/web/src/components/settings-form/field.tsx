@@ -23,7 +23,14 @@ import type { SettingRow } from "@/lib/api";
 import { desktop } from "@/lib/desktop";
 import { toastError } from "@/lib/feedback";
 import { ROLE_LABELS } from "@/lib/labels";
-import { defaultVoice, providerById, providerName, providerOfAccount } from "@/lib/providers";
+import {
+  defaultVoice,
+  OFF_PROVIDER,
+  providerById,
+  providerName,
+  providerOfAccount,
+  providersFor,
+} from "@/lib/providers";
 import { cn } from "@/lib/utils";
 import {
   appendPath,
@@ -376,10 +383,26 @@ function ControlInput({
           : followed !== null && role.follows !== undefined
             ? t`Same as ${ph({ role: followedRole })} (${ph({ value: name(followed) })})`
             : t`Default (${ph({ value: name(fallback) })})`;
-      // The accounts Settings has, of the providers that can fill the role.
-      const options = (accounts ?? [])
-        .filter((account) => providerById(account.provider)?.offers[role.category] !== undefined)
-        .map((account) => ({ value: account.id, label: account.name }));
+      // The accounts Settings has, of the providers that can fill the role, plus key-optional
+      // local defaults so Ollama and self-hosted Fish Speech are selectable right away.
+      const listed = (accounts ?? []).filter(
+        (account) => providerById(account.provider)?.offers[role.category] !== undefined,
+      );
+      const localDefaults = providersFor(role.category)
+        .filter(
+          (entry) =>
+            entry.baseUrl !== null &&
+            (entry.credential === null || entry.keyOptional) &&
+            !listed.some((account) => account.id === entry.id),
+        )
+        .map((entry) => ({ value: entry.id, label: entry.name }));
+      const options = [
+        ...(role.optional && fallback !== null
+          ? [{ value: OFF_PROVIDER, label: off === undefined ? t`Off` : t(off) }]
+          : []),
+        ...listed.map((account) => ({ value: account.id, label: account.name })),
+        ...localDefaults,
+      ];
       return (
         <ChoiceSelect
           id={id}

@@ -46,9 +46,9 @@ it offers, beside that kind's others, and a line in each kind's table; chat need
 
 | Role | Settings | Variables | Default | Spends |
 | --- | --- | --- | --- | --- |
-| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v6` | in a call, a chat's voice message |
+| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v6` (`none` for off) | in a call, a chat's voice message |
 | mind | `mind.provider`, `mind.model` | `LLM_PROVIDER`, `LLM_MODEL` | OpenRouter `~google/gemini-flash-latest` | in a call |
-| voice | `voice.provider`, `voice.model`, `voice.voiceId` | `TTS_PROVIDER`, `TTS_MODEL`, `TTS_VOICE_ID` | Fish Audio `drama-3` | in a call, a chat's voice reply |
+| voice | `voice.provider`, `voice.model`, `voice.voiceId` | `TTS_PROVIDER`, `TTS_MODEL`, `TTS_VOICE_ID` | Fish Audio `drama-3` (`none` for off) | in a call, a chat's voice reply |
 | realtime | `realtime.provider`, `realtime.model`, `realtime.voice` | `REALTIME_PROVIDER`, `REALTIME_MODEL`, `REALTIME_VOICE` | off | in a call |
 | gate | `knowledge.gate.provider`, `.model` | `RETRIEVAL_GATE_PROVIDER`, `RETRIEVAL_GATE_MODEL` | OpenRouter `~typesafe/jev-latest` | in a call, a chat's director |
 | rerank | `knowledge.rerank.provider`, `.model` | `RERANK_PROVIDER`, `RERANK_MODEL` | OpenRouter `cohere/rerank-4-fast` | in a call, MCP |
@@ -150,8 +150,12 @@ can't outlive picking one. Removing an account a settings file names is refused 
 until no role names it.
 
 Ollama takes no key and costs nothing; `openai-compatible` is any other server that speaks
-OpenAI's chat or embeddings API, which needs an API base and has no default model, so naming it
-means naming one.
+OpenAI's chat, embeddings, transcription (`/audio/transcriptions` or realtime `/realtime` when
+`OPENAI_COMPATIBLE_STT_PROTOCOL=realtime`), or speech (`/audio/speech`) API, which needs an API
+base (`OPENAI_COMPATIBLE_BASE_URL`) and has no default chat/embedding model. `fish-speech` talks to
+a self-hosted open-source Fish Speech server (`FISH_SPEECH_BASE_URL`, default
+`http://127.0.0.1:8080`), checks `GET /v1/health`, synthesizes via `POST /v1/tts` with an optional
+`reference_id`, and sends `FISH_SPEECH_API_KEY` as Bearer auth only when set.
 
 ## Model lists
 
@@ -235,7 +239,8 @@ JSON caller's body becomes there. The minds and the JSON posters read it and nam
 ## Speech without a WebSocket
 
 Fish Audio, ElevenLabs, Cartesia and Soniox stream speech over a WebSocket that stays open for the
-call; MiniMax and OpenAI answer one HTTP request per sentence (`transport` in the catalog). Both
+call; Fish Speech (self-hosted), MiniMax, OpenAI and `openai-compatible` answer one HTTP request
+per sentence (`transport` in the catalog). Both
 kinds are supported, and both are interruptible: when the viewer talks over her, the call
 cancels the reply, which aborts a request in flight and drops the audio queued behind it, whatever
 the transport. What an HTTP voice costs instead:
@@ -269,7 +274,9 @@ switched it for that reply.
 | Provider | Request | Voice | Notes |
 | --- | --- | --- | --- |
 | Fish Audio | `POST {base}/v1/tts`, the model in the `model` header | `reference_id` | 128 kbps, `latency: "normal"` and no `normalize`, as a call asks; `drama-3` gets her cues as written |
+| Fish Speech (self-hosted) | `POST {root}/v1/tts` | `reference_id` when set | `format: "mp3"`, 128 kbps, no `normalize` or `model` header; optional bearer key |
 | OpenAI | `POST {base}/audio/speech` | `voice`, else `marin` | `response_format: "mp3"` |
+| OpenAI-compatible endpoint | `POST {base}/audio/speech` | `voice` when set | `response_format: "mp3"`, optional bearer key |
 | ElevenLabs | `POST {base}/v1/text-to-speech/{voice}?output_format=mp3_44100_128` | in the path | `model_id` |
 | Cartesia | `POST {base}/tts/bytes` | `{ mode: "id", id }` | `Cartesia-Version: 2026-03-01`, as pipedog's service spoke; the spoken language |
 | MiniMax | `POST {base}/t2a_v2?GroupId=…` with `stream: false` | `voice_setting.voice_id`, else `Calm_Woman` | The account needs a group id. The audio comes back as hex, its length in `extra_info`; a `200` whose `base_resp.status_code` isn't 0 is a refusal |
@@ -290,6 +297,7 @@ Its length is the provider's figure (MiniMax's) or counted from the MP3's frame 
 | Provider | Request | Model | Notes |
 | --- | --- | --- | --- |
 | OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
+| OpenAI-compatible endpoint | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | as set | Optional bearer key; live calls also use HTTP `/audio/transcriptions` segmented by local VAD (500 ms pre-roll) unless `sttProtocol` is `realtime` |
 | Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
 | ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
 | Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It shares only the endpoints with `laplace-transcribe`'s client, whose retries, uploads streamed from disk, reference ids and error texts a voice message doesn't want |

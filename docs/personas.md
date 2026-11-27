@@ -151,7 +151,7 @@ variable names:
 
 A provider's variable still keys its default account, below that account's entry; the local app
 moves it into the entry when it saves a new one. The names it accepts: each provider's key (`SONIOX_API_KEY`, `OPENROUTER_API_KEY`, `FISH_API_KEY`,
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`,
+`FISH_SPEECH_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`,
 `DASHSCOPE_API_KEY`, `MOONSHOT_API_KEY`, `ZHIPU_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`,
 `ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, `MINIMAX_API_KEY`, `COHERE_API_KEY`),
 a role's own (`RERANK_API_KEY`, `EMBED_API_KEY`, `REFINE_API_KEY`), and production's
@@ -211,7 +211,9 @@ alone). The studio's Voice tab edits them, and drops them when it saves her voic
 provider, whose voice ids they aren't. Paths resolve in the persona's folder, the user's copy first.
 
 Each role's `provider` picks one from [the catalog](providers.md#roles) and its `model` is that
-provider's id for it, the provider's default when unset; `realtime.provider` is off until set.
+provider's id for it, the provider's default when unset; `hearing.provider` and `voice.provider`
+also accept `none` to turn speech recognition or speech off (`voice.voiceId` may be omitted while
+only chatting in text), and `realtime.provider` is off until set.
 Memory is the exception: unset, it takes her chat model while both use one provider, so changing
 `mind.model` changes what extracting memories does and costs too.
 `hearing.language` is the language viewers speak, as a two-letter code: Soniox detects it when it

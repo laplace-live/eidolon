@@ -1,9 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
+import { FishSpeechSelfHosted } from "../../src/speech/stream/fish-speech.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
 import { OpenAISpeech } from "../../src/speech/stream/openai.ts";
+import { encodeWav } from "../../src/speech/wav.ts";
 import { useFakeClock } from "../clock.ts";
 import {
   bytesOf,
@@ -349,4 +351,67 @@ test("openSpeech speaks for the voice role in scope, and refuses before connecti
   expect(() => openSpeech()).toThrow("MiniMax needs a group id: set MINIMAX_GROUP_ID");
   setEnv({ TTS_PROVIDER: undefined });
   expect(() => openSpeech()).toThrow("Fish Audio needs an API key: set FISH_API_KEY");
+});
+
+test("FishSpeechSelfHosted strips /v1, omits unset auth/reference_id, and strips WAV headers", async () => {
+  fake = await fakeServer({
+    http: () => new Response(encodeWav(new Int16Array([11, -22, 33]), 44100)),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "fish-speech",
+    FISH_SPEECH_BASE_URL: `${fake.base}/v1/`,
+  });
+  const stream = keep(openSpeech());
+  expect(stream).toBeInstanceOf(FishSpeechSelfHosted);
+  expect(stream.sampleRate).toBe(44100);
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "你好。" });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [11, -22, 33] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+  const [req] = fake.requests as [HttpRequest];
+  expect(req.path).toBe("/v1/tts");
+  expect(req.headers.get("authorization")).toBeNull();
+  expect(req.headers.get("model")).toBeNull();
+  expect(JSON.parse(req.body)).toEqual({
+    text: "你好。",
+    format: "pcm",
+    streaming: true,
+    normalize: false,
+  });
+});
+
+test("openai-compatible TTS allows omitted voice and optional API key", async () => {
+  fake = await fakeServer({
+    http: () => new Response(encodeWav(new Int16Array([7, 8]), 24000)),
+  });
+  restore();
+  restore = setEnv({
+    ...CLEAN_ENV,
+    TTS_PROVIDER: "openai-compatible",
+    OPENAI_COMPATIBLE_BASE_URL: `${fake.base}/v1/`,
+  });
+  const stream = keep(openSpeech());
+  expect(stream).toBeInstanceOf(OpenAISpeech);
+  const utterance = stream.utterance(null);
+  utterance.say({ id: 1, text: "Hi." });
+  utterance.end();
+  expect(plain(await collect(utterance.audio))).toEqual([
+    { kind: "pcm", seg: 1, pcm: [7, 8] },
+    { kind: "seg-end", seg: 1 },
+    { kind: "end" },
+  ]);
+  const [req] = fake.requests as [HttpRequest];
+  expect(req.path).toBe("/v1/audio/speech");
+  expect(req.headers.get("authorization")).toBeNull();
+  expect(JSON.parse(req.body)).toEqual({
+    input: "Hi.",
+    model: "tts-1",
+    response_format: "pcm",
+  });
 });

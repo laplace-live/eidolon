@@ -271,6 +271,11 @@ export function ChatView({ id }: { readonly id: string }) {
   const placeCall = (persona: ParticipantId, group: boolean) =>
     presence.start(chatTarget(id, personaOf(persona), group ? personas : null));
   const missing = listOf(chat.data.missingCallKeys);
+  const callsOffNote = !chat.data.callsOff
+    ? null
+    : solo === null
+      ? t`Voice calls are turned off for everyone in this chat.`
+      : t`Voice calls are turned off in her settings.`;
   const keyless =
     chat.data.missingCallKeys.length === 0
       ? null
@@ -334,7 +339,9 @@ export function ChatView({ id }: { readonly id: string }) {
           personas={personas}
           groupCall={chat.data.groupCall}
           disabled={inCall}
-          unavailable={view.elsewhere ? t`You're already in a call. Hang up first.` : keyless}
+          unavailable={
+            view.elsewhere ? t`You're already in a call. Hang up first.` : (callsOffNote ?? keyless)
+          }
           onCall={placeCall}
         />
         <ChatMenu id={id} name={menuName} onSettings={() => setSettingsOpen(true)} />

@@ -147,7 +147,10 @@ class Ear {
     if (turn.append(pcm, this.#detector.vadSpeaking) === "complete") {
       this.#detector.silenceComplete();
     }
-    if (edge === "started") this.#detector.speechStarted();
+    if (edge === "started") {
+      this.#detector.speechStarted();
+      this.#deps.stt.speechStarted?.();
+    }
     if (vad.speaking && clock.now() - this.#lastActivity >= SPEECH_ACTIVITY_MS) {
       this.#lastActivity = clock.now();
       this.#post({ type: "user-speaking" });

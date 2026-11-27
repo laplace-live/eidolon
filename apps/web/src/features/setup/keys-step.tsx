@@ -13,6 +13,7 @@ import {
   effectiveProviderType,
   REINDEX_PATHS,
 } from "@/components/settings-form/controls";
+import { PROVIDER_OFF_LABELS } from "@/components/settings-form/labels";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { ReindexDialog } from "@/components/settings-form/reindex-dialog";
 import { useAccountKeys } from "@/components/settings-form/use-account-keys";
@@ -32,7 +33,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { accountsQuery } from "@/lib/accounts";
 import { type AccountView, type ApiError, asApiError, call, type SettingRow } from "@/lib/api";
 import { listOf, ROLE_LABELS } from "@/lib/labels";
-import { providerName, providerOfAccount, roleById, SETUP_ROLES } from "@/lib/providers";
+import {
+  OFF_PROVIDER,
+  providerById,
+  providerName,
+  providerOfAccount,
+  roleById,
+  SETUP_ROLES,
+} from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
 import {
   activeRiders,
@@ -85,6 +93,7 @@ function RolePicker({
   const locked = envLock(entry, rows);
   const current = effectiveProvider(entry, rows, drafts);
   const model = modelAfter(entry, rows, drafts, accounts);
+  const offLabel = PROVIDER_OFF_LABELS[role];
   return (
     <Field>
       <FieldLabel htmlFor={id}>{t(ROLE_LABELS[role])}</FieldLabel>
@@ -99,7 +108,7 @@ function RolePicker({
         <SelectContent>
           {choicesFor(entry, accounts, current).map((choice) => (
             <SelectItem key={choice.account} value={choice.account}>
-              {choice.name}
+              {choice.account === OFF_PROVIDER ? (offLabel ? t(offLabel) : t`Off`) : choice.name}
               {choice.recommended && <Badge variant="secondary">{t`Recommended`}</Badge>}
             </SelectItem>
           ))}
@@ -110,7 +119,7 @@ function RolePicker({
         <FieldDescription>
           {t`Set by ${ph({ env: locked.env })} in the environment, which wins over the value saved here. Change it there.`}
         </FieldDescription>
-      ) : model !== null && drafts[modelPath] === undefined ? (
+      ) : current === OFF_PROVIDER ? null : model !== null && drafts[modelPath] === undefined ? (
         <FieldDescription>
           <Trans>
             Model: <code className="font-mono text-foreground/80">{model}</code>
@@ -192,10 +201,15 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   ];
   const needs = keyNeeds(picked, listed);
   const modelless = picks.filter(
-    (role) => modelAfter(roleById(role), rows, drafts, listed) === null,
+    (role) =>
+      effectiveProvider(roleById(role), rows, drafts) !== OFF_PROVIDER &&
+      modelAfter(roleById(role), rows, drafts, listed) === null,
   );
   const lacking = new Map(
-    needs.map((need) => [need.account, missingFields(need, listed, keys.options[need.account])]),
+    needs.map((need) => [
+      need.account,
+      missingFields(need, listed, keys.options[need.account], keys.baseUrls[need.account]),
+    ]),
   );
   const incomplete = [...lacking.values()].some((fields) => fields.length > 0);
   const loading = settings.isPending || accounts.isPending || status.isPending;
@@ -255,7 +269,14 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
         return;
       }
       const keyed = await queryClient.query(accountsQuery);
-      const checked = keyNeeds(picked, keyed.accounts).filter((need) => need.set);
+      const checked = keyNeeds(picked, keyed.accounts).filter((need) => {
+        if (need.set) return true;
+        if (need.key !== "optional") return false;
+        const listedAccount = keyed.accounts.find((entry) => entry.id === need.account);
+        const effectiveBase =
+          listedAccount?.baseUrl.value ?? providerById(need.provider)?.baseUrl ?? null;
+        return effectiveBase !== null;
+      });
       const outcomes = await Promise.all(checked.map((need) => keys.check(need.account)));
       if (outcomes.every((outcome) => outcome.result?.ok)) onDone();
       else setChecksFailed(true);

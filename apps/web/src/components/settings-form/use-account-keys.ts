@@ -21,6 +21,7 @@ export function withoutAccounts<T>(
 export function useAccountKeys() {
   const queryClient = useQueryClient();
   const [typed, setTypedState] = useState<Readonly<Record<string, string>>>({});
+  const [baseUrls, setBaseUrlsState] = useState<Readonly<Record<string, string>>>({});
   const [options, setOptionsState] = useState<Readonly<Record<string, Options>>>({});
   const [outcomes, setOutcomes] = useState<Readonly<Record<string, CheckOutcome>>>({});
   const [checking, setChecking] = useState<ReadonlySet<string>>(new Set());
@@ -28,6 +29,11 @@ export function useAccountKeys() {
 
   function setTyped(account: string, value: string) {
     setTypedState((current) => ({ ...current, [account]: value }));
+    setOutcomes(({ [account]: _, ...rest }) => rest);
+  }
+
+  function setBaseUrl(account: string, value: string) {
+    setBaseUrlsState((current) => ({ ...current, [account]: value }));
     setOutcomes(({ [account]: _, ...rest }) => rest);
   }
 
@@ -41,11 +47,14 @@ export function useAccountKeys() {
   /** Checks a key typed but not saved, or without one the key the account has. */
   async function check(account: string, value?: string): Promise<CheckOutcome> {
     const apiKey = value?.trim() || undefined;
+    const baseUrl = baseUrls[account]?.trim() || undefined;
     setChecking((current) => new Set(current).add(account));
     let outcome: CheckOutcome;
     try {
       outcome = {
-        result: await call("POST /api/local/accounts/check", { body: { account, apiKey } }),
+        result: await call("POST /api/local/accounts/check", {
+          body: { account, apiKey, ...(baseUrl ? { baseUrl } : {}) },
+        }),
       };
     } catch (error) {
       outcome = { error: asApiError(error) };
@@ -64,14 +73,16 @@ export function useAccountKeys() {
     const updates: [string, AccountUpdate][] = [];
     for (const account of accounts) {
       const apiKey = typed[account]?.trim() ?? "";
+      const baseUrl = baseUrls[account]?.trim() ?? "";
       const filled = Object.entries(options[account] ?? {})
         .map(([key, value]) => [key, value.trim()] as const)
         .filter(([, value]) => value !== "");
-      if (apiKey === "" && filled.length === 0) continue;
+      if (apiKey === "" && baseUrl === "" && filled.length === 0) continue;
       updates.push([
         account,
         {
           ...(apiKey === "" ? {} : { apiKey }),
+          ...(baseUrl === "" ? {} : { baseUrl }),
           ...(filled.length === 0 ? {} : { options: Object.fromEntries(filled) }),
         },
       ]);
@@ -84,6 +95,7 @@ export function useAccountKeys() {
       }
       const saved = updates.map(([account]) => account);
       setTypedState((current) => withoutAccounts(current, saved));
+      setBaseUrlsState((current) => withoutAccounts(current, saved));
       setOptionsState((current) => withoutAccounts(current, saved));
       await refreshAccounts(queryClient);
     } finally {
@@ -91,7 +103,19 @@ export function useAccountKeys() {
     }
   }
 
-  return { typed, options, outcomes, checking, saving, setTyped, setOption, check, save };
+  return {
+    typed,
+    baseUrls,
+    options,
+    outcomes,
+    checking,
+    saving,
+    setTyped,
+    setBaseUrl,
+    setOption,
+    check,
+    save,
+  };
 }
 
 export type AccountKeys = ReturnType<typeof useAccountKeys>;

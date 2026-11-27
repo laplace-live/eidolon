@@ -18,7 +18,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
-import { trySelect } from "@eidolon/providers";
+import { type Markup, modelInfo, trySelect } from "@eidolon/providers";
 import { parse as parseToml, TomlError } from "smol-toml";
 import { readBytes } from "../../responses.ts";
 import {
@@ -353,14 +353,26 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         if (fields instanceof Response) return fields;
         if (fields.name === "") return localError(400, "bad-request", "A new persona needs a name");
         // She starts on the active persona's providers, so she speaks through the same one.
-        const fish = (trySelect("voice")?.provider.id ?? "fish") === "fish";
-        const voice = fish ? fishVoiceId(voiceId) : line(voiceId, MAX_VOICE_ID_CHARS);
-        if (!voice) {
-          const message = fish ? "Pick a Fish voice for her" : "Pick a voice for her";
-          return localError(400, "bad-request", message);
+        const voiceSelection = trySelect("voice");
+        const fish = voiceSelection?.provider.id === "fish";
+        const hasVoice =
+          voiceId !== undefined &&
+          voiceId !== null &&
+          !(typeof voiceId === "string" && voiceId.trim() === "");
+        let voice: string | null = null;
+        if (hasVoice) {
+          voice = fish ? fishVoiceId(voiceId) : line(voiceId, MAX_VOICE_ID_CHARS);
+          if (!voice) {
+            const message = fish ? "Pick a Fish voice for her" : "Pick a voice for her";
+            return localError(400, "bad-request", message);
+          }
         }
+        const markup: Markup | null =
+          trySelect("realtime") !== null || voiceSelection === null
+            ? null
+            : (modelInfo(voiceSelection.provider.id, "tts", voiceSelection.model)?.markup ?? null);
         try {
-          writeNewPersona(id, fields, voice, starterSettings(activePersona().id));
+          writeNewPersona(id, fields, voice, starterSettings(activePersona().id), markup);
         } catch (error) {
           return writeFailure(error);
         }

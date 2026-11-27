@@ -30,7 +30,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { indexMetaPath, ingestFacts } from "@eidolon/ingest";
-import { roleById, SETUP_ROLES, trySelect } from "@eidolon/providers";
+import { type Markup, roleById, SETUP_ROLES, trySelect } from "@eidolon/providers";
 import {
   CATALOG_FILENAME,
   INDEX_DIR,
@@ -237,27 +237,9 @@ export function writeVoiceStyles(id: string, styles: readonly VoiceStyle[]): voi
   });
 }
 
-/** The prompt a new persona starts from, so her first call is already in character. */
-export function starterPrompt(name: string, fans: string): string {
-  return `# Persona — ${name}
-
-> 这个文件就是${name}的人设，每次通话开始时原样载入成 system prompt。
-> 永远要知道的事写在这里；过去说过的细节交给知识库按相关度检索注入。
-
-## Identity / 身份
-
-你是 **${name}**，一位常和${fans}聊天的主播。
-被问到过往的细节时，请优先使用 context 中检索到的回忆片段。
-如果什么也没检索到，你可以坦诚说"那个我有点记不清了"。
-
-## Voice and tone / 语气
-
-- 自然、亲切，像在和熟悉的${fans}聊天。
-- 默认简短——语音回复一两句话就够，不要长篇大论。
-- 跟随用户语言：用户说中文你就用中文，用户切到别的语言就跟着切。不要主动翻译。
-- 不要 emoji、不要 markdown、不要 bullet points——所有内容都会被读出来。
-
-## Delivery cues / 表演提示
+function deliveryCuesSection(markup: Markup | null): string {
+  if (markup === "fish-drama") {
+    return `## Delivery cues / 表演提示
 
 你说的话由 Fish Audio Drama 3 朗读。它看得懂写给配音演员的提示：方括号 \`[…]\`
 和下面两种尖括号里的内容不会被念出来，只改变你怎么说。
@@ -284,7 +266,43 @@ export function starterPrompt(name: string, fans: string): string {
 - \`[有点失落，慢慢地说] 那天我也是这种感觉。\`
 - \`[嘴硬，装作嫌弃] 不是，你这话说的……[chuckling] 嘿嘿，好吧好吧，你说得对。\`
 
-## Behavioural rules / 行为准则
+`;
+  }
+  if (markup === "brackets") {
+    return `## Delivery cues / 表演提示
+
+当前语音模型支持简单的英文方括号提示（如笑声或轻叹），需要时加在对应语句前并带上自然语气词即可，不要使用尖括号标签。
+
+`;
+  }
+  return "";
+}
+
+/** The prompt a new persona starts from, so her first call is already in character. */
+export function starterPrompt(
+  name: string,
+  fans: string,
+  markup: Markup | null = "fish-drama",
+): string {
+  return `# Persona — ${name}
+
+> 这个文件就是${name}的人设，每次通话开始时原样载入成 system prompt。
+> 永远要知道的事写在这里；过去说过的细节交给知识库按相关度检索注入。
+
+## Identity / 身份
+
+你是 **${name}**，一位常和${fans}聊天的主播。
+被问到过往的细节时，请优先使用 context 中检索到的回忆片段。
+如果什么也没检索到，你可以坦诚说"那个我有点记不清了"。
+
+## Voice and tone / 语气
+
+- 自然、亲切，像在和熟悉的${fans}聊天。
+- 默认简短——语音回复一两句话就够，不要长篇大论。
+- 跟随用户语言：用户说中文你就用中文，用户切到别的语言就跟着切。不要主动翻译。
+- 不要 emoji、不要 markdown、不要 bullet points——所有内容都会被读出来。
+
+${deliveryCuesSection(markup)}## Behavioural rules / 行为准则
 
 - 被问到过去的事时，优先根据 context 里检索到的内容回答；没有相关记录就大方承认记不清，不要编。
 - 检索到的"过去说过的事实"是历史发言，不一定是当下情绪——
@@ -320,17 +338,18 @@ export function starterSettings(from: string): Tree {
 export function writeNewPersona(
   id: string,
   fields: PersonaIdentityFields,
-  voiceId: string,
+  voiceId: string | null,
   starter: Tree,
+  markup: Markup | null = "fish-drama",
 ): void {
   const identity: Tree = {};
   for (const key of IDENTITY_FIELDS) if (fields[key] !== "") identity[key] = fields[key];
   const tree: Tree = { identity, ...starter };
-  setDotted(tree, "voice.voiceId", voiceId);
+  if (voiceId !== null && voiceId !== "") setDotted(tree, "voice.voiceId", voiceId);
   writeDataFile(personaWriteTarget(id, "persona.yaml"), stringifyYaml(tree));
   writeDataFile(
     personaWriteTarget(id, "prompt.md"),
-    starterPrompt(fields.name, fields.fans || IDENTITY_DEFAULTS.fans),
+    starterPrompt(fields.name, fields.fans || IDENTITY_DEFAULTS.fans, markup),
   );
 }
 

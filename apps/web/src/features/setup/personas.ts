@@ -32,7 +32,10 @@ export async function refreshPersonas(
   ]);
 }
 
-export function createPersona(draft: PersonaDraft, voiceId: string): Promise<PersonaSummary> {
+export function createPersona(
+  draft: PersonaDraft,
+  voiceId?: string | null,
+): Promise<PersonaSummary> {
   return call("POST /api/local/personas", { body: createRequest(draft, voiceId) });
 }
 

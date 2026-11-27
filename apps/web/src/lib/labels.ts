@@ -41,6 +41,17 @@ export const CATEGORY_LABELS: Readonly<Record<Category, MessageDescriptor>> = {
 /** A provider's own account settings, by field key. */
 export const ACCOUNT_FIELD_LABELS: Readonly<Record<string, MessageDescriptor>> = {
   groupId: msg`Group ID`,
+  sttProtocol: msg`Speech Recognition Transport`,
+};
+
+/** Fixed choices for account fields that offer an option list. */
+export const ACCOUNT_FIELD_OPTION_LABELS: Readonly<
+  Record<string, Readonly<Record<string, MessageDescriptor>>>
+> = {
+  sttProtocol: {
+    http: msg`HTTP (/audio/transcriptions)`,
+    realtime: msg`Realtime WebSocket (/realtime)`,
+  },
 };
 
 /** What a provider's key needs besides itself, for the providers a call needs by default. */

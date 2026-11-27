@@ -2,7 +2,7 @@
 // without one fails only once it has started.
 import type { ParticipantId } from "@eidolon/chat";
 import { withPersona } from "@eidolon/config";
-import { accountsFor } from "@eidolon/providers";
+import { accountsFor, roleById, selectedAccount } from "@eidolon/providers";
 import { statusRoles } from "../status.ts";
 
 /** ChatContents' `missingCallKeys` for a chat of `participants`. */
@@ -15,4 +15,17 @@ export function missingCallKeys(participants: readonly ParticipantId[]): string[
     ),
   );
   return lists.some((names) => names.length === 0) ? [] : [...new Set(lists.flat())];
+}
+
+/** True when no participant can take a call because hearing or speech is turned off without realtime. */
+export function callsDisabled(participants: readonly ParticipantId[]): boolean {
+  if (participants.length === 0) return false;
+  return participants.every((persona) =>
+    withPersona(persona, () => {
+      if (selectedAccount(roleById("realtime")) !== null) return false;
+      return (
+        selectedAccount(roleById("hearing")) === null || selectedAccount(roleById("voice")) === null
+      );
+    }),
+  );
 }

@@ -246,7 +246,7 @@ describe("listing and creating", () => {
       },
     });
     expect(own.status).toBe(200);
-    for (const voiceId of ["", " ", "a\nb", "x".repeat(201), 7]) {
+    for (const voiceId of ["a\nb", "x".repeat(201), 7]) {
       const refused = await call("POST", "/personas", { ...NEW_PERSONA, voiceId });
       expect([JSON.stringify(voiceId), refused.status]).toEqual([JSON.stringify(voiceId), 400]);
     }
@@ -266,9 +266,30 @@ describe("listing and creating", () => {
       mind: { provider: "anthropic", model: "claude-sonnet-5-5" },
       knowledge: { gate: { provider: "openrouter", model: "morph/reflex" } },
     });
+    const prompt = readFileSync(join(personaHomeDir("aria"), "prompt.md"), "utf8");
+    expect(prompt).not.toContain("Fish Audio Drama 3");
+    expect(prompt).not.toContain("## Delivery cues / 表演提示");
   });
 
-  test("refuses a bad slug, a route word, a taken id, no name, voice or known zone", async () => {
+  test("creates a persona without a voiceId when omitted or blank", async () => {
+    for (const [index, voiceId] of [undefined, null, "", " "].entries()) {
+      const id = `aria-${index}`;
+      const created = await call("POST", "/personas", { ...NEW_PERSONA, id, voiceId });
+      expect([voiceId, created.status]).toEqual([voiceId, 201]);
+      const yaml = parseYaml(readFileSync(join(personaHomeDir(id), "persona.yaml"), "utf8"));
+      expect(yaml).toEqual({
+        identity: {
+          name: "阿莉亚",
+          shortName: "莉亚",
+          fans: "星星",
+          summary: NEW_PERSONA.summary,
+          timezone: "Asia/Tokyo",
+        },
+      });
+    }
+  });
+
+  test("refuses a bad slug, a route word, a taken id, no name, bad voice or known zone", async () => {
     for (const [change, status, code] of [
       [{ id: "Aria" }, 400, "invalid-persona-id"],
       [{ id: "../x" }, 400, "invalid-persona-id"],
@@ -279,7 +300,6 @@ describe("listing and creating", () => {
       [{ id: MILKY }, 409, "persona-exists"],
       [{ name: "" }, 400, "bad-request"],
       [{ name: "a\nb" }, 400, "bad-request"],
-      [{ voiceId: undefined }, 400, "bad-request"],
       [{ voiceId: "not-a-voice" }, 400, "bad-request"],
       [{ timezone: "Mars/Olympus" }, 400, "bad-request"],
     ] as const) {

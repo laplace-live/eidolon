@@ -7,6 +7,7 @@ import { LargeDialogContent } from "@/components/large-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { VoicePicker } from "@/components/voice-picker";
 import { refreshPersonas, saveVoice } from "@/features/setup/personas";
+import { VoiceById } from "@/features/studio/voice-by-id";
 import type { Voice } from "@/lib/api";
 import { changeVoiceDialog } from "./voice";
 
@@ -34,24 +35,38 @@ export function VoiceDialog({
       onOpenChange(false);
     },
   });
+  const byId = useMutation({
+    mutationFn: (id: string) => saveVoice(persona.id, id),
+    onSuccess: async (_, id) => {
+      await refreshPersonas(queryClient);
+      toast.success(t`Voice set to ${id}.`);
+      onOpenChange(false);
+    },
+  });
+  const busy = save.isPending || byId.isPending;
   return (
     <Dialog
       open={open}
       onOpenChange={(next) =>
-        changeVoiceDialog(next, save.isPending, onOpenChange, () => save.reset())
+        changeVoiceDialog(next, busy, onOpenChange, () => {
+          save.reset();
+          byId.reset();
+        })
       }
     >
       <LargeDialogContent
         title={t`Pick a Voice`}
-        description={t`How ${ph({ name: persona.name })} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one.`}
+        description={t`How ${ph({ name: persona.name })} sounds. Choose from your own Fish Audio voices or the public library, play a sample, or enter a voice ID.`}
       >
         <VoicePicker
-          value={save.variables?.id ?? current}
+          value={save.variables?.id ?? byId.variables ?? current}
           onChange={(voice) => save.mutate(voice)}
           account={account}
-          disabled={save.isPending}
+          disabled={busy}
         />
+        <VoiceById disabled={busy} onUse={(id) => byId.mutate(id)} />
         {save.isError && <ErrorAlert error={save.error} />}
+        {byId.isError && <ErrorAlert error={byId.error} />}
       </LargeDialogContent>
     </Dialog>
   );

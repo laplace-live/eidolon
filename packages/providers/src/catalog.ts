@@ -32,6 +32,7 @@ export const PROVIDER_IDS = [
   "openai-compatible",
   "soniox",
   "fish",
+  "fish-speech",
   "elevenlabs",
   "deepgram",
   "cartesia",
@@ -81,10 +82,13 @@ export interface Model {
   readonly maxDim?: number;
 }
 
+/** Sentinel provider value that explicitly disables an optional role. */
+export const OFF_PROVIDER = "none";
+
 /** How a voice is named: Fish's public library, a provider's voice id, or a fixed set. */
 export type VoiceCatalog =
   | { readonly kind: "fish-library" }
-  | { readonly kind: "id"; readonly libraryUrl: string; readonly default?: string }
+  | { readonly kind: "id"; readonly libraryUrl?: string; readonly default?: string }
   | { readonly kind: "preset"; readonly voices: readonly string[]; readonly default: string };
 
 /** How audio moves between the bot and the provider, for STT, TTS and realtime offers. */
@@ -125,6 +129,12 @@ export interface ProviderField {
   readonly env: string;
   /** English, for messages; the local app names it in the viewer's language. */
   readonly label: string;
+  /** When true, the field can be omitted and defaults cleanly. */
+  readonly optional?: boolean;
+  /** Allowed option values when the field is a fixed choice. */
+  readonly options?: readonly string[];
+  /** Default option value when unset. */
+  readonly default?: string;
 }
 
 export interface Provider {
@@ -649,10 +659,36 @@ export const PROVIDERS: readonly Provider[] = [
     keyOptional: true,
     baseUrl: null,
     baseUrlEnv: "OPENAI_COMPATIBLE_BASE_URL",
+    fields: [
+      {
+        key: "sttProtocol",
+        env: "OPENAI_COMPATIBLE_STT_PROTOCOL",
+        label: "Speech recognition transport",
+        optional: true,
+        options: ["http", "realtime"],
+        default: "http",
+      },
+    ],
     check: { path: "/models", auth: "bearer" },
     offers: {
       llm: { defaultModel: null, openModels: true, models: [] },
       embedding: { defaultModel: null, openModels: true, models: [] },
+      stt: {
+        defaultModel: "whisper-1",
+        openModels: true,
+        models: [
+          { id: "whisper-1" },
+          { id: "gpt-4o-transcribe" },
+          { id: "gpt-4o-mini-transcribe" },
+        ],
+      },
+      tts: {
+        defaultModel: "tts-1",
+        openModels: true,
+        transport: "http-stream",
+        voices: { kind: "id" },
+        models: [{ id: "tts-1" }, { id: "tts-1-hd" }, { id: "gpt-4o-mini-tts" }],
+      },
     },
   },
   {
@@ -683,7 +719,11 @@ export const PROVIDERS: readonly Provider[] = [
         defaultModel: "tts-rt-v2",
         openModels: true,
         transport: "websocket",
-        voices: { kind: "id", libraryUrl: "https://soniox.com/docs/tts/voices" },
+        voices: {
+          kind: "id",
+          libraryUrl: "https://soniox.com/docs/tts/voices",
+          default: "Bryce",
+        },
         models: [{ id: "tts-rt-v2" }],
       },
       transcription: {
@@ -742,6 +782,27 @@ export const PROVIDERS: readonly Provider[] = [
             price: { unit: "bytes", usd: 15 },
           },
         ],
+      },
+    },
+  },
+  {
+    id: "fish-speech",
+    name: "Fish Speech (self-hosted)",
+    url: "https://speech.fish.audio/",
+    keyUrl: null,
+    billingUrl: null,
+    credential: "FISH_SPEECH_API_KEY",
+    keyOptional: true,
+    baseUrl: "http://127.0.0.1:8080",
+    baseUrlEnv: "FISH_SPEECH_BASE_URL",
+    check: { path: "/v1/health", auth: "bearer" },
+    offers: {
+      tts: {
+        defaultModel: "default",
+        openModels: true,
+        transport: "http-stream",
+        voices: { kind: "id" },
+        models: [{ id: "default" }],
       },
     },
   },
@@ -848,6 +909,7 @@ export const PROVIDERS: readonly Provider[] = [
         voices: {
           kind: "id",
           libraryUrl: "https://www.minimax.io/platform/document/system_voice_id",
+          default: "Calm_Woman",
         },
         models: [
           { id: "speech-2.8-turbo", price: { unit: "characters", usd: 60 } },
@@ -949,6 +1011,8 @@ export interface Role {
   readonly baseUrlEnv?: string;
   /** When it spends: during a call, building an index, or never during a call. */
   readonly phase: "call" | "index" | "offline";
+  /** True when the role can be explicitly turned off via `OFF_PROVIDER`. */
+  readonly optional?: boolean;
 }
 
 export const ROLES: readonly Role[] = [
@@ -963,6 +1027,7 @@ export const ROLES: readonly Role[] = [
     defaultProvider: "soniox",
     legacyModelEnv: { env: "SONIOX_MODEL", provider: "soniox" },
     phase: "call",
+    optional: true,
   },
   {
     id: "mind",
@@ -987,6 +1052,7 @@ export const ROLES: readonly Role[] = [
     defaultProvider: "fish",
     legacyModelEnv: { env: "FISH_MODEL", provider: "fish" },
     phase: "call",
+    optional: true,
   },
   {
     id: "realtime",

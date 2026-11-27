@@ -30,10 +30,17 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { refreshAccounts } from "@/lib/accounts";
 import { type AccountUpdate, type AccountView, asApiError, call } from "@/lib/api";
-import { ACCOUNT_FIELD_LABELS, CATEGORY_LABELS } from "@/lib/labels";
+import { ACCOUNT_FIELD_LABELS, ACCOUNT_FIELD_OPTION_LABELS, CATEGORY_LABELS } from "@/lib/labels";
 import { type Category, PROVIDERS, type Provider, providerById } from "@/lib/providers";
 
 /** What a provider offers, in the viewer's language: "Chat · Voice". */
@@ -143,6 +150,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
       else if (account?.baseUrl.source === "account") body.baseUrl = null;
       const changed: Record<string, string | null> = {};
       for (const field of provider.fields ?? []) {
+        if (!(field.key in options)) continue;
         const typed = (options[field.key] ?? "").trim();
         if (typed !== "") changed[field.key] = typed;
         else if (account?.options[field.key]?.source === "account") changed[field.key] = null;
@@ -291,37 +299,68 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                   />
                   <FieldDescription>
                     {sourceNote(account?.baseUrl.source ?? null, provider.baseUrlEnv) ??
-                      (needsBase
-                        ? t`Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1.`
-                        : t`Leave it empty for the provider's own API, or point it at a proxy or another region.`)}
+                      (provider.id === "fish-speech"
+                        ? t`Your Fish Speech server's address, such as http://127.0.0.1:8080.`
+                        : needsBase
+                          ? t`Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1.`
+                          : t`Leave it empty for the provider's own API, or point it at a proxy or another region.`)}
                   </FieldDescription>
                 </Field>
               )}
-              {(provider.fields ?? []).map((field) => (
-                <Field key={field.key}>
-                  <FieldLabel htmlFor={`${ids.base}-${field.key}`}>
-                    {ACCOUNT_FIELD_LABELS[field.key]
-                      ? t(ACCOUNT_FIELD_LABELS[field.key])
-                      : field.label}
-                  </FieldLabel>
-                  <Input
-                    id={`${ids.base}-${field.key}`}
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={options[field.key] ?? ""}
-                    placeholder={account?.options[field.key]?.value ?? ""}
-                    onChange={(event) =>
-                      setOptions((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    disabled={busy}
-                  />
-                  {sourceNote(account?.options[field.key]?.source ?? null, field.env) && (
-                    <FieldDescription>
-                      {sourceNote(account?.options[field.key]?.source ?? null, field.env)}
-                    </FieldDescription>
-                  )}
-                </Field>
-              ))}
+              {(provider.fields ?? []).map((field) => {
+                const optionLabels = ACCOUNT_FIELD_OPTION_LABELS[field.key];
+                return (
+                  <Field key={field.key}>
+                    <FieldLabel htmlFor={`${ids.base}-${field.key}`}>
+                      {ACCOUNT_FIELD_LABELS[field.key]
+                        ? t(ACCOUNT_FIELD_LABELS[field.key])
+                        : field.label}
+                    </FieldLabel>
+                    {field.options ? (
+                      <Select
+                        value={
+                          options[field.key] ||
+                          account?.options[field.key]?.value ||
+                          field.default ||
+                          ""
+                        }
+                        onValueChange={(value) =>
+                          setOptions((current) => ({ ...current, [field.key]: value }))
+                        }
+                        disabled={busy}
+                      >
+                        <SelectTrigger id={`${ids.base}-${field.key}`} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {optionLabels?.[option] ? t(optionLabels[option]) : option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`${ids.base}-${field.key}`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={options[field.key] ?? ""}
+                        placeholder={account?.options[field.key]?.value ?? ""}
+                        onChange={(event) =>
+                          setOptions((current) => ({ ...current, [field.key]: event.target.value }))
+                        }
+                        disabled={busy}
+                      />
+                    )}
+                    {sourceNote(account?.options[field.key]?.source ?? null, field.env) && (
+                      <FieldDescription>
+                        {sourceNote(account?.options[field.key]?.source ?? null, field.env)}
+                      </FieldDescription>
+                    )}
+                  </Field>
+                );
+              })}
               {outcome && <CheckResultView provider={provider.id} outcome={outcome} />}
               {save.isError && <ErrorAlert error={save.error} />}
               {removeKey.isError && <ErrorAlert error={removeKey.error} />}

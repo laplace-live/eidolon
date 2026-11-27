@@ -52,33 +52,46 @@ interface Transcriber {
   readonly run: (job: Job) => Promise<Heard>;
 }
 
+async function transcribeOpenAI({
+  selection,
+  audio,
+  model,
+  language,
+  options,
+}: Parameters<Transcriber["run"]>[0]) {
+  const key = selection.apiKey as string | undefined;
+  const response = await send(
+    selection,
+    `${baseOf(selection)}/audio/transcriptions`,
+    {
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
+      body: upload(audio, { model, language, response_format: "json" }),
+    },
+    options,
+  );
+  const body = record(await response.json());
+  const usage = record(body.usage);
+  const seconds = usage.type === "duration" ? count(usage.seconds) : undefined;
+  return {
+    text: typeof body.text === "string" ? body.text : "",
+    durationMs: seconds === undefined ? null : Math.round(seconds * 1000),
+    units:
+      usage.type === "tokens"
+        ? { inputTokens: count(usage.input_tokens), outputTokens: count(usage.output_tokens) }
+        : {},
+  };
+}
+
 /** Each provider's batch speech recognition, by catalog id: one for every provider that hears. */
 export const TRANSCRIBERS: { readonly [P in ProviderId]?: Transcriber } = {
   openai: {
     // gpt-realtime-whisper serves the Realtime API's transcription sessions alone.
     model: (model) => (model === "gpt-realtime-whisper" ? "gpt-4o-transcribe" : model),
-    async run({ selection, audio, model, language, options }) {
-      const response = await send(
-        selection,
-        `${baseOf(selection)}/audio/transcriptions`,
-        {
-          headers: { Authorization: `Bearer ${selection.apiKey}` },
-          body: upload(audio, { model, language, response_format: "json" }),
-        },
-        options,
-      );
-      const body = record(await response.json());
-      const usage = record(body.usage);
-      const seconds = usage.type === "duration" ? count(usage.seconds) : undefined;
-      return {
-        text: typeof body.text === "string" ? body.text : "",
-        durationMs: seconds === undefined ? null : Math.round(seconds * 1000),
-        units:
-          usage.type === "tokens"
-            ? { inputTokens: count(usage.input_tokens), outputTokens: count(usage.output_tokens) }
-            : {},
-      };
-    },
+    run: transcribeOpenAI,
+  },
+
+  "openai-compatible": {
+    run: transcribeOpenAI,
   },
 
   deepgram: {

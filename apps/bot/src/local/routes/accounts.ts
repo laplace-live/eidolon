@@ -21,6 +21,7 @@ import {
   listAccounts,
   listModels,
   type ModelListing,
+  OFF_PROVIDER,
   PROVIDERS,
   type Provider,
   providerById,
@@ -53,7 +54,7 @@ function accountUses(): Map<string, AccountUse[]> {
     for (const role of ROLES) {
       const named = layers.values.get(role.providerEnv);
       const id = named?.value?.trim().toLowerCase();
-      if (!id) continue;
+      if (!id || id === OFF_PROVIDER) continue;
       if (named?.source === "persona") add(id, { persona, role: role.id });
       else if (named?.source === "app" && !appDone) add(id, { persona: null, role: role.id });
     }

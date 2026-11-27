@@ -62,7 +62,7 @@ class OpenAIStt extends WebsocketStt {
   constructor(selection: Selection, language: string | null, signal: AbortSignal) {
     super(selection, signal);
     this.url = openaiSttUrl(selection);
-    this.headers = { Authorization: `Bearer ${selection.apiKey}` };
+    this.headers = selection.apiKey ? { Authorization: `Bearer ${selection.apiKey}` } : {};
     this.#sessionUpdate = openaiSessionUpdate(selection.model, language);
   }
 

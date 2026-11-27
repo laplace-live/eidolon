@@ -25,6 +25,7 @@ import {
 import {
   accountOf,
   LEGACY_VOICE_STYLE_PREFIX,
+  OFF_PROVIDER,
   ROLES,
   roleById,
   VOICE_ENV,
@@ -234,8 +235,12 @@ export function checkValue(field: SettingField, value: unknown, persona: string)
       }
       const role = ROLES.find((entry) => entry.providerEnv === field.env);
       if (role !== undefined) {
+        const normalized = (checked.value as string).trim().toLowerCase();
+        if (normalized === OFF_PROVIDER && (role.optional || role.defaultProvider === null)) {
+          return { ok: true, value: OFF_PROVIDER };
+        }
         // A provider's id names its default account; any other, an account credentials.json holds.
-        const account = accountOf((checked.value as string).toLowerCase());
+        const account = accountOf(normalized);
         if (account?.provider.offers[role.category] === undefined) {
           return invalid(`Not an account Eidolon knows for ${role.label}`);
         }

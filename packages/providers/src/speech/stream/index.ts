@@ -5,6 +5,7 @@ import { openModel, selectRequired } from "../../resolve.ts";
 import { CartesiaSpeech } from "./cartesia.ts";
 import { ElevenLabsSpeech } from "./elevenlabs.ts";
 import { FishSpeech } from "./fish.ts";
+import { FishSpeechSelfHosted } from "./fish-speech.ts";
 import { MiniMaxSpeech } from "./minimax.ts";
 import { OpenAISpeech } from "./openai.ts";
 import type { KeyedSelection } from "./shared.ts";
@@ -60,11 +61,13 @@ export const SPEECH_STREAMS: {
   readonly [P in ProviderId]?: (selection: KeyedSelection) => SpeechStream;
 } = {
   fish: (selection) => new FishSpeech(selection),
+  "fish-speech": (selection) => new FishSpeechSelfHosted(selection),
   elevenlabs: (selection) => new ElevenLabsSpeech(selection),
   cartesia: (selection) => new CartesiaSpeech(selection),
   soniox: (selection) => new SonioxSpeech(selection),
   minimax: (selection) => new MiniMaxSpeech(selection),
   openai: (selection) => new OpenAISpeech(selection),
+  "openai-compatible": (selection) => new OpenAISpeech(selection),
 };
 
 /** The voice role in the current persona scope; throws before connecting without its key. */
