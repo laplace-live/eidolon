@@ -3,7 +3,7 @@
 
 /** How a stage's idle, breathing, gaze and reactions differ in pace and phase from another's. */
 export interface AvatarStageMotion {
-  /** Speed multiplier for clips, breathing, blinks, gaze and head gestures; 1 unless given. */
+  /** Speed multiplier (0.25..4) for clips, mood fades, breathing, blinks, gaze and head gestures; 1 unless given. */
   readonly pace?: number;
   /** Seconds into her idle clip and breathing cycle she starts at; 0 unless given. */
   readonly offset?: number;
@@ -46,7 +46,6 @@ function spread(
   random: () => number,
   wrap = false,
 ): number[] {
-  if (count === 1 && !wrap) return [lo + (0.2 + 0.6 * random()) * (hi - lo)];
   const base = wrap ? random() : 0;
   const values = Array.from({ length: count }, (_, i) => {
     const slot = (i + 0.15 + 0.7 * random()) / count;
@@ -58,13 +57,14 @@ function spread(
 
 /**
  * Distinct motion settings for `count` stages shown together, stratified and shuffled so no two
- * share the same pace, breathing/idle phase, sway, thinking gaze side, or listener reaction time.
+ * share the same pace, breathing/idle phase, sway, thinking gaze angle (alternating sides), or
+ * listener reaction time.
  */
 export function stageMotions(
   count: number,
   random: () => number = Math.random,
 ): AvatarStageMotion[] {
-  if (!(count > 0)) return [];
+  if (!Number.isFinite(count) || count < 1) return [];
   const n = Math.floor(count);
   const paces = spread(n, PACE_RANGE[0], PACE_RANGE[1], random);
   const offsets = spread(n, 0, OFFSET_SPAN, random, true);
@@ -79,14 +79,7 @@ export function stageMotions(
   const reactions =
     n === 1
       ? [0]
-      : shuffle(
-          Array.from({ length: n }, (_, i) =>
-            i === 0
-              ? 0.04 * random()
-              : 0.06 + ((i - 1 + 0.15 + 0.7 * random()) / (n - 1)) * (REACTION_SPAN - 0.06),
-          ),
-          random,
-        );
+      : shuffle([0.04 * random(), ...spread(n - 1, 0.06, REACTION_SPAN, random)], random);
   return Array.from({ length: n }, (_, i) => ({
     pace: paces[i] ?? 1,
     offset: offsets[i] ?? 0,

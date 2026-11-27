@@ -30,12 +30,16 @@ function nextBlinkSeed(): number {
 export async function loadPsd2liveModel(
   canvas: HTMLCanvasElement,
   bytes: Uint8Array,
-  o: { readonly runtime?: Psd2liveRuntimeSource; readonly seed?: number } = {},
+  o: {
+    readonly runtime?: Psd2liveRuntimeSource;
+    /** Seeds her blink timing; a fresh seed per model unless given. */
+    readonly seed?: number;
+  } = {},
 ): Promise<Psd2liveModel> {
   const rig = Psd2liveRig.load(instantiatePsd2live(await compilePsd2liveRuntime(o.runtime)), bytes);
   let renderer: Psd2liveRenderer | null = null;
   try {
-    rig.behaviorSeed((o.seed ?? nextBlinkSeed()) >>> 0 || 1);
+    rig.behaviorSeed(o.seed === undefined ? nextBlinkSeed() : o.seed >>> 0);
     renderer = new Psd2liveRenderer(rig, canvas);
     await renderer.loadTextures();
     return new Psd2liveModel(rig, renderer);
@@ -117,8 +121,61 @@ export class Psd2liveModel implements AvatarModel {
   }
 
   advance(seconds: number): void {
-    if (this.#disposed) return;
-    this.#run(() => this.rig.advance(seconds));
+    if (this.#disposed || !Number.isFinite(seconds) || !(seconds > 0)) return;
+    this.#run(() => {
+      const events: { at: number; run: () => void }[] = [];
+      for (const [layer, playing] of this.#playing) {
+        const state = this.rig.layerState(layer);
+        if (state === null || state.clip !== playing.clip) {
+          this.#playing.delete(layer);
+          continue;
+        }
+        const authored = this.inventory.clips.find(({ id }) => id === playing.clip);
+        if (playing.loop) {
+          if (authored?.looping !== false || !(authored.duration > 0)) continue;
+          const { duration } = authored;
+          const total = (state.finished ? 0 : state.time) + seconds;
+          if (state.finished || total >= duration) {
+            const rem = total % duration;
+            events.push({
+              at: seconds - rem,
+              run: () => {
+                this.rig.playLayer(playing.clip, layer, playing.priority);
+              },
+            });
+          }
+          continue;
+        }
+        const endIn =
+          playing.left !== null
+            ? Math.max(0, playing.left)
+            : state.finished
+              ? 0
+              : Math.max(0, (authored?.duration ?? 0) - state.time);
+        if (seconds >= endIn) {
+          events.push({
+            at: endIn,
+            run: () => {
+              this.rig.playLayer(null, layer, 0);
+              this.#playing.delete(layer);
+            },
+          });
+        } else if (playing.left !== null) {
+          playing.left -= seconds;
+        }
+      }
+      events.sort((a, b) => a.at - b.at);
+      let cursor = 0;
+      for (const event of events) {
+        if (event.at > cursor) {
+          this.rig.advance(event.at - cursor);
+          cursor = event.at;
+        }
+        event.run();
+      }
+      if (seconds > cursor) this.rig.advance(seconds - cursor);
+      else if (events.length > 0) this.rig.advance(1e-7);
+    });
   }
 
   roleParameters(role: string): readonly string[] {

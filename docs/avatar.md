@@ -179,7 +179,8 @@ each frame the stage applies what it was given to the model, then updates and dr
   and draws the model. A model that fails is disposed and reported once, so the page can show her
   picture instead.
 - **The model adapter**, `AvatarModel`, is what the stage asks of a model: expressions, clips on
-  three layers, the mouth, gaze and how far it turns her, a role's parameters, parameters held over
+  three layers, the mouth, gaze and how far it turns her and how strongly breathing sways her,
+  advancing clips and behaviors to a starting pose, a role's parameters, parameters held over
   the rest, an outfit, bounds, hit tests, an alpha read, and update, draw and dispose.
   `loadPsd2liveModel` gives the PSD2Live one, on a runtime instance of its own, and
   `inspectPsd2liveRig` reads a file's inventory without WebGL.
@@ -421,11 +422,11 @@ call is the app shell's (`features/call/call-provider.tsx`), and so are her stag
   up.
 - **Her stages.** The Call click makes one stage per member with a model (`CallStages`,
   `stages.ts`), each on a canvas of its own, kept for the call's life and disposed when it is over,
-  and drawing at most 60 frames a second, however fast the display. On a group call, `stageMotions`
-  gives each stage its own motion `pace`, starting `offset` into her idle clip and breathing cycle,
-  breathing `sway`, thinking gaze `away` side, and listener `reaction` delay so members don't sway,
-  blink, look away or nod in unison, while lip sync stays on real audio time. The same canvas moves
-  between the screen, a group call's tile and the dock's thumbnail
+  and drawing at most 60 frames a second, however fast the display. On a group call with more than
+  one stage, `stageMotions` gives each stage its own motion `pace`, starting `offset` into her idle
+  clip and breathing cycle, breathing `sway`, thinking gaze `away` angle, and listener `reaction`
+  delay so members don't sway, blink, look away or nod in unison, while lip sync stays on real
+  audio time. The same canvas moves between the screen, a group call's tile and the dock's thumbnail
   (`avatar-view.tsx`). Out of the page it pauses, and its GL context survives the move, so leaving
   the chat costs no drawing and coming back no reload.
 - **Loaded on demand.** The renderer comes in through `import("./avatar-loader")`, so the app's

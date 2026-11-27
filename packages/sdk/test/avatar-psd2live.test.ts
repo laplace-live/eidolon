@@ -515,6 +515,8 @@ describe("the model", () => {
     for (const frame of frames.splice(0)) frame(0);
     expect(first.at("ParamEyeLOpen")).toBeCloseTo(1, 2);
     expect(second.at("ParamEyeLOpen")).toBeCloseTo(1, 2);
+    const settledArm = first.at("ParamArmLSwing");
+    expect(Math.abs(settledArm)).toBeGreaterThan(1e-4);
     expect(
       Math.abs((first.rig.layerState(0)?.time ?? 0) - (second.rig.layerState(0)?.time ?? 0)),
     ).toBeGreaterThan(1);
@@ -529,6 +531,7 @@ describe("the model", () => {
     const blinksB: number[] = [];
     for (let step = 1; step <= 360; step++) {
       for (const frame of frames.splice(0)) frame((step * 1000) / 60);
+      if (step === 1) expect(first.at("ParamArmLSwing")).toBeCloseTo(settledArm, 3);
       if (first.at("ParamEyeLOpen") < 0.5) blinksA.push(step);
       if (second.at("ParamEyeLOpen") < 0.5) blinksB.push(step);
     }
@@ -537,5 +540,27 @@ describe("the model", () => {
     expect(blinksA[0]).not.toBe(blinksB[0]);
     first.stage.dispose();
     second.stage.dispose();
+  });
+
+  test("advance wraps non-looping idle clips and ends one-shots before settling physics", () => {
+    const renderer = { dispose() {}, draw() {} } as unknown as Psd2liveRenderer;
+    const a = new Psd2liveModel(load(), renderer);
+    const b = new Psd2liveModel(load(), renderer);
+    const talk = a.inventory.clips.find((clip) => clip.group === "Talk");
+    const nod = a.inventory.clips.find((clip) => clip.group === "Nod");
+    expect(talk?.looping).toBe(false);
+    a.play(talk?.id ?? null, 0, { loop: true });
+    b.play(talk?.id ?? null, 0, { loop: true });
+    a.play(nod?.id ?? null, 2, { priority: 2 });
+    a.advance(7.5);
+    b.advance(10.2);
+    expect(a.rig.layerState(0)).toMatchObject({ clip: talk?.id, finished: false });
+    expect(b.rig.layerState(0)).toMatchObject({ clip: talk?.id, finished: false });
+    expect(
+      Math.abs((a.rig.layerState(0)?.time ?? 0) - (b.rig.layerState(0)?.time ?? 0)),
+    ).toBeGreaterThan(1);
+    expect(a.rig.layerState(2)).toMatchObject({ clip: null, priority: 0 });
+    a.dispose();
+    b.dispose();
   });
 });

@@ -277,9 +277,13 @@ describe("CallStages", () => {
     expect(stages[0]?.options.offset).toBeUndefined();
     expect(stages[0]?.options.reaction).toBeUndefined();
 
+    cast.load(chatTarget("c1", member("milky-green"), [member("hazel", null)]), loads().how);
+    await settle();
+    expect(stages[1]?.options.pace).toBeUndefined();
+
     cast.load(chatTarget("c1", member("milky-green"), [member("hazel")]), loads().how);
     await settle();
-    const [, first, second] = stages;
+    const [, , first, second] = stages;
     expect(first?.options.pace).not.toBe(second?.options.pace);
     expect(first?.options.offset).not.toBe(second?.options.offset);
     expect(first?.options.sway).not.toBe(second?.options.sway);

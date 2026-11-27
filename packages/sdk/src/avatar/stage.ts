@@ -162,7 +162,10 @@ export class AvatarStage {
     this.#offset =
       o.offset !== undefined && Number.isFinite(o.offset) && o.offset > 0 ? o.offset : 0;
     this.#sway = o.sway !== undefined && Number.isFinite(o.sway) && o.sway >= 0 ? o.sway : 1;
-    this.#away = o.away !== undefined ? [clamp(o.away[0], 1), clamp(o.away[1], 1)] : AWAY;
+    this.#away =
+      o.away !== undefined && Number.isFinite(o.away[0]) && Number.isFinite(o.away[1])
+        ? [clamp(o.away[0], 1), clamp(o.away[1], 1)]
+        : AWAY;
     this.#reaction =
       o.reaction !== undefined && Number.isFinite(o.reaction) && o.reaction > 0 ? o.reaction : 0;
     this.#onError = o.onError;
@@ -337,10 +340,16 @@ export class AvatarStage {
     const step = dt * this.#pace;
     this.#last = now;
     const reads = this.#reads.splice(0);
+    const advancing = this.#fresh && !this.#reducedMotion && this.#offset > 0;
+    this.#fresh = false;
     try {
-      this.#apply(model, now, step);
+      this.#apply(model, now, step, !advancing);
       model.mouth(this.#level(dt));
       model.update(step);
+      if (advancing) {
+        model.advance?.(this.#offset);
+        if (this.#setup !== null) this.#gestures(model, this.#setup);
+      }
       model.draw(this.#pixelRatio(), this.#view(model));
       // The drawing buffer is cleared once the page composites the frame, so it is read now.
       for (const read of reads) read.done(model.alphaAt(read.x, read.y));
@@ -375,7 +384,7 @@ export class AvatarStage {
     );
   }
 
-  #apply(model: AvatarModel, now: number, step: number): void {
+  #apply(model: AvatarModel, now: number, step: number, gestures: boolean): void {
     this.#time += step;
     const setup = this.#setup;
     if (setup === null) return;
@@ -395,10 +404,6 @@ export class AvatarStage {
       model.play(idle, IDLE, { loop: true });
       applied.idle = idle;
     }
-    if (this.#fresh) {
-      this.#fresh = false;
-      if (!this.#reducedMotion && this.#offset > 0) model.advance?.(this.#offset);
-    }
     // A lent mood shows over the reply's when the two can't both.
     const tags = direction.pulse === null ? direction.mood : [direction.pulse, ...direction.mood];
     const expressions = moodExpressions(setup, tags);
@@ -412,6 +417,21 @@ export class AvatarStage {
       model.play(talk, TALK, { loop: true });
       applied.talk = talk;
     }
+    if (gestures) this.#gestures(model, setup);
+    this.#moods.set(moodSettings(setup, tags), this.#settle);
+    this.#settle = false;
+    // The head's turn goes over a mood that holds the same parameter.
+    const holds = [...this.#moods.step(step), ...this.#motionHolds(model)];
+    if (!sameHolds(holds, this.#held)) {
+      model.hold(holds);
+      this.#held = holds;
+    }
+    const [x, y] = this.#lookTarget(direction, now);
+    model.lookAt(x, y);
+  }
+
+  #gestures(model: AvatarModel, setup: ResolvedSetup): void {
+    const direction = this.#direction;
     const gesture = direction.gesture;
     if (gesture !== null && gesture.seq !== this.#gestureSeq) {
       this.#gestureSeq = gesture.seq;
@@ -424,6 +444,7 @@ export class AvatarStage {
         }
       }
     }
+    if (gesture === null || direction.speaking) this.#delayed = null;
     if (this.#delayed !== null && this.#time >= this.#delayed.at) {
       const { name } = this.#delayed;
       this.#delayed = null;
@@ -434,16 +455,6 @@ export class AvatarStage {
       this.#make(model, setup, this.#asked);
       this.#asked = null;
     }
-    this.#moods.set(moodSettings(setup, tags), this.#settle);
-    this.#settle = false;
-    // The head's turn goes over a mood that holds the same parameter.
-    const holds = [...this.#moods.step(step), ...this.#motionHolds(model)];
-    if (!sameHolds(holds, this.#held)) {
-      model.hold(holds);
-      this.#held = holds;
-    }
-    const [x, y] = this.#lookTarget(direction, now);
-    model.lookAt(x, y);
   }
 
   /**

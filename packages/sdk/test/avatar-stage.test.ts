@@ -829,10 +829,43 @@ describe("motion variation across stages", () => {
     clock.frame(360);
     clock.frame(460);
     expect(model.play).not.toHaveBeenCalled();
+
+    // Starting to speak, or a reset clearing gesture to null, drops a pending listener reaction.
+    stage.direct(direction({ speaking: false, gesture: { name: "nod", seq: 4 } }));
+    clock.frame(500);
+    model.play.mockClear();
+    stage.direct(direction({ speaking: true, gesture: { name: "nod", seq: 4 } }));
+    for (const now of [550, 650, 750]) clock.frame(now);
+    expect(model.play).not.toHaveBeenCalledWith("nod-id", 2, { priority: 2 });
+
+    stage.direct(direction({ speaking: false, gesture: { name: "nod", seq: 5 } }));
+    clock.frame(800);
+    model.play.mockClear();
+    stage.direct(direction({ speaking: false, gesture: null }));
+    for (const now of [900, 1000, 1100]) clock.frame(now);
+    expect(model.play).not.toHaveBeenCalledWith("nod-id", 2, { priority: 2 });
+  });
+
+  test("a gesture queued on frame 0 starts after offset advances idle", () => {
+    const stage = stageOf({ offset: 5, away: [Number.NaN, 0.45] });
+    const model = fakeModel();
+    stage.show(model, SETUP);
+    stage.direct(direction({ looking: "away", speaking: true, gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    const nodOrder =
+      model.play.mock.invocationCallOrder[
+        model.play.mock.calls.findIndex(([clip]) => clip === "nod-id")
+      ];
+    const [advanced] = model.advance.mock.invocationCallOrder;
+    expect(nodOrder).toBeGreaterThan(advanced ?? Number.POSITIVE_INFINITY);
+    const [ax = 0, ay = 0] = model.lookAt.mock.lastCall ?? [];
+    expect(Number.isFinite(ax) && Number.isFinite(ay)).toBe(true);
   });
 
   test("stageMotions spreads pace, phase, sway, away side and reaction across a cast", () => {
     expect(stageMotions(0)).toEqual([]);
+    expect(stageMotions(0.5)).toEqual([]);
+    expect(stageMotions(Number.POSITIVE_INFINITY)).toEqual([]);
     let state = 12345;
     const random = () => {
       state = (state * 1664525 + 1013904223) >>> 0;

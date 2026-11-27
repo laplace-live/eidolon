@@ -119,7 +119,7 @@ export class CallStages {
     // Each call's end, and StrictMode's unmount, disposes the stages: the next call routes again.
     this.#unsubscribe ??= this.#signals.subscribe(this.#route);
     const members = target.cast.filter((member) => member.appearance.model !== null);
-    const motions = this.#group ? stageMotions(members.length) : [];
+    const motions = this.#group && members.length > 1 ? stageMotions(members.length) : [];
     for (const [i, member] of members.entries()) {
       const entry: Entry = {
         persona: member.id,

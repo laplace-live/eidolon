@@ -29,6 +29,7 @@ const BREATH = 2;
 const LOOK = 4;
 const LIP_SYNC = 8;
 const STAGE_CLIPS = 1;
+const STAGE_EXPRESSIONS = 2;
 const STAGE_BEHAVIORS = 4;
 /** p2l_rig_load_ex's P2L_LOAD_VERIFY_CRC: every chunk that carries a CRC is checked. */
 const VERIFY_CRC = 1;
@@ -538,9 +539,10 @@ export class Psd2liveRig {
 
   /** Advances clips and behaviors by [dt] seconds and settles pendulums at that pose. */
   advance(dt: number): void {
-    if (!(dt > 0)) return;
+    if (!Number.isFinite(dt) || !(dt > 0)) return;
     this.rt.p2l_update_stages(this.rig, dt, STAGE_CLIPS | STAGE_BEHAVIORS);
     if (this.blinkSeed !== undefined) this.rt.p2l_behavior_seed(this.rig, this.blinkSeed);
+    this.rt.p2l_update_stages(this.rig, 0, STAGE_CLIPS | STAGE_EXPRESSIONS | STAGE_BEHAVIORS);
     this.rt.p2l_physics_stabilize(this.rig);
   }
 
