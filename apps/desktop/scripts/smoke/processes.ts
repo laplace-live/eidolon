@@ -89,15 +89,19 @@ export async function runCommandOutput(
     // A failed start emits "error" with no "exit".
     child.once("error", () => done({ code: null, signal: null }));
   });
-  let exit = await within(exited, timeoutMs);
+  const deadline = Date.now() + timeoutMs;
+  let exit = await within(exited, Math.max(deadline - Date.now(), 1));
   if (exit === null) {
     timedOut = true;
     if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
       killTree(child.pid, { wait: true });
     }
     exit = await within(exited, GRACE_MS);
+    await within(drained, DRAIN_MS);
+  } else {
+    const streamEnded = await within(drained, Math.max(deadline - Date.now(), GRACE_MS));
+    if (streamEnded === null) timedOut = true;
   }
-  await within(drained, DRAIN_MS);
   child.stdout?.destroy();
   child.stderr?.destroy();
   if (spawnError !== null) throw spawnError;

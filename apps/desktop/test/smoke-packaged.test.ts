@@ -400,6 +400,14 @@ describe("PowerShell", () => {
     );
     expect(eof.trim()).toBe("closed");
 
+    // Non-zero exit includes the child's full stderr first line.
+    await expect(
+      runCommandOutput(process.execPath, [
+        "-e",
+        'process.stderr.write("bad flag\\n"); process.exit(2);',
+      ]),
+    ).rejects.toThrow(/exited 2: bad flag$/);
+
     // A missing executable rejects on the next tick instead of waiting out timeoutMs + GRACE_MS.
     const missingAt = Date.now();
     await expect(
