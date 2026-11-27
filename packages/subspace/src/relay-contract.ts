@@ -34,6 +34,7 @@ export const HostHelloSchema = z.object({
     )
     .max(512)
     .optional(),
+  revokedGrantIds: z.array(z.string().min(1).max(64)).max(512).optional(),
 });
 
 export const HostChallengeSchema = z.object({

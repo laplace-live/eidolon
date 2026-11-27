@@ -9,16 +9,20 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { hostTransportNeeds } from "../src/host.ts";
 import {
+  acceptHostHandshake,
   completeDeviceAuthorization,
   computeRelayControlProof,
   deriveRelayDeviceToken,
   deriveRelayInviteToken,
   discoverRelayAuthUrl,
+  encodeMuxFrame,
   encodePairingUrl,
   generateX25519KeyPair,
   importX25519PrivateKey,
   isAllowedAuthUrl,
   isMacLocalNetworkBlocked,
+  MUX_FRAME,
+  MuxEndpoint,
   mintRelayJwt,
   parsePairingInput,
   performPairingHandshake,
@@ -3406,5 +3410,167 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     );
     expect(resAfterHalfClose.status).toBe(200);
     expect(raceClient.activeTransport).toBe("relay");
+  });
+
+  test("MuxEndpoint buffers early RELAY_UPDATE, pairing preserves slow post-ticket auth, and host_hello stays within 64 KiB", async () => {
+    // 1. MuxEndpoint buffers RELAY_UPDATE received before handler attaches and flushes on setOnRelayUpdate.
+    const mux = new MuxEndpoint({ sendFrame: async () => {} });
+    const earlyPayload = { url: "https://relay.example.test", relayHostId: "host_abc123" };
+    await mux.handleFrame(
+      encodeMuxFrame(MUX_FRAME.RELAY_UPDATE, 0, utf8Encode(JSON.stringify(earlyPayload))),
+    );
+    let received: unknown = null;
+    mux.setOnRelayUpdate((payload) => {
+      received = payload;
+    });
+    expect(received).toEqual(earlyPayload);
+    mux.close();
+
+    // 2. Slow Direct pairing server answering e2ee_authenticated after directFallbackTimeoutMs succeeds without burning ticket.
+    const hostKp = await generateX25519KeyPair();
+    const slowDirectServer = createServer();
+    const slowWss = new WebSocketServer({ server: slowDirectServer, path: "/v1/subspace" });
+    slowWss.on("connection", (ws) => {
+      let e2ee: Awaited<ReturnType<typeof acceptHostHandshake>>["session"] | null = null;
+      ws.on("message", async (raw) => {
+        if (e2ee === null) {
+          const accepted = await acceptHostHandshake(
+            {
+              publicKeyB64: hostKp.publicKeyB64,
+              privateKey: await importX25519PrivateKey(hostKp.privateKeyPkcs8B64),
+            },
+            raw.toString("utf8"),
+          );
+          e2ee = accepted.session;
+          ws.send(accepted.readyRaw);
+        } else {
+          await new Promise((r) => setTimeout(r, 150));
+          await e2ee.sendJson(
+            {
+              type: "e2ee_authenticated",
+              ok: true,
+              grantId: "g-slow-ok",
+              hostName: "Slow Direct",
+              serverVersion: "0.22.0",
+              deviceToken: "dev-tok-123",
+            },
+            (sealed) => {
+              if (ws.readyState === 1) ws.send(sealed);
+            },
+          );
+        }
+      });
+    });
+    await new Promise<void>((resolve) => slowDirectServer.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of slowWss.clients) ws.terminate();
+          slowWss.close(() => slowDirectServer.close(() => resolve()));
+        }),
+    );
+    const slowPort = (slowDirectServer.address() as { port: number }).port;
+    const paired = await performPairingHandshake(
+      {
+        v: 1,
+        mode: "direct",
+        hostName: "Slow Direct",
+        hostPublicKeyB64: hostKp.publicKeyB64,
+        ticket: "ticket-slow-1234567890",
+        expiresAt: Date.now() + 60_000,
+        endpoint: { host: "127.0.0.1", port: slowPort },
+        relay: { url: "http://127.0.0.1:1", relayHostId: "host_dead1234" },
+      },
+      { directFallbackTimeoutMs: 50 },
+    );
+    expect(paired.transport).toBe("direct");
+    expect(paired.grantId).toBe("g-slow-ok");
+    paired.tunnel.mux.close();
+    paired.tunnel.ws.close();
+
+    // 3. Host with > 48 KiB of grants bounds host_hello frame size and overflows remaining device_install frames to host_hello_ack.
+    const { WebSocketServer: RelayWsServer } = await import("ws");
+    const relayKp = await generateX25519KeyPair();
+    let seenHelloBytes = 0;
+    let helloDeviceCount = 0;
+    const totalInstalled = new Set<string>();
+    const relaySrv = createServer((req, res) => {
+      if (new URL(req.url ?? "/", "http://127.0.0.1").pathname === "/api/auth/token") {
+        res
+          .writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ token: "jwt-cap", expiresAt: Date.now() + 600_000 }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const relayWss = new RelayWsServer({ server: relaySrv, maxPayload: 64 * 1024 });
+    relayWss.on("connection", (ws) => {
+      let relayHostId = "";
+      ws.on("message", (raw) => {
+        const text = raw.toString("utf8");
+        const msg = JSON.parse(text) as Record<string, unknown>;
+        if (msg.type === "host_hello") {
+          seenHelloBytes = Buffer.byteLength(text, "utf8");
+          const devs = (msg.devices as { grantId: string }[] | undefined) ?? [];
+          helloDeviceCount = devs.length;
+          for (const d of devs) totalInstalled.add(d.grantId);
+          relayHostId = String(msg.relayHostId);
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64: Buffer.from("ch-cap-32bytes-0123456789abcdef0").toString("base64"),
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+        } else if (msg.type === "device_install") {
+          totalInstalled.add(String(msg.grantId));
+          ws.send(JSON.stringify({ type: "device_installed", grantId: msg.grantId }));
+        }
+      });
+    });
+    await new Promise<void>((resolve) => relaySrv.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of relayWss.clients) ws.terminate();
+          relayWss.close(() => relaySrv.close(() => resolve()));
+        }),
+    );
+    const capPort = (relaySrv.address() as { port: number }).port;
+    const capDir = tempDir("subspace-hello-cap-");
+    const capStore = new SubspaceStore(capDir);
+    const grants = Array.from({ length: 350 }, (_, i) => ({
+      id: `grant-cap-${String(i).padStart(3, "0")}`,
+      clientName: `Device-${"x".repeat(80)}-${i}`,
+      tokenSha256: "a".repeat(64),
+      relayTokenSha256: "b".repeat(64),
+      mode: "direct" as const,
+      createdAt: 1_760_000_000_000 + i,
+      lastSeenAt: null,
+    }));
+    capStore.saveGrants(grants);
+    capStore.saveRelayAuth({
+      authUrl: `http://127.0.0.1:${capPort}`,
+      relayUrl: `http://127.0.0.1:${capPort}`,
+      token: "sess-cap",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const capHost = new SubspaceHost({
+      store: capStore,
+      serverVersion: () => "0.22.0",
+      dispatch: async () => new Response("ok"),
+      relayUrl: () => `http://127.0.0.1:${capPort}`,
+    });
+    cleanups.push(() => capHost.stop());
+    capHost.startRelay();
+    await vi.waitFor(() => expect(capHost.relayConnected).toBe(true), { timeout: 10_000 });
+    expect(seenHelloBytes).toBeGreaterThan(0);
+    expect(seenHelloBytes).toBeLessThanOrEqual(48 * 1024);
+    expect(helloDeviceCount).toBeLessThan(350);
+    expect(totalInstalled.size).toBe(350);
   });
 });

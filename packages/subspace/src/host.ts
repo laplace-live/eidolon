@@ -682,7 +682,7 @@ export class SubspaceHost {
       };
     } else {
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
-      await this.#ensureRelayConnected();
+      await this.#waitForRelayConnected();
       const currentAuth = this.#requireRelayAuth();
       const relayUrl =
         this.#relayControlUrl ?? withoutTrailingSlashes(this.#resolveRelayUrl(currentAuth));
@@ -820,13 +820,11 @@ export class SubspaceHost {
     return identity;
   }
 
-  async #ensureRelayConnected(timeoutMs = 10_000): Promise<void> {
-    this.startRelay();
-    await this.#waitForRelayConnected(timeoutMs);
-  }
-
   async #waitForRelayConnected(timeoutMs = 10_000): Promise<void> {
     if (this.#relayConnected && this.#relayWs?.readyState === WebSocket.OPEN) return;
+    if (!this.#hasActiveRelayConnection() && !this.#relayTimer && this.#relayError !== null) {
+      throw relayHostError(this.#relayErrorCode ?? "relay-unreachable", this.#relayError);
+    }
     await new Promise<void>((resolve, reject) => {
       const waiter = {
         resolve: () => {
@@ -1013,23 +1011,50 @@ export class SubspaceHost {
 
     ws.on("open", () => {
       if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
-      const initialDevices = this.#deps.store
-        .readGrants()
-        .filter(grantSupportsRelay)
-        .slice(0, 512)
-        .map((grant) => ({
+      // Keep host_hello safely under Relay's 64 KiB handshake frame limit; host_hello_ack handles overflow.
+      const helloBudgetBytes = 48 * 1024;
+      const baseHello = {
+        type: "host_hello" as const,
+        v: 1 as const,
+        relayHostId,
+        hostPublicKeyB64: identity.publicKeyB64,
+        hostName: identity.hostName,
+      };
+      let usedBytes = Buffer.byteLength(
+        JSON.stringify({ ...baseHello, devices: [], revokedGrantIds: [] }),
+        "utf8",
+      );
+      const revokedGrantIds: string[] = [];
+      for (const id of this.#deps.store.readRevokedRelayGrantIds()) {
+        if (revokedGrantIds.length >= 512) break;
+        const itemBytes = Buffer.byteLength(JSON.stringify(id), "utf8") + 1;
+        if (usedBytes + itemBytes > helloBudgetBytes) break;
+        usedBytes += itemBytes;
+        revokedGrantIds.push(id);
+      }
+      const initialDevices: {
+        readonly grantId: string;
+        readonly tokenHash: string;
+        readonly clientName: string;
+      }[] = [];
+      for (const grant of this.#deps.store.readGrants()) {
+        if (initialDevices.length >= 512) break;
+        if (!grantSupportsRelay(grant)) continue;
+        const entry = {
           grantId: grant.id,
           tokenHash: grant.relayTokenSha256 ?? grant.tokenSha256,
           clientName: grant.clientName,
-        }));
+        };
+        const itemBytes = Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
+        if (usedBytes + itemBytes > helloBudgetBytes) break;
+        usedBytes += itemBytes;
+        initialDevices.push(entry);
+      }
       void sendWs(
         ws,
         JSON.stringify({
-          type: "host_hello",
-          v: 1,
-          relayHostId,
-          hostPublicKeyB64: identity.publicKeyB64,
-          hostName: identity.hostName,
+          ...baseHello,
+          ...(revokedGrantIds.length > 0 ? { revokedGrantIds } : {}),
           ...(initialDevices.length > 0 ? { devices: initialDevices } : {}),
         }),
       ).catch(() => {});
@@ -1045,7 +1070,7 @@ export class SubspaceHost {
     });
 
     ws.on("close", (code, reason) => {
-      if (this.#relayWs !== ws) return;
+      if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
       this.#relayWs = null;
       this.#relayControlUrl = null;
       this.#relayControlToken = null;
@@ -1086,7 +1111,7 @@ export class SubspaceHost {
     });
 
     ws.on("error", (err) => {
-      if (this.#relayWs !== ws) return;
+      if (this.#relayWs !== ws || attemptId !== this.#relayAttemptId) return;
       wsFailed = true;
       logger.warning(`[subspace] Relay control connection error: ${errorText(err)}`);
       this.#setRelayState(false, `Relay connection failed (${relayUrl})`, "relay-unreachable");
@@ -1123,6 +1148,7 @@ export class SubspaceHost {
       }
       case "host_hello_ack": {
         const installedGrantIds = new Set<string>();
+        const sentRevokedGrantIds = new Set<string>();
         const restoredInviteIds = new Set<string>();
         const sentRevokeIds = new Set<string>();
         while (
@@ -1133,6 +1159,9 @@ export class SubspaceHost {
         ) {
           const allGrants = this.#deps.store.readGrants().filter(grantSupportsRelay);
           const pendingGrants = allGrants.filter((grant) => !installedGrantIds.has(grant.id));
+          const pendingRevokedGrants = this.#deps.store
+            .readRevokedRelayGrantIds()
+            .filter((id) => !sentRevokedGrantIds.has(id));
           const now = Date.now();
           for (const [id, expiresAt] of this.#pendingRelayInviteRevokes) {
             if (expiresAt <= now || this.#invites.has(id)) {
@@ -1148,12 +1177,17 @@ export class SubspaceHost {
           );
           if (
             pendingGrants.length === 0 &&
+            pendingRevokedGrants.length === 0 &&
             pendingRevokes.length === 0 &&
             pendingInvites.length === 0
           ) {
             break;
           }
           await Promise.all([
+            ...pendingRevokedGrants.map((grantId) => {
+              sentRevokedGrantIds.add(grantId);
+              return sendWs(ws, JSON.stringify({ type: "device_revoke", grantId })).catch(() => {});
+            }),
             ...pendingGrants.map((grant) => {
               installedGrantIds.add(grant.id);
               return sendWs(
@@ -1229,7 +1263,9 @@ export class SubspaceHost {
         this.#pendingRelayInviteRevokes.delete(parsed.inviteId);
         return;
       case "device_installed":
+        return;
       case "device_revoked":
+        this.#deps.store.ackRevokedRelayGrants([parsed.grantId]);
         return;
     }
   }
@@ -1375,6 +1411,7 @@ export class SubspaceHost {
       }
 
       let grantId: string;
+      let relayCapable = auth.kind === "pair";
       const relayInfo = await this.#activeRelayEndpoint(identity.publicKeyB64);
       if (auth.kind === "pair") {
         const currentIdentity = await this.#ensureIdentity();
@@ -1440,7 +1477,9 @@ export class SubspaceHost {
           return;
         }
         let missingRelayHash: string | undefined;
+        relayCapable = grant.relayTokenSha256 !== undefined;
         if (grant.relayTokenSha256 === undefined) {
+          relayCapable = true;
           missingRelayHash = await sha256Hex(
             utf8Encode(await deriveRelayDeviceToken(auth.deviceToken)),
           );
@@ -1573,6 +1612,21 @@ export class SubspaceHost {
         return;
       }
       sessionHandle.mux = mux;
+      // If Relay connected while the handshake was still attaching mux, push the latest Relay endpoint now.
+      if (mode === "direct" && this.#relayConnected && relayCapable) {
+        const latestRelay = await this.#activeRelayEndpoint(identity.publicKeyB64);
+        if (
+          !closed &&
+          !this.#stopped &&
+          !mux.closed &&
+          latestRelay !== undefined &&
+          (relayInfo === undefined ||
+            relayInfo.url !== latestRelay.url ||
+            relayInfo.relayHostId !== latestRelay.relayHostId)
+        ) {
+          void mux.sendRelayUpdate(latestRelay);
+        }
+      }
 
       ws.on("message", (raw) => {
         void (async () => {

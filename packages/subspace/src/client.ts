@@ -292,7 +292,13 @@ async function dialAuthenticatedTunnel(input: {
     );
     const authRes = await session.openJson<E2eeAuthResponse>(
       rawDataToUint8Array(
-        await nextMessage(ws, remainingTimeoutMs(), input.relayCredential.kind, mapConnectError),
+        await nextMessage(
+          ws,
+          // Keep the short fallback timeout before sending a single-use invite; once submitted, wait for the host's response so pairing doesn't burn the ticket.
+          input.relayCredential.kind === "invite" ? CONNECT_TIMEOUT_MS : remainingTimeoutMs(),
+          input.relayCredential.kind,
+          mapConnectError,
+        ),
       ),
     );
     const mux = new MuxEndpoint({

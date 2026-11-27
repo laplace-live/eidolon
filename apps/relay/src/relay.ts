@@ -398,6 +398,9 @@ export class RelayHub {
       }
 
       relayHostId = hello.relayHostId;
+      for (const grantId of hello.revokedGrantIds ?? []) {
+        this.#store.revokeDevice(relayHostId, grantId);
+      }
       for (const device of hello.devices ?? []) {
         this.#store.installDevice({
           relayHostId,

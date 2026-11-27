@@ -153,7 +153,17 @@ function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> 
 async function connectRawRelayHost(
   relayUrl: string,
   jwt: string,
-  options: { readonly autoPong?: boolean; readonly hostName?: string } = {},
+  options: {
+    readonly autoPong?: boolean;
+    readonly hostName?: string;
+    readonly keys?: Awaited<ReturnType<typeof generateX25519KeyPair>>;
+    readonly devices?: readonly {
+      readonly grantId: string;
+      readonly tokenHash: string;
+      readonly clientName: string;
+    }[];
+    readonly revokedGrantIds?: readonly string[];
+  } = {},
 ): Promise<{
   readonly ws: WebSocket;
   readonly relayHostId: string;
@@ -162,7 +172,7 @@ async function connectRawRelayHost(
     predicate: (msg: Record<string, unknown>) => boolean,
   ): Promise<Record<string, unknown>>;
 }> {
-  const keys = await generateX25519KeyPair();
+  const keys = options.keys ?? (await generateX25519KeyPair());
   const privateKey = await importX25519PrivateKey(keys.privateKeyPkcs8B64);
   const relayHostId = await deriveRelayHostId(base64ToBytes(keys.publicKeyB64));
   const ws = new WebSocket(`${relayUrl.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`, {
@@ -215,6 +225,8 @@ async function connectRawRelayHost(
       relayHostId,
       hostPublicKeyB64: keys.publicKeyB64,
       hostName: options.hostName ?? "RawTestHost",
+      ...(options.devices ? { devices: options.devices } : {}),
+      ...(options.revokedGrantIds ? { revokedGrantIds: options.revokedGrantIds } : {}),
     }),
   );
 
@@ -931,18 +943,19 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     };
     try {
       process.env.EIDOLON_RELAY_PUBLIC_URL = " https://relay.example.com/ ";
-      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https:/ID.Example.com/ ";
+      process.env.EIDOLON_RELAY_AUTH_ISSUER = " https://ID.Example.com:443/ ";
       process.env.EIDOLON_RELAY_AUTH_AUDIENCE = " eidolon-relay ";
       delete process.env.EIDOLON_RELAY_JWKS_URL;
       expect(loadRelayConfig()).toMatchObject({
         publicUrl: "https://relay.example.com",
-        authIssuer: "https://id.example.com",
+        authIssuer: "https://id.example.com:443",
         authAudience: "eidolon-relay",
-        jwksUrl: "https://id.example.com/.well-known/jwks.json",
+        jwksUrl: "https://id.example.com:443/.well-known/jwks.json",
       });
 
       for (const [key, badValue] of [
         ["EIDOLON_RELAY_AUTH_ISSUER", "https://id.laplace.live \\"],
+        ["EIDOLON_RELAY_AUTH_ISSUER", "https:/id.example.com"],
         ["EIDOLON_RELAY_PUBLIC_URL", "https://eidolon-relay.vrp.moe \\"],
         ["EIDOLON_RELAY_AUTH_AUDIENCE", "eidolon-relay \\"],
         ["EIDOLON_RELAY_JWKS_URL", "https://id.laplace.live/.well-known/jwks.json \\"],
@@ -1022,9 +1035,12 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
 
     // 3. Roaming: stop Direct listener -> Client A reconnects automatically via Relay and proxies requests.
     await hostMgr.host.stopDirect();
-    await vi.waitFor(async () => {
-      expect((await clientAMgr.getState()).servers[0]?.activeTransport).toBe("relay");
-    });
+    await vi.waitFor(
+      async () => {
+        expect((await clientAMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+      },
+      { timeout: 10_000 },
+    );
     const resThroughRelay = await clientAMgr.proxyToActive(
       new Request("http://local/ping"),
       "/ping",
@@ -1080,13 +1096,17 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       });
     });
 
-    let relay = await startRelayServer({
+    let currentRelay: Awaited<ReturnType<typeof startRelayServer>> | null = await startRelayServer({
       host: "127.0.0.1",
       port: relayPort,
       authIssuer: auth.issuer,
       authAudience: "eidolon-relay",
       jwksUrl: `${auth.url}/.well-known/jwks.json`,
       dbPath: dbFile,
+    });
+    cleanups.push(async () => {
+      await currentRelay?.stop();
+      currentRelay = null;
     });
     const revokeHostDir = mkdtempSync(join(tmpdir(), "relay-revoke-host-"));
     const revokeClientDir = mkdtempSync(join(tmpdir(), "relay-revoke-client-"));
@@ -1098,12 +1118,12 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       serverVersion: () => "0.22.0",
       activeCalls: () => 0,
       dispatchLocal: async () => Response.json({ ok: true }),
-      relayUrl: () => relay.url,
+      relayUrl: () => `http://127.0.0.1:${relayPort}`,
     });
     cleanups.push(() => revokeHostMgr.stop());
     revokeHostMgr.store.saveRelayAuth({
       authUrl: auth.url,
-      relayUrl: relay.url,
+      relayUrl: `http://127.0.0.1:${relayPort}`,
       token: "sess-revoke",
       user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
       savedAt: Date.now(),
@@ -1119,7 +1139,8 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     if (!dualParsed.ok) return;
 
     // Stop Relay while Direct consumes the dual invite, then bring Relay back up (clean memory DB too).
-    await relay.stop();
+    await currentRelay.stop();
+    currentRelay = null;
     const revokeClientMgr = new SubspaceManager({
       dataHome: revokeClientDir,
       serverVersion: () => "0.22.0",
@@ -1129,7 +1150,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     cleanups.push(() => revokeClientMgr.stop());
     await revokeClientMgr.pairServer({ code: dualOffer.pairingUrl, activate: true });
 
-    relay = await startRelayServer({
+    currentRelay = await startRelayServer({
       host: "127.0.0.1",
       port: relayPort,
       authIssuer: auth.issuer,
@@ -1137,7 +1158,6 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       jwksUrl: `${auth.url}/.well-known/jwks.json`,
       dbPath: dbFile,
     });
-    cleanups.push(() => relay.stop());
 
     await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
       timeout: 10_000,
@@ -1152,8 +1172,9 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     ).rejects.toMatchObject({ code: "pairing-failed" });
 
     // Paired device must authenticate immediately on fresh Relay even with brand-new ephemeral DB via host_hello.devices.
-    await relay.stop();
-    relay = await startRelayServer({
+    await currentRelay.stop();
+    currentRelay = null;
+    currentRelay = await startRelayServer({
       host: "127.0.0.1",
       port: relayPort,
       authIssuer: auth.issuer,
@@ -1165,10 +1186,94 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       timeout: 10_000,
     });
     await revokeHostMgr.host.stopDirect();
-    await vi.waitFor(async () => {
-      expect((await revokeClientMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+    await vi.waitFor(
+      async () => {
+        expect((await revokeClientMgr.getState()).servers[0]?.activeTransport).toBe("relay");
+      },
+      { timeout: 10_000 },
+    );
+    const revokePing = await revokeClientMgr.proxyToActive(
+      new Request("http://local/ping"),
+      "/ping",
+    );
+    expect(revokePing.status).toBe(200);
+
+    // Offline grant revocation stays persisted and revokes device on Relay before host registration.
+    await currentRelay.stop();
+    currentRelay = null;
+    const revokedGrantId = revokeHostMgr.store.readGrants()[0]!.id;
+    expect(revokeHostMgr.host.revokeGrant(revokedGrantId)).toBe(true);
+    expect(revokeHostMgr.store.readRevokedRelayGrantIds()).toContain(revokedGrantId);
+    currentRelay = await startRelayServer({
+      host: "127.0.0.1",
+      port: relayPort,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: dbFile,
     });
-    const ping = await revokeClientMgr.proxyToActive(new Request("http://local/ping"), "/ping");
-    expect(ping.status).toBe(200);
+    await vi.waitFor(() => expect(revokeHostMgr.host.relayConnected).toBe(true), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(() => expect(revokeHostMgr.store.readRevokedRelayGrantIds()).toEqual([]), {
+      timeout: 5_000,
+    });
+    await expect(
+      revokeClientMgr.proxyToActive(new Request("http://local/after-revoke"), "/after-revoke"),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // Direct host_hello.revokedGrantIds check without device_revoke: Relay must close with 4401 before forwarding.
+    const rawHostKeys = await generateX25519KeyPair();
+    const rawNow = Math.floor(Date.now() / 1000);
+    const rawJwt = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: ["eidolon-relay"],
+      sub: "alice",
+      iat: rawNow,
+      exp: rawNow + 900,
+    });
+    const rawToken = "a".repeat(64);
+    const rawTokHash = await sha256Hex(utf8Encode(rawToken));
+    const rawHost1 = await connectRawRelayHost(`http://127.0.0.1:${relayPort}`, rawJwt, {
+      keys: rawHostKeys,
+      devices: [{ grantId: "raw-g1", tokenHash: rawTokHash, clientName: "RawClient" }],
+    });
+    rawHost1.ws.close();
+    await rawHost1.closed;
+
+    const rawHost2 = await connectRawRelayHost(`http://127.0.0.1:${relayPort}`, rawJwt, {
+      keys: rawHostKeys,
+      revokedGrantIds: ["raw-g1"],
+    });
+    const rawClientWs = new WebSocket(`ws://127.0.0.1:${relayPort}${RELAY_PATHS.CLIENT_CONNECT}`);
+    cleanups.push(() => {
+      if (rawClientWs.readyState !== WebSocket.CLOSED) rawClientWs.terminate();
+    });
+    await new Promise<void>((resolve, reject) => {
+      rawClientWs.once("open", () => resolve());
+      rawClientWs.once("error", reject);
+    });
+    const rawClientClosed = waitForClose(rawClientWs);
+    rawClientWs.send(
+      JSON.stringify({
+        type: "client_auth",
+        v: 1,
+        relayHostId: rawHost2.relayHostId,
+        credential: { kind: "device", grantId: "raw-g1", relayToken: rawToken },
+      }),
+    );
+    const rawOutcome = await Promise.race([
+      rawClientClosed,
+      rawHost2
+        .waitMessage((m) => m.type === "connection_open")
+        .then(
+          () => ({ code: -1, reason: "unexpected connection_open" }),
+          (err) => ({ code: -2, reason: String(err) }),
+        ),
+    ]);
+    expect(rawOutcome).toEqual({
+      code: RELAY_CLOSE_CODE.UNAUTHORIZED,
+      reason: "Revoked or invalid device token",
+    });
   });
 });

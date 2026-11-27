@@ -41,6 +41,7 @@ const GrantRecordSchema = z.object({
 
 const GrantsFileSchema = z.object({
   grants: z.array(GrantRecordSchema),
+  revokedRelayGrantIds: z.array(z.string().min(1)).optional(),
 });
 
 const SavedServerSchema = z.object({
@@ -176,24 +177,64 @@ export class SubspaceStore {
     writeSecretJson(this.#hostPath, HostIdentitySchema.parse(identity));
   }
 
+  #readGrantsFile(): { grants: SubspaceGrantRecord[]; revokedRelayGrantIds: string[] } {
+    const file = readJsonFile(this.#grantsPath, GrantsFileSchema);
+    return {
+      grants: file?.grants ?? [],
+      revokedRelayGrantIds: file?.revokedRelayGrantIds ?? [],
+    };
+  }
+
+  #writeGrantsFile(
+    grants: readonly SubspaceGrantRecord[],
+    revokedRelayGrantIds: readonly string[],
+  ): void {
+    writeSecretJson(this.#grantsPath, {
+      grants,
+      ...(revokedRelayGrantIds.length > 0 ? { revokedRelayGrantIds } : {}),
+    });
+  }
+
   readGrants(): SubspaceGrantRecord[] {
-    return readJsonFile(this.#grantsPath, GrantsFileSchema)?.grants ?? [];
+    return this.#readGrantsFile().grants;
+  }
+
+  readRevokedRelayGrantIds(): string[] {
+    return this.#readGrantsFile().revokedRelayGrantIds;
+  }
+
+  ackRevokedRelayGrants(ids: readonly string[]): void {
+    if (ids.length === 0) return;
+    const drop = new Set(ids);
+    const { grants, revokedRelayGrantIds } = this.#readGrantsFile();
+    const nextRevoked = revokedRelayGrantIds.filter((id) => !drop.has(id));
+    if (nextRevoked.length !== revokedRelayGrantIds.length) {
+      this.#writeGrantsFile(grants, nextRevoked);
+    }
   }
 
   saveGrants(grants: readonly SubspaceGrantRecord[]): void {
-    writeSecretJson(this.#grantsPath, { grants });
+    this.#writeGrantsFile(grants, this.#readGrantsFile().revokedRelayGrantIds);
   }
 
   addGrant(grant: SubspaceGrantRecord): void {
-    const next = [...this.readGrants().filter((g) => g.id !== grant.id), grant];
-    this.saveGrants(next);
+    const { grants, revokedRelayGrantIds } = this.#readGrantsFile();
+    const nextGrants = [...grants.filter((g) => g.id !== grant.id), grant];
+    const nextRevoked = revokedRelayGrantIds.filter((id) => id !== grant.id);
+    this.#writeGrantsFile(nextGrants, nextRevoked);
   }
 
   removeGrant(id: string): boolean {
-    const current = this.readGrants();
-    const next = current.filter((g) => g.id !== id);
-    if (next.length === current.length) return false;
-    this.saveGrants(next);
+    const { grants, revokedRelayGrantIds } = this.#readGrantsFile();
+    const removed = grants.find((g) => g.id === id);
+    if (removed === undefined) return false;
+    const nextGrants = grants.filter((g) => g.id !== id);
+    const supportsRelay = removed.mode === "relay" || removed.relayTokenSha256 !== undefined;
+    const nextRevoked =
+      supportsRelay && !revokedRelayGrantIds.includes(id)
+        ? [...revokedRelayGrantIds, id]
+        : revokedRelayGrantIds;
+    this.#writeGrantsFile(nextGrants, nextRevoked);
     return true;
   }
 

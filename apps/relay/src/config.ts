@@ -22,12 +22,15 @@ function readCleanEnvValue(name: string, raw: string, expectation: string): stri
 }
 
 function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: boolean): string {
-  // Reject shell line-continuation characters before URL.parse() silently rewrites `\` to `/`.
+  // Reject shell line-continuation characters and single-slash typos before URL parsing.
   const value = readCleanEnvValue(
     name,
     raw,
     "must be a valid http(s) URL without whitespace or backslashes",
   );
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
+  }
   const parsed = URL.parse(value);
   if (parsed === null) {
     throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
@@ -35,7 +38,14 @@ function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: bool
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`${name} must use http or https (got ${JSON.stringify(raw)})`);
   }
-  return stripTrailingSlashes ? withoutTrailingSlashes(parsed.href) : parsed.href;
+  // Preserve explicit default port (e.g. :443) for string-matched JWT iss while canonicalizing case.
+  const explicitPortMatch = /^https?:\/\/(?:\[[^\]]+\]|[^/:]+):(\d+)/i.exec(value);
+  const authority =
+    explicitPortMatch !== null && parsed.port === ""
+      ? `${parsed.hostname}:${explicitPortMatch[1]}`
+      : parsed.host;
+  const canonical = `${parsed.protocol}//${authority}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return stripTrailingSlashes ? withoutTrailingSlashes(canonical) : canonical;
 }
 
 function readNormalizedToken(name: string, raw: string): string {

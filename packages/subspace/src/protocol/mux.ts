@@ -319,6 +319,7 @@ export class MuxEndpoint {
     }
   >();
   #onRelayUpdate: ((payload: unknown) => void) | undefined;
+  #pendingRelayUpdate: { readonly payload: unknown } | null = null;
 
   constructor(options: {
     readonly sendFrame: (frame: Uint8Array) => Promise<void>;
@@ -336,6 +337,11 @@ export class MuxEndpoint {
 
   setOnRelayUpdate(handler: ((payload: unknown) => void) | undefined): void {
     this.#onRelayUpdate = handler;
+    if (handler !== undefined && this.#pendingRelayUpdate !== null) {
+      const pending = this.#pendingRelayUpdate;
+      this.#pendingRelayUpdate = null;
+      handler(pending.payload);
+    }
   }
 
   async sendRelayUpdate(relay: {
@@ -580,7 +586,12 @@ export class MuxEndpoint {
       }
       case MUX_FRAME.RELAY_UPDATE: {
         try {
-          this.#onRelayUpdate?.(JSON.parse(utf8Decode(payload)));
+          const decoded = JSON.parse(utf8Decode(payload));
+          if (this.#onRelayUpdate !== undefined) {
+            this.#onRelayUpdate(decoded);
+          } else {
+            this.#pendingRelayUpdate = { payload: decoded };
+          }
         } catch {
           // Ignore malformed relay update payloads.
         }
