@@ -322,8 +322,21 @@ describe("the keys the picks need", () => {
       baseUrl: { value: "http://127.0.0.1:8000/v1", source: "account" },
     });
     expect(missingFields(need, [saved], undefined)).toEqual([]);
+    expect(missingFields(need, [saved], undefined, "")).toEqual(["baseUrl"]);
     expect(
       missingFields({ account: "fish-speech", provider: "fish-speech" }, [], undefined),
     ).toEqual([]);
+  });
+
+  test("clearing a saved model draft in KeysStep writes null so provider default applies", () => {
+    const base = rows({
+      "voice.provider": { value: "openai-compatible", source: "persona" },
+      "voice.model": { value: "kokoro", source: "persona" },
+    });
+    expect(modelAfter(roleById("voice"), base, { "voice.model": "" }, [])).toBe("tts-1");
+    expect(pickChanges(base, { "voice.model": "" }, [])).toEqual({
+      persona: { "voice.model": null },
+      app: {},
+    });
   });
 });

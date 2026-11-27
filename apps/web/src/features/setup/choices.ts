@@ -23,7 +23,7 @@ import {
   SETUP_ROLES,
 } from "@/lib/providers";
 import { RECOMMENDED_ROLES } from "./first-run";
-import { flagOn } from "./wizard";
+import { flagOn, ownValue } from "./wizard";
 
 export type PickedRole = (typeof SETUP_ROLES)[number];
 
@@ -114,8 +114,11 @@ export function modelAfter(
   drafts: Readonly<Record<string, string>>,
   accounts: AccountList | undefined,
 ): string | null {
-  const typed = strip(drafts[`${role.path}.model`] ?? "");
+  const modelPath = `${role.path}.model`;
+  const hasDraft = modelPath in drafts;
+  const typed = strip(drafts[modelPath] ?? "");
   if (typed !== "") return typed;
+  if (hasDraft) return fallbackModel(role, rows, drafts, accounts);
   const moved =
     effectiveProviderType(role, rows, {}, accounts) !==
     effectiveProviderType(role, rows, drafts, accounts);
@@ -160,6 +163,7 @@ export function pickChanges(
     const role = SETUP_ROLES.map(roleById).find((entry) => `${entry.path}.provider` === path);
     if (role === undefined) {
       if (value !== "") values[path] = value;
+      else if (ownValue(row) !== null) values[path] = null;
     } else if (value !== effectiveProvider(role, rows, {})) {
       values[path] = value;
     }
@@ -260,12 +264,9 @@ export function missingFields(
   const provider = providerById(need.provider);
   const account = accounts?.find((entry) => entry.id === need.account);
   const missing: string[] = [];
-  if (
-    provider?.baseUrl === null &&
-    provider.baseUrlEnv !== null &&
-    (account?.baseUrl?.value ?? null) === null &&
-    (typedBaseUrl ?? "").trim() === ""
-  ) {
+  const effectiveBase =
+    typedBaseUrl !== undefined ? typedBaseUrl.trim() : (account?.baseUrl?.value ?? "");
+  if (provider?.baseUrl === null && provider.baseUrlEnv !== null && effectiveBase === "") {
     missing.push("baseUrl");
   }
   for (const field of provider?.fields ?? []) {

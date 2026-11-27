@@ -631,5 +631,18 @@ describe("POST credentials/check", () => {
       status: 400,
       code: "bad-request",
     });
+
+    // A mixed group with a deaf host rejects when that host leads, and allows the hearing host.
+    writeFileSync(
+      join(kuro, "persona.yaml"),
+      "identity:\n  name: 茶茶\nhearing:\n  provider: none\n",
+    );
+    resetSettings();
+    installSettings();
+    expect(groupCallRefusal(["kuro", "milky-green"], "kuro")).toMatchObject({
+      status: 400,
+      code: "bad-request",
+    });
+    expect(groupCallRefusal(["kuro", "milky-green"], "milky-green")).toBeNull();
   });
 });

@@ -471,7 +471,11 @@ test("pcmBody strips WAV headers across chunk boundaries and preserves raw PCM",
   expect(await collectBody([new Uint8Array([0x52, 0x49]), new Uint8Array([0x00, 0x01])])).toEqual([
     0x52, 0x49, 0x00, 0x01,
   ]);
-  expect(await collectBody([wav.subarray(0, 22), wav.subarray(22, 44)])).toEqual([]);
+  const emptyWav = encodeWav(new Int16Array(0), 44100);
+  expect(await collectBody([emptyWav.subarray(0, 22), emptyWav.subarray(22, 44)])).toEqual([]);
+  await expect(collectBody([wav.subarray(0, 22), wav.subarray(22, 44)])).rejects.toThrow(
+    "Truncated WAV audio",
+  );
 
   // Malformed RIFF/WAVE streams exceeding 64 KiB without a `data` chunk stop probing and flush.
   const oversize = new Uint8Array(64 * 1024 + 16);
@@ -493,6 +497,7 @@ test("pcmBody strips WAV headers across chunk boundaries and preserves raw PCM",
   // Trailing RIFF metadata subchunks past the `data` extent are discarded, and bad WAV formats reject.
   const withTrailer = new Uint8Array(wav.length + 12);
   withTrailer.set(wav, 0);
+  new DataView(withTrailer.buffer).setUint32(4, withTrailer.length - 8, true);
   withTrailer.set([0x4c, 0x49, 0x53, 0x54, 4, 0, 0, 0, 1, 2, 3, 4], wav.length);
   expect(stripWavHeader(withTrailer)).toEqual(wav.subarray(44));
   expect(await collectBody([withTrailer.subarray(0, 48), withTrailer.subarray(48)])).toEqual([

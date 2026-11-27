@@ -101,16 +101,11 @@ export function NewPersonaDialog({
     onOpenChange(next);
   }
 
-  const voiceOptional = voiceOff || provider === "openai-compatible" || provider === "fish-speech";
+  const loadingVoice = active.isPending || accounts.isPending || unavailable !== null;
 
   function submit() {
     setShowErrors(true);
-    if (
-      Object.keys(personaErrors(draft, taken)).length > 0 ||
-      (!voiceOptional && voiceId === null)
-    ) {
-      return;
-    }
+    if (loadingVoice || Object.keys(personaErrors(draft, taken)).length > 0) return;
     create.mutate({ voiceId });
   }
 
@@ -136,7 +131,7 @@ export function NewPersonaDialog({
               <Button variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
                 {t`Cancel`}
               </Button>
-              <Button onClick={submit} disabled={create.isPending}>
+              <Button onClick={submit} disabled={create.isPending || loadingVoice}>
                 {create.isPending && <Spinner />}
                 {t`Create`}
               </Button>

@@ -12,7 +12,10 @@ export interface GroupCallRefusal {
 }
 
 /** Why the chat's `personas` can't be called together now; null when they can. */
-export function groupCallRefusal(personas: readonly ParticipantId[]): GroupCallRefusal | null {
+export function groupCallRefusal(
+  personas: readonly ParticipantId[],
+  host?: ParticipantId,
+): GroupCallRefusal | null {
   if (personas.length < 2) {
     return { status: 400, code: "bad-request", message: "A group call needs two personas or more" };
   }
@@ -39,6 +42,13 @@ export function groupCallRefusal(personas: readonly ParticipantId[]): GroupCallR
       status: 400,
       code: "bad-request",
       message: `${muted}'s voice is turned off, so she can't join a group call`,
+    };
+  }
+  if (host !== undefined && personas.includes(host) && personaCallsDisabled(host)) {
+    return {
+      status: 400,
+      code: "bad-request",
+      message: `${host} has voice calls turned off, so she can't host a group call`,
     };
   }
   if (personas.every(personaCallsDisabled)) {

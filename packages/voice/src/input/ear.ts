@@ -74,7 +74,8 @@ class Ear {
       clock: deps.clock,
       ttfsP99: deps.stt.ttfsP99,
       acknowledgesFinalize: deps.stt.acknowledgesFinalize,
-      finalizeTimeoutMs: deps.stt.finalizeTimeoutMs,
+      finalizeTimeoutMs:
+        deps.stt.finalizeTimeoutMs === undefined ? undefined : () => deps.stt.finalizeTimeoutMs!,
       join: deps.join,
       post,
       clearAnalyzer: () => deps.turn.clear(),

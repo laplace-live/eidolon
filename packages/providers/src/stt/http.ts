@@ -18,7 +18,6 @@ class HttpWhisperStt implements SttStream {
   readonly inputRate = SAMPLE_RATE;
   readonly ttfsP99 = TTFS_P99;
   readonly acknowledgesFinalize = true;
-  readonly finalizeTimeoutMs: number;
   readonly events = new AsyncQueue<SttEvent>();
 
   readonly #url: string;
@@ -38,6 +37,8 @@ class HttpWhisperStt implements SttStream {
   #utterance: Int16Array[] = [];
   #utteranceSamples = 0;
   #inSpeech = false;
+  #rolledOver = false;
+  #queued = 0;
   #closed = false;
   #chain: Promise<void> = Promise.resolve();
 
@@ -59,7 +60,6 @@ class HttpWhisperStt implements SttStream {
     this.#meter = new Meter(selection);
     this.#timeoutMs = timeoutMs;
     this.#maxUtteranceSamples = maxUtteranceSamples;
-    this.finalizeTimeoutMs = timeoutMs + 1_000;
     this.#signal = AbortSignal.any([signal, this.#controller.signal]);
     const onAbort = () => void this.close();
     if (signal.aborted) {
@@ -71,6 +71,11 @@ class HttpWhisperStt implements SttStream {
     }
   }
 
+  /** Covers every queued HTTP transcription request so rollover chains don't exhaust a single budget. */
+  get finalizeTimeoutMs(): number {
+    return Math.max(1, this.#queued) * this.#timeoutMs + 1_000;
+  }
+
   speechStarted(): void {
     if (this.#closed || this.#inSpeech) return;
     if (this.#preRollSamples > 0) {
@@ -79,6 +84,7 @@ class HttpWhisperStt implements SttStream {
       this.#preRoll = [];
       this.#preRollSamples = 0;
     }
+    this.#rolledOver = false;
     this.#inSpeech = true;
   }
 
@@ -120,10 +126,19 @@ class HttpWhisperStt implements SttStream {
   finalize(): void {
     if (this.#closed) return;
     const hadSpeech = this.#inSpeech;
+    const hadRollover = this.#rolledOver;
     this.#inSpeech = false;
-    if (!hadSpeech || this.#utteranceSamples < MIN_SPEECH_SAMPLES) {
+    this.#rolledOver = false;
+    if (!hadSpeech || (!hadRollover && this.#utteranceSamples < MIN_SPEECH_SAMPLES)) {
       this.#utterance = [];
       this.#utteranceSamples = 0;
+      this.#chain = this.#chain.then(() => {
+        if (!this.#closed) this.events.push({ type: "finalized" });
+      });
+      return;
+    }
+    if (this.#utteranceSamples === 0) {
+      this.#utterance = [];
       this.#chain = this.#chain.then(() => {
         if (!this.#closed) this.events.push({ type: "finalized" });
       });
@@ -133,12 +148,20 @@ class HttpWhisperStt implements SttStream {
   }
 
   #flushUtterance(finalized: boolean): void {
+    if (!finalized) this.#rolledOver = true;
     const sampleCount = this.#utteranceSamples;
     const chunks = this.#utterance;
     this.#utterance = [];
     this.#utteranceSamples = 0;
     const samples = concatPcm(chunks, sampleCount);
-    this.#chain = this.#chain.then(() => this.#transcribe(samples, finalized));
+    this.#queued++;
+    this.#chain = this.#chain.then(async () => {
+      try {
+        await this.#transcribe(samples, finalized);
+      } finally {
+        this.#queued = Math.max(0, this.#queued - 1);
+      }
+    });
   }
 
   async #transcribe(samples: Int16Array, finalized: boolean): Promise<void> {

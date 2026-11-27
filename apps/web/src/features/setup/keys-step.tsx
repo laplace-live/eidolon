@@ -94,6 +94,11 @@ function RolePicker({
   const current = effectiveProvider(entry, rows, drafts);
   const providerType = providerOfAccount(current, accounts);
   const model = modelAfter(entry, rows, drafts, accounts);
+  const modelRow = rows.find((row) => row.path === modelPath);
+  const savedModel =
+    modelRow && modelRow.source !== "default" && typeof modelRow.value === "string"
+      ? modelRow.value
+      : "";
   const offLabel = PROVIDER_OFF_LABELS[role];
   const customizable = providerType === "openai-compatible";
   return (
@@ -137,7 +142,7 @@ function RolePicker({
             autoComplete="off"
             spellCheck={false}
             placeholder={model ?? t`Model ID`}
-            value={drafts[modelPath] ?? ""}
+            value={drafts[modelPath] ?? (customizable ? savedModel : "")}
             aria-invalid={invalid}
             onChange={(event) => onDraft(modelPath, event.target.value)}
             disabled={disabled}

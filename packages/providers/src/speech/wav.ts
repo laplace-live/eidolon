@@ -154,6 +154,9 @@ export async function* pcmBody(
     }
   }
   if (!probed && pending.length > 0) yield pending;
+  if (probed && remaining !== null && remaining > 0) {
+    throw new SpeechError(`Truncated WAV audio: expected ${remaining} more byte(s)`);
+  }
 }
 
 function writeAscii(target: Uint8Array, offset: number, text: string): void {

@@ -211,7 +211,7 @@ test("HTTP Whisper STT rolls over long utterances into finalized=false segments 
   const events = watch(stream);
 
   stream.speechStarted?.();
-  stream.send(new Int16Array(8400));
+  stream.send(new Int16Array(6800));
   stream.finalize();
   await events.until((e) => e.type === "finalized" || (e.type === "final" && e.finalized));
   expect(events.seen).toEqual([

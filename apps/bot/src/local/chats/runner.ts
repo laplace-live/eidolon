@@ -470,8 +470,8 @@ export class ChatRunner {
   }
 
   /** Why the personas of chat `id` can't be called together now; null when they can. */
-  async groupCallRefusal(id: string): Promise<GroupCallRefusal | null> {
-    return groupCallRefusal(await this.participants(id));
+  async groupCallRefusal(id: string, host?: ParticipantId): Promise<GroupCallRefusal | null> {
+    return groupCallRefusal(await this.participants(id), host);
   }
 
   /**

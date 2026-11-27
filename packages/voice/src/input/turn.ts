@@ -27,7 +27,7 @@ export interface TurnDetectorOptions {
    */
   readonly acknowledgesFinalize: boolean;
   /** Overrides FINALIZE_ACK_CAP_MS for slower HTTP batch recognizers. */
-  readonly finalizeTimeoutMs?: number;
+  readonly finalizeTimeoutMs?: number | (() => number);
   readonly join: JoinSegments;
   readonly post: (event: EarEvent) => void;
   /** Smart Turn forgets the turn's speech when the turn ends. */
@@ -92,19 +92,33 @@ export class TurnDetector {
     // the cap has nothing to add.
     if (this.#options.acknowledgesFinalize) {
       this.#unanswered++;
-      this.#cancelAckCap?.();
-      this.#cancelAckCap = this.#options.clock.setTimer(
-        this.#options.finalizeTimeoutMs ?? FINALIZE_ACK_CAP_MS,
-        () => {
-          this.#cancelAckCap = null;
-          // An answer still owed was lost, as a reconnect loses them.
-          this.#unanswered = 0;
-          // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
-          if (!this.#wordsPending) this.#acknowledge();
-        },
-      );
+      this.#armAckCap();
     }
     this.#activity();
+  }
+
+  #finalizeCapMs(): number | undefined {
+    const raw = this.#options.finalizeTimeoutMs;
+    const ms = typeof raw === "function" ? raw() : raw;
+    return ms;
+  }
+
+  #armAckCap(): void {
+    this.#cancelAckCap?.();
+    if (!this.#options.acknowledgesFinalize || this.#unanswered === 0) {
+      this.#cancelAckCap = null;
+      return;
+    }
+    const customMs = this.#finalizeCapMs();
+    const ackMs = customMs !== undefined ? customMs * this.#unanswered : FINALIZE_ACK_CAP_MS;
+    this.#cancelAckCap = this.#options.clock.setTimer(ackMs, () => {
+      this.#cancelAckCap = null;
+      // An answer still owed was lost, as a reconnect loses them.
+      this.#unanswered = 0;
+      if (customMs !== undefined) this.#activity();
+      // Words it heard and hasn't finished are still coming: their final, or the watchdog, ends it.
+      if (!this.#wordsPending) this.#acknowledge();
+    });
   }
 
   analyzed(state: EndOfTurn): void {
@@ -133,12 +147,13 @@ export class TurnDetector {
 
   final(text: string, finalized: boolean): void {
     if (text.trim()) this.#finals.push(text);
+    if (finalized) this.#unanswered = Math.max(0, this.#unanswered - 1);
+    if (this.#unanswered > 0 && this.#finalizeCapMs() !== undefined) this.#armAckCap();
     this.#activity();
     this.#startTurn();
     this.#options.post({ type: "final", text });
     this.#text = text;
     this.#wordsPending = false;
-    if (finalized) this.#unanswered = Math.max(0, this.#unanswered - 1);
     // An earlier stop's answer, with the last stop's still owed, is a final like any other.
     if (finalized && this.#unanswered === 0) {
       this.#acknowledge();
@@ -146,7 +161,7 @@ export class TurnDetector {
     } else if (
       this.#timeoutExpired &&
       this.#turnComplete &&
-      (this.#unanswered === 0 || this.#options.finalizeTimeoutMs === undefined)
+      (this.#unanswered === 0 || this.#finalizeCapMs() === undefined)
     ) {
       this.#stop();
       return;
@@ -165,6 +180,10 @@ export class TurnDetector {
    */
   finalized(): void {
     this.#unanswered = Math.max(0, this.#unanswered - 1);
+    if (this.#finalizeCapMs() !== undefined) {
+      if (this.#unanswered > 0) this.#armAckCap();
+      this.#activity();
+    }
     if (this.#unanswered === 0 && this.#vadStopped && !this.#wordsPending) this.#acknowledge();
   }
 
@@ -213,7 +232,11 @@ export class TurnDetector {
       this.#cancelTimeout?.();
       this.#cancelTimeout = null;
       this.#stop();
-    } else if (this.#text && this.#cancelTimeout === null) {
+    } else if (
+      this.#text &&
+      this.#cancelTimeout === null &&
+      (this.#unanswered === 0 || this.#finalizeCapMs() === undefined)
+    ) {
       this.#stop();
     }
   }
@@ -244,9 +267,10 @@ export class TurnDetector {
    */
   #activity(): void {
     if (!this.#inTurn) return;
+    const customMs = this.#finalizeCapMs();
     const timeoutMs =
-      this.#vadStopped && this.#unanswered > 0 && this.#options.finalizeTimeoutMs !== undefined
-        ? Math.max(STOP_TIMEOUT_MS, this.#options.finalizeTimeoutMs + 1_000)
+      this.#vadStopped && this.#unanswered > 0 && customMs !== undefined
+        ? Math.max(STOP_TIMEOUT_MS, customMs * this.#unanswered + 1_000)
         : STOP_TIMEOUT_MS;
     this.#cancelWatchdog?.();
     this.#cancelWatchdog = this.#options.clock.setTimer(timeoutMs, () => {
