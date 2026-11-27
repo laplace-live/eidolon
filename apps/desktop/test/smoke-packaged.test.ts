@@ -391,7 +391,7 @@ describe("PowerShell", () => {
     ).toEqual({ SystemRoot: "C:\\Windows" });
   });
 
-  test("closes stdin immediately and kills a hung command and pipe-holding children at timeout", async () => {
+  test("closes stdin immediately, kills a hung command at timeout, and doesn't wait on a detached pipe-holder", async () => {
     // A child reading stdin until EOF finishes at once because stdin is "ignore", not an open pipe.
     const eof = await runCommandOutput(
       process.execPath,
@@ -409,29 +409,40 @@ describe("PowerShell", () => {
     ).rejects.toThrow(/ENOENT/);
     expect(Date.now() - missingAt).toBeLessThan(1000);
 
-    // A hung command that also spawns a detached child inheriting stdout/stderr must reject promptly.
-    const pidFile = join(tmpdir(), `eidolon-smoke-sub-${process.pid}-${Date.now()}.pid`);
+    // A hung command that also spawns a detached child inheriting stdout/stderr must be killed at
+    // timeout and reject promptly even while the detached child keeps the pipe open on POSIX.
+    const parentPidFile = join(tmpdir(), `eidolon-smoke-parent-${process.pid}-${Date.now()}.pid`);
+    const subPidFile = join(tmpdir(), `eidolon-smoke-sub-${process.pid}-${Date.now()}.pid`);
     const script = [
       'const { spawn } = require("node:child_process");',
       'const { writeFileSync } = require("node:fs");',
+      `writeFileSync(${JSON.stringify(parentPidFile)}, String(process.pid));`,
       'const sub = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], { detached: true, stdio: "inherit" });',
-      `writeFileSync(${JSON.stringify(pidFile)}, String(sub.pid));`,
+      `writeFileSync(${JSON.stringify(subPidFile)}, String(sub.pid));`,
       "setTimeout(() => {}, 5000);",
     ].join(" ");
     const started = Date.now();
+    let parentPid: number | null = null;
+    let subPid: number | null = null;
     try {
       await expect(
         runCommandOutput(process.execPath, ["-e", script], { timeoutMs: 600 }),
       ).rejects.toThrow(/timed out after 0\.6 s/);
       expect(Date.now() - started).toBeLessThan(4000);
+      parentPid = Number(readFileSync(parentPidFile, "utf8").trim());
+      subPid = Number(readFileSync(subPidFile, "utf8").trim());
+      expect(() => process.kill(parentPid as number, 0)).toThrow();
+      if (process.platform === "win32") {
+        expect(() => process.kill(subPid as number, 0)).toThrow();
+      }
     } finally {
-      if (existsSync(pidFile)) {
-        const subPid = Number(readFileSync(pidFile, "utf8").trim());
-        rmSync(pidFile, { force: true });
+      for (const file of [parentPidFile, subPidFile]) rmSync(file, { force: true });
+      for (const pid of [parentPid, subPid]) {
+        if (pid === null) continue;
         try {
-          process.kill(subPid, "SIGKILL");
+          process.kill(pid, "SIGKILL");
         } catch {
-          // Already stopped by killTree on Windows.
+          // Already stopped.
         }
       }
     }

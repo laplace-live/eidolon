@@ -448,7 +448,7 @@ export async function startSmoke({
   argv = process.argv.slice(2),
   restoresPreferences = false,
   fakes: fakesOptions,
-}: SmokeOptions): Promise<Smoke & { finish(): Promise<number> }> {
+}: SmokeOptions): Promise<Smoke & { finish(): Promise<number>; abortSync(): void }> {
   const args = parseSmokeArgs(argv);
   const run = makeRun(label);
   const canary = `eidolon-smoke-canary-${randomBytes(9).toString("hex")}`;
@@ -465,14 +465,20 @@ export async function startSmoke({
     process.platform !== "darwin" ? "it runs on macOS only" : args.headful ? "--headful" : null;
   const focus = watchFocus({ ours: (pid) => processes.ours(pid), skip });
 
-  // Synchronous: Playwright's own handler exits the process once it has closed Electron.
-  const interrupted = (signal: NodeJS.Signals): void => {
-    process.stderr.write(`\n${label}: ${signal}, stopping what the smoke started\n`);
+  function abortSync(): void {
+    process.off("SIGINT", interrupted);
+    process.off("SIGTERM", interrupted);
     processes.killAllSync();
     preferences?.restore();
+  }
+
+  // Synchronous: Playwright's own handler exits the process once it has closed Electron.
+  function interrupted(signal: NodeJS.Signals): void {
+    process.stderr.write(`\n${label}: ${signal}, stopping what the smoke started\n`);
+    abortSync();
     process.stderr.write(`${label}: the run's folder is kept: ${run.root}\n`);
     process.exit(signal === "SIGINT" ? 130 : 143);
-  };
+  }
   process.once("SIGINT", interrupted);
   process.once("SIGTERM", interrupted);
 
@@ -606,7 +612,7 @@ export async function startSmoke({
     return checks.pass ? 0 : 1;
   }
 
-  return { ...smoke, finish };
+  return { ...smoke, finish, abortSync };
 }
 
 /** Runs `body` as a smoke and exits with its verdict; a throw fails it with the error. */

@@ -169,15 +169,19 @@ async function collect(
       else child.stderr.once("end", () => done());
     }),
   ]);
-  let exit = await within(running.exited, timeoutMs);
-  const timedOut = exit === null;
+  const deadline = Date.now() + timeoutMs;
+  let exit = await within(running.exited, Math.max(deadline - Date.now(), 1));
+  let timedOut = exit === null;
   if (timedOut) {
     if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
       killTree(child.pid, { wait: true });
     }
     exit = await within(running.exited, 5000);
+    await within(drained, 500);
+  } else {
+    const streamEnded = await within(drained, Math.max(deadline - Date.now(), 5000));
+    if (streamEnded === null) timedOut = true;
   }
-  await within(drained, 500);
   child.stdout?.destroy();
   child.stderr?.destroy();
   return { code: timedOut ? null : (exit?.code ?? null), stdout, stderr };
@@ -1061,27 +1065,14 @@ const writeResults = (passed: boolean): string => {
   return results;
 };
 
-const watchdog = setTimeout(() => {
-  const last = smoke.checks.list.at(-1)?.name ?? "starting";
-  smoke.checks.add(
-    `${LABEL} ran to its end`,
-    false,
-    `timed out after ${SMOKE_WATCHDOG_MS / 60_000} min (last finished check: ${last})`,
-  );
-  smoke.processes.killAllSync();
-  const results = writeResults(false);
-  console.error(`${LABEL}: timed out; the results are in ${results}`);
-  process.exit(1);
-}, SMOKE_WATCHDOG_MS);
-watchdog.unref();
-
-try {
+let watchdogFired = false;
+const marked = planned.setup === null ? null : markDefaultHome();
+const runBody = async (): Promise<void> => {
   if (planned.setup === null) await walk(smoke, appLayout(planned.binary), numbers);
   else {
-    const marked = markDefaultHome();
     try {
       const installed = await install(smoke, planned.setup, planned.binary, numbers);
-      if (installed && existsSync(planned.binary)) {
+      if (!watchdogFired && installed && existsSync(planned.binary)) {
         await walk(smoke, appLayout(planned.binary), numbers);
       }
     } finally {
@@ -1091,12 +1082,48 @@ try {
       marked?.marker.remove();
     }
   }
-} catch (error) {
+};
+
+let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
+const watchdog = new Promise<void>((done) => {
+  watchdogTimer = setTimeout(() => {
+    watchdogFired = true;
+    const last = smoke.checks.list.at(-1)?.name ?? "starting";
+    smoke.checks.add(
+      `${LABEL} ran to its end`,
+      false,
+      `timed out after ${SMOKE_WATCHDOG_MS / 60_000} min (last finished check: ${last})`,
+    );
+    // Unblocks any stuck child wait so runBody's finally (uninstall + marker) and finish() can run.
+    smoke.processes.killAllSync();
+    done();
+  }, SMOKE_WATCHDOG_MS);
+  watchdogTimer.unref();
+});
+const hardExit = setTimeout(
+  () => {
+    marked?.marker.remove();
+    smoke.abortSync();
+    const results = writeResults(false);
+    console.error(`${LABEL}: cleanup timed out; the results are in ${results}`);
+    process.exit(1);
+  },
+  SMOKE_WATCHDOG_MS + 3 * 60_000,
+);
+hardExit.unref();
+
+const bodyPromise = runBody().catch((error: unknown) => {
   const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
   smoke.checks.add(`${LABEL} ran to its end`, false, text.split("\n").slice(0, 4).join(" | "));
-}
-const code = await smoke.finish();
-clearTimeout(watchdog);
+});
+await Promise.race([bodyPromise, watchdog]);
+clearTimeout(watchdogTimer);
+if (watchdogFired) await within(bodyPromise, UNINSTALL_MS + 15_000);
+marked?.marker.remove();
+const finished = await within(smoke.finish(), 30_000);
+if (finished === null) smoke.abortSync();
+const code = finished !== null && !watchdogFired ? finished : 1;
+clearTimeout(hardExit);
 // A pass removed the run's folder; its results come back into it alone.
 const results = writeResults(code === 0);
 console.log(`${LABEL}: the results are in ${results}`);
