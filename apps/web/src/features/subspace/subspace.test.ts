@@ -1073,5 +1073,31 @@ describe("Subspace web UI regressions", () => {
     await switchHost();
     rejectBytes!(new Error("aborted mid-stream"));
     await expect(bytesPromise).rejects.toBeInstanceOf(StaleHostMutationError);
+
+    // 5. send(): discarded streaming response body is cancelled on stale host switch
+    const cancelSpy = vi.fn(async () => {});
+    let resolveStreamFetch: ((res: Response) => void) | null = null;
+    fetchSpy.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveStreamFetch = resolve;
+        }),
+    );
+    const streamPromise = actualSend("POST /api/local/chats/:id/messages", {
+      params: { id: "chat-1" },
+      body: { text: "hi" },
+    });
+    await vi.waitFor(() => {
+      expect(resolveStreamFetch).not.toBeNull();
+    });
+    await switchHost();
+    resolveStreamFetch!({
+      ok: true,
+      status: 200,
+      bodyUsed: false,
+      body: { cancel: cancelSpy },
+    } as unknown as Response);
+    await expect(streamPromise).rejects.toBeInstanceOf(StaleHostMutationError);
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
   });
 });

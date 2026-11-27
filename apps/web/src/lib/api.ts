@@ -195,8 +195,15 @@ function splitRoute(route: string): { readonly method: string; readonly path: st
   return { method: route.slice(0, space), path: route.slice(space + 1) };
 }
 
-function assertFreshHostWrite(hostScopedWrite: boolean, startedEpoch: number): void {
+function assertFreshHostWrite(
+  hostScopedWrite: boolean,
+  startedEpoch: number,
+  response?: Response,
+): void {
   if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+    if (response !== undefined && !response.bodyUsed) {
+      void response.body?.cancel().catch(() => {});
+    }
     throw new StaleHostMutationError();
   }
 }
@@ -232,10 +239,10 @@ export async function send(route: string, input: Loose = {}): Promise<Response> 
     if (signal?.aborted) throw error;
     throw new ApiError(0, "unreachable", String(error));
   }
-  assertFreshHostWrite(hostScopedWrite, startedEpoch);
+  assertFreshHostWrite(hostScopedWrite, startedEpoch, response);
   if (!response.ok) {
     const err = await errorFrom(response);
-    assertFreshHostWrite(hostScopedWrite, startedEpoch);
+    assertFreshHostWrite(hostScopedWrite, startedEpoch, response);
     if (err.status === 409 && err.code === "conflict") {
       for (const listener of [...expectedHostConflictListeners]) listener();
     }
