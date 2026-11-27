@@ -321,11 +321,12 @@ export class SubspaceManager {
         throw codedError("call-active", "A call is in progress; hang up before switching servers");
       }
     }
+    // Re-read after awaiting in case another caller removed hostId or switched activeHostId.
     const previous = this.activeHostId;
+    const updated = this.store.setActiveHostId(hostId);
     if (previous !== null && previous !== hostId) {
       this.#clients.get(previous)?.stop();
     }
-    const updated = this.store.setActiveHostId(hostId);
     if (hostId !== null) {
       const server = updated.servers.find((s) => s.id === hostId);
       if (server === undefined) {
