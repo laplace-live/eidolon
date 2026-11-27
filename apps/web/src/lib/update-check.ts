@@ -38,7 +38,7 @@ export function checkForUpdates(): void {
   }
   const app = desktop();
   if (current.phase === "unsupported" || !app?.updateCheck) return;
-  // Also while the launch check runs: main joins it and surfaces skipped versions too.
+  // Also while a quiet check runs: main joins it and surfaces skipped versions too.
   toast.loading(t`Checking for updates…`, { id: CHECK_TOAST_ID });
   const fail = (message: string) =>
     toast.error(t`Update check failed: ${ph({ message })}`, { id: CHECK_TOAST_ID });

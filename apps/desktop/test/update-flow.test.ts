@@ -490,19 +490,83 @@ describe("UpdateFlow", () => {
     // Newer version advances the offered update directly from 0.2.0 to 0.2.1.
     await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
     expect(s.checks).toHaveLength(4);
-    // Download clicked mid-refresh waits for the refresh and downloads 0.2.1.
-    f.flow.download();
-    expect(s.downloads).toHaveLength(0);
     s.checks[3]?.resolve(release("0.2.1", { eidolonNotes: notes021 }));
     await settle();
+    expect(f.flow.state).toEqual({ phase: "available", version: "0.2.1", notes: notes021 });
+    expect(f.states).toEqual(["checking", "available 0.2.0", "available 0.2.1"]);
+
+    // Download clicked mid-refresh waits for the refresh, keeps manual outcome if joined on an
+    // offline failure, and starts straight into downloading when a newer release lands.
+    await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
+    expect(s.checks).toHaveLength(5);
+    const joinedFail = f.flow.check(true);
+    f.flow.download();
+    expect(s.downloads).toHaveLength(0);
+    s.checks[4]?.reject(new Error("offline"));
+    expect(await joinedFail).toEqual({ outcome: "available", version: "0.2.1" });
     expect(s.downloads).toHaveLength(1);
-    expect(f.flow.state).toEqual({ phase: "downloading", version: "0.2.1", percent: 0 });
-    expect(f.states).toEqual([
-      "checking",
-      "available 0.2.0",
-      "available 0.2.1",
-      "downloading 0.2.1 0",
+    s.downloads[0]?.done.reject(new Error("reset"));
+    await settle();
+
+    // Reset to available 0.2.1 and verify download() mid-refresh onto 0.2.2 skips a transient available push.
+    const recover = new UpdateFlow({
+      driver: s.driver,
+      restart: async () => true,
+      relaunch: () => {},
+      progress: () => {},
+      version: "0.1.0",
+      log: { info: () => {}, warn: () => {} },
+      changed: (state) => f.states.push(`r:${word(state)}`),
+      notes: manifestNotes,
+    });
+    const initial = recover.check(false);
+    s.checks[5]?.resolve(release("0.2.1", { eidolonNotes: notes021 }));
+    await initial;
+    void recover.check(false);
+    recover.download();
+    s.checks[6]?.resolve(release("0.2.2", { eidolonNotes: notes021 }));
+    await settle();
+    expect(s.downloads).toHaveLength(2);
+    expect(recover.state).toEqual({ phase: "downloading", version: "0.2.2", percent: 0 });
+    expect(f.states.filter((entry) => entry.startsWith("r:"))).toEqual([
+      "r:checking",
+      "r:available 0.2.1",
+      "r:downloading 0.2.2 0",
     ]);
+  });
+
+  test("a check started synchronously from changed keeps #checking intact", async () => {
+    const s = scripted();
+    let reentered = false;
+    let flow!: UpdateFlow;
+    flow = new UpdateFlow({
+      driver: s.driver,
+      restart: async () => true,
+      relaunch: () => {},
+      progress: () => {},
+      version: "0.1.0",
+      log: { info: () => {}, warn: () => {} },
+      changed: (state) => {
+        if (state.phase === "available" && !reentered) {
+          reentered = true;
+          void flow.check(false);
+        }
+      },
+    });
+    const first = flow.check(false);
+    s.checks[0]?.resolve(release("0.2.0"));
+    await first;
+    await settle();
+    expect(s.checks).toHaveLength(2);
+    // Second check is still in flight; joining it must reuse checks[1] and defer download().
+    const joined = flow.check(true);
+    flow.download();
+    expect(s.checks).toHaveLength(2);
+    expect(s.downloads).toHaveLength(0);
+    s.checks[1]?.resolve(release("0.2.1"));
+    expect(await joined).toEqual({ outcome: "available", version: "0.2.1" });
+    expect(s.downloads).toHaveLength(1);
+    expect(flow.state).toEqual({ phase: "downloading", version: "0.2.1", percent: 0 });
   });
 
   test("hourly ticks do not hit the feed while downloading, in error, downloaded, or after stop()", async () => {
@@ -547,9 +611,11 @@ describe("UpdateFlow", () => {
     stoppedAfterLaunch.flow.backendReady();
     await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS);
     expect(s.checks).toHaveLength(2);
-    s.checks[1]?.resolve(null);
+    s.checks[1]?.resolve(release("0.2.0"));
     await settle();
     stoppedAfterLaunch.flow.stop();
+    stoppedAfterLaunch.flow.download();
+    expect(s.downloads).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS * 2);
     expect(s.checks).toHaveLength(2);
   });
@@ -1203,5 +1269,71 @@ describe("FallbackUpdateBoxes", () => {
       message: "LAPLACE Eidolon can't update itself here",
       buttons: ["OK"],
     });
+  });
+
+  test("prompts for an hourly update that arrived while another box was open and skips a redundant box on mid-refresh download", async () => {
+    const s = scripted();
+    const opened: { message: string; close: PromiseWithResolvers<number> }[] = [];
+    let boxes!: FallbackUpdateBoxes;
+    const flow = new UpdateFlow({
+      driver: s.driver,
+      version: "0.1.0",
+      log: { info: () => {}, warn: () => {} },
+      changed: (state) => {
+        void boxes.stateChanged(state);
+      },
+      restart: async () => false,
+      relaunch: () => {},
+      progress: () => {},
+    });
+    boxes = new FallbackUpdateBoxes({
+      flow,
+      version: "0.1.0",
+      strings: () => en,
+      quitting: () => false,
+      showBox: (opts) => {
+        const close = Promise.withResolvers<number>();
+        opened.push({ message: opts.message, close });
+        return close.promise;
+      },
+    });
+
+    flow.backendReady();
+    const manual = boxes.checkByHand();
+    s.checks[0]?.resolve(null);
+    await settle();
+    expect(opened.map((b) => b.message)).toEqual(["LAPLACE Eidolon is up to date"]);
+
+    // While "up to date" sits open, the launch check lands 0.2.0; closing "up to date" prompts 0.2.0.
+    await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS);
+    s.checks[1]?.resolve(release("0.2.0"));
+    await settle();
+    expect(opened).toHaveLength(1);
+    opened[0]?.close.resolve(0);
+    await manual;
+    await settle();
+    expect(opened.map((b) => b.message)).toEqual([
+      "LAPLACE Eidolon is up to date",
+      "LAPLACE Eidolon 0.2.0 is available",
+    ]);
+
+    // Hourly refresh starts while 0.2.0 box is open; clicking Download waits for 0.2.1 without opening
+    // a spurious "0.2.1 is available" box, then prompts "Restart to finish updating" once downloaded.
+    await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
+    expect(s.checks).toHaveLength(3);
+    opened[1]?.close.resolve(0);
+    await settle();
+    expect(s.downloads).toHaveLength(0);
+    s.checks[2]?.resolve(release("0.2.1"));
+    await settle();
+    expect(s.downloads).toHaveLength(1);
+    expect(opened).toHaveLength(2);
+    s.downloads[0]?.done.resolve();
+    await settle();
+    expect(opened.map((b) => b.message)).toEqual([
+      "LAPLACE Eidolon is up to date",
+      "LAPLACE Eidolon 0.2.0 is available",
+      "Restart to finish updating",
+    ]);
   });
 });

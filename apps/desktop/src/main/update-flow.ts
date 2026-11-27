@@ -237,7 +237,6 @@ export class UpdateFlow {
   #checking: Promise<UpdateCheckOutcome> | null = null;
   /** Whether the running check reports skipped versions too: Check for Updates… asked too. */
   #manual = false;
-  #scheduled = false;
   #stopped = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #pendingDownload = false;
@@ -262,8 +261,7 @@ export class UpdateFlow {
 
   /** The backend is ready: the first time, schedules a quiet check 10 s later and every hour after. */
   backendReady(): void {
-    if (this.#driver === null || this.#scheduled || this.#stopped) return;
-    this.#scheduled = true;
+    if (this.#driver === null || this.#timer !== undefined || this.#stopped) return;
     this.#schedule(LAUNCH_CHECK_DELAY_MS);
   }
 
@@ -288,50 +286,28 @@ export class UpdateFlow {
       return Promise.resolve({ outcome: "none" });
     }
     this.#manual = manual;
-    const checking = this.#check(this.#driver).finally(() => {
-      this.#checking = null;
-    });
-    this.#checking = checking;
-    return checking;
+    const { promise, resolve, reject } = Promise.withResolvers<UpdateCheckOutcome>();
+    this.#checking = promise;
+    this.#check(this.#driver).then(resolve, reject);
+    return promise;
   }
 
   /** Download, from an update found or one whose download failed. */
   download(): void {
     const state = this.#state;
     const driver = this.#driver;
-    if (driver === null || (state.phase !== "available" && state.phase !== "error")) return;
+    if (
+      driver === null ||
+      this.#stopped ||
+      (state.phase !== "available" && state.phase !== "error")
+    ) {
+      return;
+    }
     if (this.#checking !== null) {
       this.#pendingDownload = true;
       return;
     }
-    const { version } = state;
-    this.#set({ phase: "downloading", version, percent: 0 });
-    this.#options.log.info(`Eidolon: downloading ${version}`);
-    this.#options.progress(0);
-    driver
-      .download((percent) => {
-        const now = this.#state;
-        const rounded = Math.min(100, Math.max(0, Math.round(percent)));
-        if (now.phase !== "downloading" || rounded === now.percent) return;
-        this.#set({ phase: "downloading", version, percent: rounded });
-        this.#options.progress(rounded / 100);
-      })
-      .then(
-        () => {
-          if (this.#state.phase !== "downloading") return;
-          this.#options.progress(null);
-          this.#set({ phase: "downloaded", version, notes: this.#notes });
-          this.#options.log.info(`Eidolon: update downloaded: ${version}`);
-          if (this.#options.autoProceed) this.install();
-        },
-        (error: unknown) => {
-          if (this.#state.phase !== "downloading") return;
-          this.#options.progress(null);
-          const message = reason(error);
-          this.#set({ phase: "error", version, message });
-          this.#options.log.warn(`Eidolon: the download of ${version} failed: ${message}`);
-        },
-      );
+    this.#startDownload(driver, state.version);
   }
 
   /** Restart, once: the hop to installing comes first, so a second Restart does nothing. */
@@ -373,6 +349,7 @@ export class UpdateFlow {
     const state = this.#state;
     if (state.phase !== "available") return;
     this.#pendingDownload = false;
+    this.#manual = false;
     const { version } = state;
     this.#options.saveSkippedVersion?.(version);
     this.#options.log.info(`Eidolon: skipped update ${version}`);
@@ -413,15 +390,15 @@ export class UpdateFlow {
     if (failedMessage !== null) {
       if (this.#state.phase === "checking") this.#set({ phase: "idle" });
       log.warn(`Eidolon: the update check failed: ${failedMessage}`);
-      if (!this.#stopped && pendingDownload && this.#state.phase === "available") this.download();
-      return manual && this.#state.phase === "available"
-        ? { outcome: "available", version: this.#state.version }
-        : { outcome: "error", message: failedMessage };
+      const outcome: UpdateCheckOutcome =
+        manual && this.#state.phase === "available"
+          ? { outcome: "available", version: this.#state.version }
+          : { outcome: "error", message: failedMessage };
+      if (pendingDownload) this.download();
+      return outcome;
     }
     if (found === null) {
-      if (this.#state.phase === "checking" || this.#state.phase === "available") {
-        this.#set({ phase: "idle" });
-      }
+      this.#set({ phase: "idle" });
       log.info(`Eidolon: up to date: ${current} is the latest`);
       return { outcome: "none" };
     }
@@ -429,23 +406,52 @@ export class UpdateFlow {
     const alreadyOffered =
       this.#state.phase === "available" && this.#state.version === found.version;
     if (!this.#options.autoProceed && !manual && !alreadyOffered && found.version === skipped) {
-      if (this.#state.phase === "checking" || this.#state.phase === "available") {
-        this.#set({ phase: "idle" });
-      }
+      this.#set({ phase: "idle" });
       log.info(`Eidolon: update available: ${found.version} (skipped)`);
       return { outcome: "none" };
     }
-    const nextNotes = this.#options.notes?.(found, current) ?? [];
-    if (!isDeepStrictEqual(this.#notes, nextNotes)) this.#notes = nextNotes;
-    this.#set({ phase: "available", version: found.version, notes: this.#notes });
+    this.#notes = this.#options.notes?.(found, current) ?? [];
     log.info(`Eidolon: update available: ${found.version}`);
-    if (!this.#stopped && (this.#options.autoProceed || pendingDownload)) this.download();
+    if (!this.#stopped && (this.#options.autoProceed || pendingDownload)) {
+      this.#startDownload(driver, found.version);
+    } else {
+      this.#set({ phase: "available", version: found.version, notes: this.#notes });
+    }
     return { outcome: "available", version: found.version };
+  }
+
+  #startDownload(driver: UpdateDriver, version: string): void {
+    this.#set({ phase: "downloading", version, percent: 0 });
+    this.#options.log.info(`Eidolon: downloading ${version}`);
+    this.#options.progress(0);
+    driver
+      .download((percent) => {
+        const now = this.#state;
+        const rounded = Math.min(100, Math.max(0, Math.round(percent)));
+        if (now.phase !== "downloading" || rounded === now.percent) return;
+        this.#set({ phase: "downloading", version, percent: rounded });
+        this.#options.progress(rounded / 100);
+      })
+      .then(
+        () => {
+          if (this.#state.phase !== "downloading") return;
+          this.#options.progress(null);
+          this.#set({ phase: "downloaded", version, notes: this.#notes });
+          this.#options.log.info(`Eidolon: update downloaded: ${version}`);
+          if (this.#options.autoProceed) this.install();
+        },
+        (error: unknown) => {
+          if (this.#state.phase !== "downloading") return;
+          this.#options.progress(null);
+          const message = reason(error);
+          this.#set({ phase: "error", version, message });
+          this.#options.log.warn(`Eidolon: the download of ${version} failed: ${message}`);
+        },
+      );
   }
 
   #schedule(delay: number): void {
     this.#timer = setTimeout(() => {
-      this.#timer = undefined;
       if (this.#stopped) return;
       this.#schedule(CHECK_INTERVAL_MS);
       void this.check(false);
@@ -474,36 +480,10 @@ export class UpdateFlow {
   }
 
   #set(next: UpdateState): void {
-    if (sameUpdateState(this.#state, next)) return;
+    if (isDeepStrictEqual(this.#state, next)) return;
     this.#state = next;
     this.#options.changed?.(next);
   }
-}
-
-function sameUpdateState(a: UpdateState, b: UpdateState): boolean {
-  if (a === b) return true;
-  if (a.phase !== b.phase) return false;
-  if (
-    a.phase === "unsupported" ||
-    a.phase === "read-only" ||
-    a.phase === "idle" ||
-    a.phase === "checking"
-  ) {
-    return true;
-  }
-  if (a.phase === "downloading" && b.phase === "downloading") {
-    return a.version === b.version && a.percent === b.percent;
-  }
-  if (a.phase === "error" && b.phase === "error") {
-    return a.version === b.version && a.message === b.message;
-  }
-  if (
-    (a.phase === "available" || a.phase === "downloaded" || a.phase === "installing") &&
-    (b.phase === "available" || b.phase === "downloaded" || b.phase === "installing")
-  ) {
-    return a.version === b.version && a.notes === b.notes;
-  }
-  return false;
 }
 
 /** The mock's update, beyond any real one. */
@@ -662,11 +642,16 @@ export class FallbackUpdateBoxes {
 
   /** Prompts on passive or post-check state transitions when the active page cannot render them. */
   async stateChanged(state: UpdateState): Promise<void> {
+    if (state.phase === "installing") return;
+    if (state.phase !== "available" && state.phase !== "downloaded" && state.phase !== "error") {
+      this.#prompted = null;
+      return;
+    }
+    const key = `${state.phase}:${state.version}`;
+    if (this.#prompted === key || this.#open || this.#options.quitting()) return;
+    this.#prompted = key;
+    const { label, text } = this.#options.strings();
     if (state.phase === "available") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
       const clicked = await this.#ask({
         type: "info",
         message: text.updateAvailableTitle(state.version),
@@ -676,13 +661,7 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
-      return;
-    }
-    if (state.phase === "downloaded") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
+    } else if (state.phase === "downloaded") {
       const clicked = await this.#ask({
         type: "info",
         message: text.updateDownloadedTitle,
@@ -692,13 +671,7 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.install();
-      return;
-    }
-    if (state.phase === "error") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
+    } else {
       const clicked = await this.#ask({
         type: "warning",
         message: text.updateFailedTitle,
@@ -708,10 +681,8 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
-      return;
     }
-    if (state.phase === "installing") return;
-    this.#prompted = null;
+    void this.stateChanged(this.#options.flow.state);
   }
 
   /** Handles Check for Updates… when the active page cannot handle `check-updates`. */
@@ -744,6 +715,7 @@ export class FallbackUpdateBoxes {
         detail: text.upToDate(this.#options.version),
         buttons: [label.ok],
       });
+      void this.stateChanged(this.#options.flow.state);
       return;
     }
     if (res.outcome === "error") {
@@ -753,6 +725,7 @@ export class FallbackUpdateBoxes {
         detail: res.message,
         buttons: [label.ok],
       });
+      void this.stateChanged(this.#options.flow.state);
       return;
     }
     if (this.#prompted !== `available:${res.version}`) {
