@@ -409,11 +409,37 @@ describe("testLocalNetwork", () => {
     });
   });
 
-  test("LOCAL_NETWORK_CONNECT_SCRIPT rejects loopback sockets and inspects nested AggregateError codes", async () => {
+  test("LOCAL_NETWORK_CONNECT_SCRIPT blocks loopback/DNS-rebound targets before TCP connect and inspects AggregateError codes", async () => {
     const server = createServer();
+    let accepted = 0;
+    server.on("connection", () => {
+      accepted += 1;
+    });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("expected TCP address");
+
+    const dnsRebindRunner: LocalNetworkChildRunner = (_file, args, options, callback) => {
+      const preload = `(() => {
+        const dns = require("node:dns");
+        dns.lookup = (_hostname, opts, cb) => {
+          const fn = typeof opts === "function" ? opts : cb;
+          const all = typeof opts === "object" && opts !== null && opts.all === true;
+          process.nextTick(() => {
+            if (all) fn(null, [{ address: "127.0.0.1", family: 4 }]);
+            else fn(null, "127.0.0.1", 4);
+          });
+        };
+      })();\n`;
+      const script = args.at(-3) ?? "";
+      const target = args.slice(-2);
+      execFile(
+        process.execPath,
+        ["-e", `${preload}${script}`, ...target],
+        { timeout: options.timeout },
+        callback,
+      );
+    };
 
     try {
       const loopback = await new Promise<{
@@ -430,6 +456,16 @@ describe("testLocalNetwork", () => {
       expect(loopback.error).not.toBeNull();
       expect(loopback.error?.code).toBe(1);
       expect(loopback.stderr).toBe("INVALID_TARGET");
+      expect(accepted).toBe(0);
+
+      const rebindHost = createDesktopPermissions(makeHost({ runChild: dnsRebindRunner }));
+      expect(
+        await rebindHost.testLocalNetwork({ host: "rebind.local", port: address.port }),
+      ).toMatchObject({
+        ok: false,
+        failure: "invalid-target",
+      });
+      expect(accepted).toBe(0);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

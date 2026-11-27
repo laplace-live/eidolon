@@ -10,9 +10,6 @@ export const LC_UUID_CMDSIZE = 24;
 /** Prebuilt Electron binaries linked with lld carry LC_UUIDs starting with "4c4c44" ("LLD"). */
 export const STOCK_LLD_UUID_PREFIX = "4c4c44";
 
-/** RFC 4122 DNS namespace UUID used as a fixed seed namespace for deterministic UUIDv5 derivation. */
-const UUID_NAMESPACE = Buffer.from("6ba7b8109dad11d180b400c04fd430c8", "hex");
-
 interface Source {
   readonly size: number;
   read(offset: number, length: number): Buffer;
@@ -45,14 +42,12 @@ function fdSource(fd: number, size: number, file: string): Source {
   };
 }
 
-/** Derives a deterministic 16-byte RFC 4122 UUIDv5 for a Mach-O executable from `seed`. */
+/** Derives a deterministic 16-byte RFC 9562 UUIDv8 for a Mach-O executable from `seed`. */
 export function deriveMachoUuid(seed: string): Buffer {
-  const hash = createHash("sha1")
-    .update(UUID_NAMESPACE)
-    .update(`eidolon-macho-uuid:${seed}`, "utf8")
-    .digest();
+  const hash = createHash("sha256").update(`eidolon-macho-uuid:${seed}`, "utf8").digest();
   const uuid = Buffer.from(hash.subarray(0, 16));
-  uuid[6] = (uuid[6]! & 0x0f) | 0x50;
+  if (uuid[0] === 0x4c && uuid[1] === 0x4c && uuid[2] === 0x44) uuid[0] ^= 0x01;
+  uuid[6] = (uuid[6]! & 0x0f) | 0x80;
   uuid[8] = (uuid[8]! & 0x3f) | 0x80;
   return uuid;
 }
@@ -66,12 +61,17 @@ export function formatUuid(bytes: Uint8Array): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-function locateExecuteUuidOffset(source: Source, label: string): number | null {
-  if (source.size < 32) return null;
+type LocateResult =
+  | { readonly kind: "not-execute" }
+  | { readonly kind: "missing-uuid" }
+  | { readonly kind: "ok"; readonly offset: number };
+
+function locateExecuteUuidOffset(source: Source, label: string): LocateResult {
+  if (source.size < 32) return { kind: "not-execute" };
   const header = source.read(0, 32);
   const magic = header.readUInt32LE(0);
   const filetype = header.readUInt32LE(12);
-  if (magic !== MH_MAGIC_64 || filetype !== MH_EXECUTE) return null;
+  if (magic !== MH_MAGIC_64 || filetype !== MH_EXECUTE) return { kind: "not-execute" };
   const ncmds = header.readUInt32LE(16);
   const sizeofcmds = header.readUInt32LE(20);
   if (32 + sizeofcmds > source.size) {
@@ -89,11 +89,11 @@ function locateExecuteUuidOffset(source: Source, label: string): number | null {
       throw new RangeError(`Invalid Mach-O load command size in ${label}`);
     }
     if (cmd === LC_UUID && cmdsize === LC_UUID_CMDSIZE) {
-      return 32 + off + 8;
+      return { kind: "ok", offset: 32 + off + 8 };
     }
     off += cmdsize;
   }
-  throw new Error(`No LC_UUID load command in ${label}`);
+  return { kind: "missing-uuid" };
 }
 
 function withFileSource<T>(
@@ -110,8 +110,8 @@ function withFileSource<T>(
 }
 
 function readUuidFromSource(source: Source, label: string): string | null {
-  const offset = locateExecuteUuidOffset(source, label);
-  return offset === null ? null : formatUuid(source.read(offset, 16));
+  const located = locateExecuteUuidOffset(source, label);
+  return located.kind === "ok" ? formatUuid(source.read(located.offset, 16)) : null;
 }
 
 /** Returns the lowercase UUID string of a 64-bit MH_EXECUTE Mach-O binary, or null otherwise. */
@@ -126,11 +126,14 @@ export function rewriteMachoExecuteUuid(file: string, uuid: Buffer): void {
     throw new Error(`Expected 16 UUID bytes, got ${uuid.length}`);
   }
   withFileSource(file, "r+", (source, fd) => {
-    const offset = locateExecuteUuidOffset(source, file);
-    if (offset === null) {
+    const located = locateExecuteUuidOffset(source, file);
+    if (located.kind === "not-execute") {
       throw new Error(`${file} is not a 64-bit MH_EXECUTE Mach-O binary`);
     }
-    const written = writeSync(fd, uuid, 0, 16, offset);
+    if (located.kind === "missing-uuid") {
+      throw new Error(`No LC_UUID load command in ${file}`);
+    }
+    const written = writeSync(fd, uuid, 0, 16, located.offset);
     if (written !== 16) {
       throw new Error(`Failed to write full LC_UUID to ${file}: wrote ${written} bytes`);
     }

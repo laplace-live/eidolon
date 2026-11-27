@@ -64,7 +64,8 @@ const MESSAGE_BY_CODE: Readonly<Partial<Record<ErrorCode, string>>> = {
   "pairing-expired": "This pairing link has expired; ask the remote host for a new one",
   "pairing-failed": "Pairing with the remote Subspace server failed",
   "subspace-unreachable": "Could not reach the Subspace server",
-  "local-network-blocked": "Local network access is blocked in macOS System Settings",
+  "local-network-blocked":
+    "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
   "upstream-failed": "Could not reach the Relay auth server",
   "relay-auth-required": "Sign in to the Subspace Relay first",
   "unknown-subspace-server": "Unknown Subspace server",

@@ -2399,4 +2399,34 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
       ),
     ).toBe(true);
   });
+
+  test("SubspaceClient exposes lastErrorCode on connection failure and clears it on stop", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected HTTP server address");
+    const unusedPort = address.port;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    const hostKp = await generateX25519KeyPair();
+    const client = new SubspaceClient({
+      id: "srv-err-code",
+      name: "Unreachable Host",
+      hostPublicKeyB64: hostKp.publicKeyB64,
+      grantId: "grant-1",
+      deviceToken: "token-1",
+      mode: "direct",
+      endpoint: { host: "127.0.0.1", port: unusedPort },
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+      lastVersion: null,
+    });
+    cleanups.push(() => client.stop());
+    await expect(client.connect()).rejects.toMatchObject({ code: "subspace-unreachable" });
+    expect(client.state).toBe("error");
+    expect(client.lastErrorCode).toBe("subspace-unreachable");
+    client.stop();
+    expect(client.state).toBe("disconnected");
+    expect(client.lastErrorCode).toBeNull();
+  });
 });

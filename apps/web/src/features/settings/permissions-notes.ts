@@ -139,7 +139,7 @@ export function requestResultNotice(
 export const CONNECTION_FAILURE_TEXT: Readonly<Record<LocalNetworkTestFailure, MessageDescriptor>> =
   {
     "invalid-target": msg`Enter a private LAN IP address or hostname and a port between 1 and 65535.`,
-    blocked: msg`macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network.`,
+    blocked: msg`Could not reach that host on your local network. Check that it is online, or allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network.`,
     refused: msg`The host responded on your local network, though nothing is listening on that port.`,
     timeout: msg`Connection timed out. Check the host, port, and macOS Local Network settings.`,
     unresolved: msg`The hostname could not be resolved on this network.`,
@@ -147,6 +147,8 @@ export const CONNECTION_FAILURE_TEXT: Readonly<Record<LocalNetworkTestFailure, M
     background: msg`Background mode leaves network testing disabled.`,
     failed: msg`The connection test could not be completed.`,
   };
+
+const MAX_DATE_MS = 8_640_000_000_000_000;
 
 export function loadVerifiedLocalNetwork(): VerifiedLocalNetwork | null {
   if (typeof localStorage === "undefined") return null;
@@ -159,7 +161,9 @@ export function loadVerifiedLocalNetwork(): VerifiedLocalNetwork | null {
       parsed.host.length > 0 &&
       isValidPort(parsed.port) &&
       typeof parsed.testedAt === "number" &&
-      Number.isFinite(parsed.testedAt)
+      Number.isFinite(parsed.testedAt) &&
+      parsed.testedAt >= 0 &&
+      parsed.testedAt <= MAX_DATE_MS
     ) {
       return { host: parsed.host, port: parsed.port, testedAt: parsed.testedAt };
     }

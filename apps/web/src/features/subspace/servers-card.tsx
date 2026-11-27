@@ -325,7 +325,10 @@ export function ServersCard() {
             .filter((part): part is string => Boolean(part))
             .join(" · ");
           const showPermissionsLink =
-            macDesktop && server.mode === "direct" && server.connectionState === "error";
+            macDesktop &&
+            server.mode === "direct" &&
+            server.connectionState === "error" &&
+            server.lastErrorCode === "local-network-blocked";
 
           return (
             <ListRow

@@ -122,7 +122,7 @@ test("?tab=desktop opens the Desktop App card there, and leads elsewhere in a br
 test("?tab=permissions opens the Permissions card when supported, and leads elsewhere otherwise", () => {
   const perms = render("/settings?tab=permissions", withPermissions);
   expect(perms.redirectTo).toBeUndefined();
-  expect(perms.html).toContain("Permissions");
+  expect(perms.html).toContain("System permissions for LAPLACE Eidolon on this computer");
 
   const browser = render("/settings?tab=permissions", undefined);
   expect(browser.html).toBe("");

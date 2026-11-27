@@ -67,8 +67,14 @@ vi.doMock("@/components/ui/collapsible", () => ({
   },
 }));
 
-const { permissionActionKind, permissionNote, permissionStatusText, requestResultNotice } =
-  await import("./permissions-notes");
+const {
+  loadVerifiedLocalNetwork,
+  LOCAL_NETWORK_STORAGE_KEY,
+  permissionActionKind,
+  permissionNote,
+  permissionStatusText,
+  requestResultNotice,
+} = await import("./permissions-notes");
 const { PermissionsSection, permissionsQuery } = await import("./permissions-card");
 const { offersPermissions } = await import("./sections");
 const { subspaceQuery } = await import("@/features/subspace/queries");
@@ -179,6 +185,31 @@ describe("permissions helpers", () => {
     expect(
       requestResultNotice({ id: "microphone", status: "granted", openedSettings: false }, "darwin"),
     ).toMatchObject({ kind: "success" });
+
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) =>
+        key === LOCAL_NETWORK_STORAGE_KEY
+          ? JSON.stringify({ host: "10.0.1.5", port: 63427, testedAt: 1e20 })
+          : null,
+    });
+    try {
+      expect(loadVerifiedLocalNetwork()).toBeNull();
+      vi.stubGlobal("localStorage", {
+        getItem: () => JSON.stringify({ host: "10.0.1.5", port: 63427, testedAt: -1 }),
+      });
+      expect(loadVerifiedLocalNetwork()).toBeNull();
+      vi.stubGlobal("localStorage", {
+        getItem: () =>
+          JSON.stringify({ host: "10.0.1.5", port: 63427, testedAt: 1_795_000_000_000 }),
+      });
+      expect(loadVerifiedLocalNetwork()).toEqual({
+        host: "10.0.1.5",
+        port: 63427,
+        testedAt: 1_795_000_000_000,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -230,8 +261,8 @@ describe("PermissionsSection", () => {
     expect(said).toContain("No successful test saved.");
     expect(said).toContain("Screen Recording Denied");
     expect(said).toContain("Accessibility Check Manually");
-    expect(row(markup, "microphone")).toContain("Request");
-    expect(row(markup, "local-network")).toContain("Request Access");
+    expect(row(markup, "microphone")).toContain(">Request<");
+    expect(row(markup, "local-network")).toContain(">Request Access<");
     expect(row(markup, "notifications")).not.toContain(">Request<");
   });
 

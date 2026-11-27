@@ -426,7 +426,7 @@ describe("Local server Subspace proxy & host switching", () => {
       .mockRejectedValueOnce(
         new SubspaceConnectError(
           "local-network-blocked",
-          "Local network access is blocked in macOS System Settings",
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
         ),
       );
     const blockedRes = await fetch(`${local.base}/api/local/chats`, { headers: local.session });
@@ -435,7 +435,8 @@ describe("Local server Subspace proxy & host switching", () => {
     const blockedBody = (await blockedRes.json()) as ErrorBody;
     expect(blockedBody.error).toMatchObject({
       code: "local-network-blocked",
-      message: "Local network access is blocked in macOS System Settings",
+      message:
+        "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
     });
     expect(blockedBody.error.id).toMatch(/^[0-9a-f]{8}$/);
   });
@@ -522,7 +523,7 @@ describe("subspaceRoutes error handling", () => {
       pairServer: async () => {
         throw new SubspaceConnectError(
           "local-network-blocked",
-          "Local network access is blocked in macOS System Settings",
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
         );
       },
       startRelayAuth: async () => {
@@ -621,7 +622,8 @@ describe("subspaceRoutes error handling", () => {
     expect((await localNetRes.json()) as ErrorBody).toEqual({
       error: {
         code: "local-network-blocked",
-        message: "Local network access is blocked in macOS System Settings",
+        message:
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
       },
     });
   });

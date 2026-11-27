@@ -236,7 +236,7 @@ async function dialAuthenticatedTunnel(input: {
     isMacLocalNetworkBlocked(err, input.target.mode, input.target.endpoint?.host)
       ? new SubspaceConnectError(
           "local-network-blocked",
-          "Local network access is blocked in macOS System Settings",
+          "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
         )
       : undefined;
   const ws = new WebSocket(targetWsUrl(input.target));
@@ -373,6 +373,7 @@ export class SubspaceClient {
   #connectEpoch = 0;
   #state: SubspaceConnectionState = "disconnected";
   #lastError: string | null = null;
+  #lastErrorCode: SubspaceConnectError["code"] | null = null;
   #latencyMs: number | null = null;
   #wanted = false;
   #revoked = false;
@@ -424,6 +425,10 @@ export class SubspaceClient {
 
   get lastError(): string | null {
     return this.#lastError;
+  }
+
+  get lastErrorCode(): SubspaceConnectError["code"] | null {
+    return this.#lastErrorCode;
   }
 
   get latencyMs(): number | null {
@@ -705,7 +710,8 @@ export class SubspaceClient {
         error instanceof SubspaceConnectError
           ? error.message
           : "Could not connect to remote server";
-      this.#setState("error", message);
+      const errorCode = error instanceof SubspaceConnectError ? error.code : "subspace-unreachable";
+      this.#setState("error", message, errorCode);
       if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
       throw error;
     }
@@ -715,10 +721,15 @@ export class SubspaceClient {
     tunnel: ActiveTunnel,
     dropReason: string,
     errorReason: string | null = dropReason,
+    errorCode: SubspaceConnectError["code"] = "subspace-unreachable",
   ): void {
     if (this.#tunnel !== tunnel) return;
     this.#dropTunnel(dropReason);
-    this.#setState(this.#wanted ? "error" : "disconnected", this.#wanted ? errorReason : null);
+    this.#setState(
+      this.#wanted ? "error" : "disconnected",
+      this.#wanted ? errorReason : null,
+      this.#wanted ? errorCode : null,
+    );
     if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
   }
 
@@ -754,7 +765,12 @@ export class SubspaceClient {
     tunnel.ws.on("close", (code, reason) => {
       if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
         this.#revoked = true;
-        this.#failActiveTunnel(tunnel, "Device access was revoked", "Device access was revoked");
+        this.#failActiveTunnel(
+          tunnel,
+          "Device access was revoked",
+          "Device access was revoked",
+          "pairing-failed",
+        );
         return;
       }
       const msg = reason.toString("utf8") || null;
@@ -816,10 +832,17 @@ export class SubspaceClient {
     this.#reconnectTimer.unref?.();
   }
 
-  #setState(state: SubspaceConnectionState, error: string | null): void {
-    if (this.#state === state && this.#lastError === error) return;
+  #setState(
+    state: SubspaceConnectionState,
+    error: string | null,
+    errorCode: SubspaceConnectError["code"] | null = null,
+  ): void {
+    if (this.#state === state && this.#lastError === error && this.#lastErrorCode === errorCode) {
+      return;
+    }
     this.#state = state;
     this.#lastError = error;
+    this.#lastErrorCode = errorCode;
     this.#events.onStateChange?.();
   }
 }

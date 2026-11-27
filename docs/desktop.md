@@ -1646,7 +1646,7 @@ Each step prints one line, made of the checks inside it:
    typed; then the smoke replaces the handler through Playwright's `app.evaluate`
    (`ipcMain.removeHandler`, then `ipcMain.handle` answering a folder of the run's), and the folder
    it answers joins the draft as a line of its own, which nothing saves.
-8. **Settings → Desktop & Permissions:** Open at Login, the terminal command, and every
+8. **Settings → Desktop** and **Settings → Permissions:** Open at Login, the terminal command, and every
    permission row each say "Background mode leaves this computer as it is.", their controls
    disabled.
 9. **The desktop companion,** drawn and never shown in background mode: the test rig, imported

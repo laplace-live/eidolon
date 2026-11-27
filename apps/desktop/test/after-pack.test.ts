@@ -78,37 +78,44 @@ ${rows}
 }
 
 describe("Mach-O LC_UUID helpers and desktop afterPack hook", () => {
-  test("deriveMachoUuid produces deterministic RFC 4122 UUIDv5 buffers distinct from stock lld UUIDs", () => {
+  test("deriveMachoUuid produces deterministic RFC 9562 UUIDv8 buffers distinct from stock lld UUIDs", () => {
     const a1 = deriveMachoUuid("live.laplace.eidolon@0.9.0+electron-45.5.0:main");
     const a2 = deriveMachoUuid("live.laplace.eidolon@0.9.0+electron-45.5.0:main");
     const b = deriveMachoUuid("live.laplace.eidolon.helper@0.9.0+electron-45.5.0:Helper.app");
     expect(a1).toEqual(a2);
     expect(a1).not.toEqual(b);
     expect(a1.length).toBe(16);
-    expect((a1[6]! & 0xf0) >> 4).toBe(5);
+    expect((a1[6]! & 0xf0) >> 4).toBe(8);
     expect((a1[8]! & 0xc0) >> 6).toBe(2);
     expect(formatUuid(a1).startsWith(STOCK_LLD_UUID_PREFIX)).toBe(false);
     expect(formatUuid(b).startsWith(STOCK_LLD_UUID_PREFIX)).toBe(false);
   });
 
-  test("readMachoExecuteUuid and rewriteMachoExecuteUuid update MH_EXECUTE and ignore MH_DYLIB", () => {
+  test("readMachoExecuteUuid returns null when LC_UUID is absent and rewriteMachoExecuteUuid handles non-execute or missing-UUID binaries", () => {
     const stockBytes = Buffer.from("4c4c448e55553144a14cbbd02afa9f74", "hex");
     const exeBuf = makeMachoBinary(MH_EXECUTE, stockBytes);
     const dylibBuf = makeMachoBinary(6, stockBytes);
+    const missingUuidExe = Buffer.alloc(32);
+    missingUuidExe.writeUInt32LE(MH_MAGIC_64, 0);
+    missingUuidExe.writeUInt32LE(MH_EXECUTE, 12);
 
     expect(readMachoExecuteUuid(exeBuf)).toBe("4c4c448e-5555-3144-a14c-bbd02afa9f74");
     expect(readMachoExecuteUuid(dylibBuf)).toBeNull();
+    expect(readMachoExecuteUuid(missingUuidExe)).toBeNull();
 
     const dir = tempDir("eidolon-macho-");
     const exeFile = join(dir, "main");
     const dylibFile = join(dir, "framework");
+    const noUuidFile = join(dir, "no-uuid");
     writeFileSync(exeFile, exeBuf);
     writeFileSync(dylibFile, dylibBuf);
+    writeFileSync(noUuidFile, missingUuidExe);
 
     const nextUuid = deriveMachoUuid("test-exe");
     rewriteMachoExecuteUuid(exeFile, nextUuid);
     expect(readMachoExecuteUuid(exeFile)).toBe(formatUuid(nextUuid));
     expect(() => rewriteMachoExecuteUuid(dylibFile, nextUuid)).toThrow(/not a 64-bit MH_EXECUTE/);
+    expect(() => rewriteMachoExecuteUuid(noUuidFile, nextUuid)).toThrow(/No LC_UUID load command/);
   });
 
   test("rewriteAppBundleUuids rewrites main and helper executables, leaves .framework intact, and no-ops off darwin", async () => {

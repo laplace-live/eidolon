@@ -1,7 +1,8 @@
 // `node apps/desktop/scripts/signed-check.ts`: the checks on a signed release in apps/desktop/.out,
 // which desktop.yml runs after its signed package step. On macOS: the app's signature, Gatekeeper's
 // verdict, the stapled ticket, the hardened runtime and a secure timestamp on each of the payload's
-// natives, and the designated requirement of the app and every helper. On Windows: the NSIS setup
+// natives, the designated requirement of the app and every helper, NSLocalNetworkUsageDescription
+// in Info.plist, and unique non-stock LC_UUIDs on the app and helper executables. On Windows: the NSIS setup
 // installed for this user, a timestamped Authenticode signature on every PE file of the install,
 // the setup and the uninstaller included, each the org's where the release signs it and Microsoft's
 // elsewhere, then the uninstall. A PASS or FAIL line per check, and exit 1 when one failed.

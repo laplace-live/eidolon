@@ -142,7 +142,10 @@ function hasInvalidRequestTarget(request: Request, pathname: string): boolean {
 function proxyFailure(error: unknown, mapPairingFailed: boolean): readonly [ErrorCode, string] {
   if (error instanceof SubspaceConnectError) {
     if (error.code === "local-network-blocked") {
-      return ["local-network-blocked", "Local network access is blocked in macOS System Settings"];
+      return [
+        "local-network-blocked",
+        "Could not reach the server on your local network; check that it is running and that Local Network access is enabled in macOS System Settings",
+      ];
     }
     if (mapPairingFailed && error.code === "pairing-failed") {
       return ["pairing-failed", "Remote server rejected this device's pairing token"];

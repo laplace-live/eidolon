@@ -1457,8 +1457,8 @@ msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and o
 msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
 
 #: src/lib/labels.ts
-msgid "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
-msgstr "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
+msgid "Can't reach that server on your local network. Check that it's running, or allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network."
+msgstr "Can't reach that server on your local network. Check that it's running, or allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network."
 
 #: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
@@ -1821,6 +1821,10 @@ msgstr "Cost"
 #: src/features/jobs/detail.tsx
 msgid "Cost So Far"
 msgstr "Cost So Far"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Could not reach that host on your local network. Check that it is online, or allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
+msgstr "Could not reach that host on your local network. Check that it is online, or allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
 
 #: src/features/call/call-notices.tsx
 msgid "Couldn't connect the call."
@@ -3662,10 +3666,6 @@ msgstr "Looking through the stream archive…"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Lowercase letters, digits and hyphens. Saved as {path}."
 msgstr "Lowercase letters, digits and hyphens. Saved as {path}."
-
-#: src/features/settings/permissions-notes.ts
-msgid "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
-msgstr "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
 
 #: src/features/settings/permissions-notes.ts
 msgid "macOS does not report Local Network status to apps. Use Test Connection below to confirm LAN access works."

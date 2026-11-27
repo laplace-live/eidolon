@@ -87,10 +87,11 @@ const CHILD_TIMEOUT_MS = CONNECT_TIMEOUT_MS + 1_000;
 const MDNS_PROMPT_TIMEOUT_MS = 1_000;
 
 export const LOCAL_NETWORK_CONNECT_SCRIPT = `
+const dns = require("node:dns");
 const net = require("node:net");
 const host = process.argv[1];
 const port = Number(process.argv[2]);
-const socket = net.createConnection({ host, port });
+let socket = null;
 let settled = false;
 function finish(code) {
   if (settled) return;
@@ -99,11 +100,12 @@ function finish(code) {
     process.stderr.write(code);
     process.exitCode = 1;
   }
-  socket.destroy();
+  if (socket) socket.destroy();
 }
 function errorCodeOf(error) {
   if (error && Array.isArray(error.errors) && error.errors.length > 0) {
     const codes = error.errors.map(errorCodeOf);
+    if (codes.includes("INVALID_TARGET")) return "INVALID_TARGET";
     if (codes.includes("ECONNREFUSED")) return "ECONNREFUSED";
     if (codes.includes("ETIMEDOUT")) return "ETIMEDOUT";
     return error.code || codes.find(Boolean) || "FAILED";
@@ -131,10 +133,40 @@ function isLanAddress(address) {
   }
   return false;
 }
-socket.setTimeout(${CONNECT_TIMEOUT_MS});
-socket.once("connect", () => finish(isLanAddress(socket.remoteAddress) ? undefined : "INVALID_TARGET"));
-socket.once("timeout", () => finish("ETIMEDOUT"));
-socket.once("error", (error) => finish(errorCodeOf(error)));
+if (net.isIP(host) !== 0 && !isLanAddress(host)) {
+  finish("INVALID_TARGET");
+} else {
+  const lanLookup = (hostname, options, callback) => {
+    dns.lookup(hostname, options, (error, address, family) => {
+      if (error) {
+        callback(error);
+        return;
+      }
+      if (Array.isArray(address)) {
+        if (address.length === 0) {
+          callback(Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" }));
+          return;
+        }
+        if (!address.every((entry) => isLanAddress(entry && entry.address))) {
+          callback(Object.assign(new Error("INVALID_TARGET"), { code: "INVALID_TARGET" }));
+          return;
+        }
+        callback(null, address);
+        return;
+      }
+      if (!isLanAddress(address)) {
+        callback(Object.assign(new Error("INVALID_TARGET"), { code: "INVALID_TARGET" }));
+        return;
+      }
+      callback(null, address, family);
+    });
+  };
+  socket = net.createConnection({ host, port, lookup: lanLookup });
+  socket.setTimeout(${CONNECT_TIMEOUT_MS});
+  socket.once("connect", () => finish(isLanAddress(socket.remoteAddress) ? undefined : "INVALID_TARGET"));
+  socket.once("timeout", () => finish("ETIMEDOUT"));
+  socket.once("error", (error) => finish(errorCodeOf(error)));
+}
 `;
 
 export function permissionIdsForPlatform(platform: NodeJS.Platform): readonly PermissionId[] {

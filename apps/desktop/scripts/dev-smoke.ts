@@ -1730,7 +1730,10 @@ async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
   step.check(`both say "${note}", their controls disabled`, pass, found.join("; "));
 
   await settingsSection(page, "Permissions", "permissions");
-  const expectedIds = ["microphone", "notifications", "local-network", "screen", "accessibility"];
+  const expectedIds =
+    process.platform === "win32"
+      ? ["microphone", "notifications"]
+      : ["microphone", "notifications", "local-network", "screen", "accessibility"];
   const notifSays = await page
     .locator('[data-permission="notifications"]')
     .getByText(note, { exact: true })
@@ -1747,7 +1750,7 @@ async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
         .locator("button")
         .evaluateAll(
           (elements) =>
-            elements.length >= 5 &&
+            elements.length >= expectedIds.length &&
             elements.every((element) => (element as HTMLButtonElement).disabled),
         );
   const bgAllSayNote = !walk.background

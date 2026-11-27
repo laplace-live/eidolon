@@ -2174,6 +2174,7 @@ export interface SubspaceServerView {
   readonly lastVersion: string | null;
   readonly connectionState: SubspaceConnectionState;
   readonly lastError: string | null;
+  readonly lastErrorCode?: string | null;
   readonly latencyMs: number | null;
 }
 

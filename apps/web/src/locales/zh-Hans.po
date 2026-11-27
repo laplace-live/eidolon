@@ -1457,8 +1457,8 @@ msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and o
 msgstr "无法连接 Eidolon 的服务器。如果它一直没有恢复，请退出 Eidolon 再重新打开。"
 
 #: src/lib/labels.ts
-msgid "Can't reach that server on your local network. Allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network, then try again."
-msgstr "连不上局域网里的这台服务器。请在“系统设置 > 隐私与安全性 > 本地网络”里允许 LAPLACE Eidolon，再试一次。"
+msgid "Can't reach that server on your local network. Check that it's running, or allow LAPLACE Eidolon in System Settings > Privacy & Security > Local Network."
+msgstr "连不上局域网里的这台服务器。请确认它正在运行，或在“系统设置 > 隐私与安全性 > 本地网络”里允许 LAPLACE Eidolon。"
 
 #: src/lib/labels.ts
 msgid "Can't reach that Subspace server. Check that it's running and connected."
@@ -1821,6 +1821,10 @@ msgstr "费用"
 #: src/features/jobs/detail.tsx
 msgid "Cost So Far"
 msgstr "目前费用"
+
+#: src/features/settings/permissions-notes.ts
+msgid "Could not reach that host on your local network. Check that it is online, or allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
+msgstr "无法连接到局域网中的该主机。请确认主机在线，或在「系统设置」→「隐私与安全性」→「本地网络」中允许 LAPLACE Eidolon。"
 
 #: src/features/call/call-notices.tsx
 msgid "Couldn't connect the call."
@@ -3662,10 +3666,6 @@ msgstr "正在翻看直播回放…"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Lowercase letters, digits and hyphens. Saved as {path}."
 msgstr "用小写字母、数字和连字符。会保存为 {path}。"
-
-#: src/features/settings/permissions-notes.ts
-msgid "macOS blocked the local network connection. Allow LAPLACE Eidolon in System Settings under Privacy & Security → Local Network."
-msgstr "macOS 阻止了此次局域网连接。请在「系统设置」→「隐私与安全性」→「本地网络」中允许 LAPLACE Eidolon。"
 
 #: src/features/settings/permissions-notes.ts
 msgid "macOS does not report Local Network status to apps. Use Test Connection below to confirm LAN access works."
