@@ -4,6 +4,7 @@
 // updater.ts runs it on electron-updater and pushes each state change to the app page.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { MessageBoxOptions, NativeImage } from "electron";
 import type { UpdateInfo } from "electron-updater";
 import type { UpdateCheckOutcome, UpdateState } from "../shared/bridge.ts";
@@ -12,8 +13,11 @@ import { launchFlag } from "./environment.ts";
 import { loggedText } from "./policy.ts";
 import type { Strings } from "./strings.ts";
 
-/** How long after the backend is first ready the quiet check runs, clear of startup. */
+/** How long after the backend is first ready the first quiet check runs, clear of startup. */
 export const LAUNCH_CHECK_DELAY_MS = 10_000;
+
+/** Period between background update checks once the launch check has run. */
+export const CHECK_INTERVAL_MS = 60 * 60_000;
 
 /**
  * NSIS's per-user install folder, %LOCALAPPDATA%\Programs\<name>, from electron-builder.yml's
@@ -191,7 +195,7 @@ export interface UpdateFlowOptions {
    * update test under EIDOLON_DESKTOP_UPDATE_TEST).
    */
   readonly autoProceed?: boolean;
-  /** Previously skipped version, kept silent on quiet launch checks. */
+  /** Previously skipped version, kept silent on quiet checks. */
   readonly skippedVersion?: () => string | null;
   /** Persists a newly skipped version. */
   readonly saveSkippedVersion?: (version: string) => void;
@@ -222,8 +226,8 @@ function reason(error: unknown): string {
 }
 
 /**
- * A quiet check 10 s after the backend is first ready, and manual checks from the app menu or
- * tray; state changes push to the renderer's title-bar badge and in-app update dialog.
+ * Quiet checks 10 s after the backend is first ready and every hour after, plus manual checks from
+ * the app menu or tray; state changes push to the renderer's title-bar badge and update dialog.
  */
 export class UpdateFlow {
   readonly #options: UpdateFlowOptions;
@@ -234,6 +238,9 @@ export class UpdateFlow {
   /** Whether the running check reports skipped versions too: Check for Updates… asked too. */
   #manual = false;
   #scheduled = false;
+  #stopped = false;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #pendingDownload = false;
   /** quitAndInstall was called: the app is meant to be quitting. */
   #committed = false;
   #relaunched = false;
@@ -253,11 +260,18 @@ export class UpdateFlow {
     return this.#state;
   }
 
-  /** The backend is ready: the first time, the quiet check is set for 10 s later. */
+  /** The backend is ready: the first time, schedules a quiet check 10 s later and every hour after. */
   backendReady(): void {
-    if (this.#driver === null || this.#scheduled) return;
+    if (this.#driver === null || this.#scheduled || this.#stopped) return;
     this.#scheduled = true;
-    setTimeout(() => void this.check(false), LAUNCH_CHECK_DELAY_MS);
+    this.#schedule(LAUNCH_CHECK_DELAY_MS);
+  }
+
+  /** Cancels scheduled background checks once the app is quitting. */
+  stop(): void {
+    this.#stopped = true;
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
   }
 
   /** One check of the feed; one asked while another runs joins it, a manual one surfacing skipped versions. */
@@ -267,10 +281,10 @@ export class UpdateFlow {
       return this.#checking;
     }
     const state = this.#state;
-    if (state.phase === "available") {
+    if (manual && state.phase === "available") {
       return Promise.resolve({ outcome: "available", version: state.version });
     }
-    if (state.phase !== "idle" || this.#driver === null) {
+    if ((state.phase !== "idle" && state.phase !== "available") || this.#driver === null) {
       return Promise.resolve({ outcome: "none" });
     }
     this.#manual = manual;
@@ -286,6 +300,10 @@ export class UpdateFlow {
     const state = this.#state;
     const driver = this.#driver;
     if (driver === null || (state.phase !== "available" && state.phase !== "error")) return;
+    if (this.#checking !== null) {
+      this.#pendingDownload = true;
+      return;
+    }
     const { version } = state;
     this.#set({ phase: "downloading", version, percent: 0 });
     this.#options.log.info(`Eidolon: downloading ${version}`);
@@ -354,6 +372,7 @@ export class UpdateFlow {
   skip(): void {
     const state = this.#state;
     if (state.phase !== "available") return;
+    this.#pendingDownload = false;
     const { version } = state;
     this.#options.saveSkippedVersion?.(version);
     this.#options.log.info(`Eidolon: skipped update ${version}`);
@@ -375,7 +394,7 @@ export class UpdateFlow {
   }
 
   async #check(driver: UpdateDriver): Promise<UpdateCheckOutcome> {
-    this.#set({ phase: "checking" });
+    if (this.#state.phase === "idle") this.#set({ phase: "checking" });
     this.#options.log.info("Eidolon: checking for updates");
     let found: UpdateInfo | null = null;
     let failedMessage: string | null = null;
@@ -383,31 +402,55 @@ export class UpdateFlow {
       found = await driver.check();
     } catch (error) {
       failedMessage = reason(error);
+    } finally {
+      this.#checking = null;
     }
     const manual = this.#manual;
     this.#manual = false;
+    const pendingDownload = this.#pendingDownload;
+    this.#pendingDownload = false;
     const { log, version: current } = this.#options;
     if (failedMessage !== null) {
-      this.#set({ phase: "idle" });
+      if (this.#state.phase === "checking") this.#set({ phase: "idle" });
       log.warn(`Eidolon: the update check failed: ${failedMessage}`);
-      return { outcome: "error", message: failedMessage };
+      if (!this.#stopped && pendingDownload && this.#state.phase === "available") this.download();
+      return manual && this.#state.phase === "available"
+        ? { outcome: "available", version: this.#state.version }
+        : { outcome: "error", message: failedMessage };
     }
     if (found === null) {
-      this.#set({ phase: "idle" });
+      if (this.#state.phase === "checking" || this.#state.phase === "available") {
+        this.#set({ phase: "idle" });
+      }
       log.info(`Eidolon: up to date: ${current} is the latest`);
       return { outcome: "none" };
     }
     const skipped = this.#options.skippedVersion?.() ?? null;
-    if (!this.#options.autoProceed && !manual && found.version === skipped) {
-      this.#set({ phase: "idle" });
+    const alreadyOffered =
+      this.#state.phase === "available" && this.#state.version === found.version;
+    if (!this.#options.autoProceed && !manual && !alreadyOffered && found.version === skipped) {
+      if (this.#state.phase === "checking" || this.#state.phase === "available") {
+        this.#set({ phase: "idle" });
+      }
       log.info(`Eidolon: update available: ${found.version} (skipped)`);
       return { outcome: "none" };
     }
-    this.#notes = this.#options.notes?.(found, current) ?? [];
+    const nextNotes = this.#options.notes?.(found, current) ?? [];
+    if (!isDeepStrictEqual(this.#notes, nextNotes)) this.#notes = nextNotes;
     this.#set({ phase: "available", version: found.version, notes: this.#notes });
     log.info(`Eidolon: update available: ${found.version}`);
-    if (this.#options.autoProceed) this.download();
+    if (!this.#stopped && (this.#options.autoProceed || pendingDownload)) this.download();
     return { outcome: "available", version: found.version };
+  }
+
+  #schedule(delay: number): void {
+    this.#timer = setTimeout(() => {
+      this.#timer = undefined;
+      if (this.#stopped) return;
+      this.#schedule(CHECK_INTERVAL_MS);
+      void this.check(false);
+    }, delay);
+    this.#timer.unref?.();
   }
 
   /** The restart has stopped everything: quitAndInstall, or the app back without the update. */

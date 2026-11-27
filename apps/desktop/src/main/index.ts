@@ -384,6 +384,7 @@ function run(): void {
     strings,
     icon,
     approved: () => {
+      updates?.stop();
       chatWatch?.stop();
       watch?.stop();
       companion?.quit();
