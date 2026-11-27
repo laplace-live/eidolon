@@ -268,6 +268,31 @@ describe("CallStages", () => {
     expect(taps()).toEqual([signals.meter, null]);
   });
 
+  test("gives each stage on a group call its own motion pace and timing, and leaves a solo call's at default", async () => {
+    const { parts, stages } = fakeParts();
+    const cast = new CallStages(fakeSignals(), parts);
+    cast.load(soloTarget(member("milky-green")), loads().how);
+    await settle();
+    expect(stages[0]?.options.pace).toBeUndefined();
+    expect(stages[0]?.options.offset).toBeUndefined();
+    expect(stages[0]?.options.reaction).toBeUndefined();
+
+    cast.load(chatTarget("c1", member("milky-green"), [member("hazel", null)]), loads().how);
+    await settle();
+    expect(stages[1]?.options.pace).toBeUndefined();
+
+    cast.load(chatTarget("c1", member("milky-green"), [member("hazel")]), loads().how);
+    await settle();
+    const [, , first, second] = stages;
+    expect(first?.options.pace).not.toBe(second?.options.pace);
+    expect(first?.options.offset).not.toBe(second?.options.offset);
+    expect(first?.options.sway).not.toBe(second?.options.sway);
+    expect(Math.sign(first?.options.away?.[0] ?? 0)).toBe(
+      -Math.sign(second?.options.away?.[0] ?? 0),
+    );
+    expect(first?.options.reaction).not.toBe(second?.options.reaction);
+  });
+
   test("is blank once every stage made found no model or failed", async () => {
     const { parts } = fakeParts();
     const cast = new CallStages(fakeSignals(), parts);

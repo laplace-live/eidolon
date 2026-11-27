@@ -28,6 +28,9 @@ const BLINK = 1;
 const BREATH = 2;
 const LOOK = 4;
 const LIP_SYNC = 8;
+const STAGE_CLIPS = 1;
+const STAGE_EXPRESSIONS = 2;
+const STAGE_BEHAVIORS = 4;
 /** p2l_rig_load_ex's P2L_LOAD_VERIFY_CRC: every chunk that carries a CRC is checked. */
 const VERIFY_CRC = 1;
 const ERROR_CAPACITY = 512;
@@ -87,6 +90,7 @@ export class Psd2liveRig {
 
   private readonly rt: P2lExports;
   private rig: number;
+  private blinkSeed: number | undefined;
   readonly width: number;
   readonly height: number;
   readonly clips: readonly ModelClip[];
@@ -336,6 +340,13 @@ export class Psd2liveRig {
     this.rt.p2l_behaviors(this.rig, flags);
   }
 
+  /** Reseeds the blink timing. */
+  behaviorSeed(seed: number): void {
+    const next = seed >>> 0;
+    this.blinkSeed = next;
+    this.rt.p2l_behavior_seed(this.rig, next);
+  }
+
   /**
    * How strongly breathing sways her and gaze turns her head, body and eyes, and how quickly gaze
    * follows, 1 each as loaded; false, changing nothing, for a negative one.
@@ -524,6 +535,15 @@ export class Psd2liveRig {
   /** Deforms the rig at the host's pose alone, dropping what clips and physics added. */
   evaluate(): void {
     this.rt.p2l_evaluate(this.rig);
+  }
+
+  /** Advances clips and behaviors by [dt] seconds and settles pendulums at that pose. */
+  advance(dt: number): void {
+    if (!Number.isFinite(dt) || !(dt > 0)) return;
+    this.rt.p2l_update_stages(this.rig, dt, STAGE_CLIPS | STAGE_BEHAVIORS);
+    if (this.blinkSeed !== undefined) this.rt.p2l_behavior_seed(this.rig, this.blinkSeed);
+    this.rt.p2l_update_stages(this.rig, 0, STAGE_CLIPS | STAGE_EXPRESSIONS | STAGE_BEHAVIORS);
+    this.rt.p2l_physics_stabilize(this.rig);
   }
 
   /** The meshes to draw back to front, each isolated group opened by -2 - its part and closed by -1. */

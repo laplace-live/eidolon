@@ -100,8 +100,13 @@ export interface AvatarModel {
   mouth(level: number): void;
   /** Where she looks, each axis -1..1 (x right, y up). */
   lookAt(x: number, y: number): void;
-  /** How far her gaze turns her head, body and eyes: 0 not at all, 1 as far as the runtime does. */
-  lookStrength(strength: number): void;
+  /**
+   * How far her gaze turns her head, body and eyes (0 not at all, 1 as far as the runtime does),
+   * and optionally how strongly breathing sways her (1 unless given).
+   */
+  lookStrength(strength: number, o?: { readonly sway?: number }): void;
+  /** Advances her clips and idle behaviors by `seconds`, settling physics at that pose. */
+  advance?(seconds: number): void;
   /** The ids of the parameters a role such as AngleX moves; none when the model gives it none. */
   roleParameters(role: string): readonly string[];
   wear(outfit: ModelOutfitLike | null): void;

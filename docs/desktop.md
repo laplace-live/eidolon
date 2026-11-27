@@ -1795,10 +1795,12 @@ platform with its secrets alone ([Secrets](#secrets)):
 2. **Install:** `pnpm install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
    build step needs a package's install script, and the signing step must follow none.
 3. **Build:** `pnpm build:desktop` stages the runner's backend and builds `dist/`.
-4. **Package:** unsigned, `pnpm package:desktop -c.compression=store`, at `0.0.0-dev`, ad hoc on
-   macOS and never with a keychain identity, an NSIS setup on Windows, stored uncompressed, which
-   packs faster. From a tag or a `sign` dispatch, signed instead: electron-builder with the release
-   overlay and that leg's secrets ([Secrets](#secrets)), then [the signed build's
+4. **Package:** unsigned, `pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false`,
+   at `0.0.0-dev`, ad hoc on macOS (stored uncompressed) and never with a keychain identity, an
+   NSIS setup on Windows at level-1 7z compression (`ELECTRON_BUILDER_COMPRESSION_LEVEL=1`) without
+   a differential blockmap, which packs and installs faster than level-9 LZMA2 or a stored 650 MB
+   setup. From a tag or a `sign` dispatch, signed instead: electron-builder with the release overlay
+   and that leg's secrets ([Secrets](#secrets)), then [the signed build's
    checks](#the-signed-builds-checks).
 5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
    instead of skipping; run after packaging, it also holds the app's payload to the stage.

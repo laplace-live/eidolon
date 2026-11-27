@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { directionOf, directionState } from "../src/avatar/direct.ts";
 import { AvatarError, resolveSetup } from "../src/avatar/model.ts";
+import { stageMotions } from "../src/avatar/motions.ts";
 import { Psd2liveModel } from "../src/avatar/psd2live/model.ts";
 import type { Psd2liveRenderer } from "../src/avatar/psd2live/renderer.ts";
 import { inspectPsd2liveRig, Psd2liveRig } from "../src/avatar/psd2live/rig.ts";
@@ -481,5 +482,85 @@ describe("the model", () => {
     for (; frames < Math.ceil(pass * 60) + 2; frames++) model.update(1 / 60);
     expect(rig.layerState(2)).toMatchObject({ clip: null, priority: 0 });
     model.dispose();
+  });
+
+  test("seeded stages with stageMotions breathe, idle and blink out of lockstep", () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0x1_0000_0000;
+    };
+    const motions = stageMotions(2, random);
+    const frames: ((now: number) => void)[] = [];
+    const make = (i: number, blinkSeed: number) => {
+      const rig = load();
+      rig.behaviorSeed(blinkSeed);
+      const model = new Psd2liveModel(rig, {
+        dispose() {},
+        draw() {},
+      } as unknown as Psd2liveRenderer);
+      const stage = new AvatarStage(new EventTarget() as unknown as HTMLCanvasElement, {
+        ...motions[i],
+        clock: { request: (frame) => frames.push(frame), cancel: () => {} },
+      });
+      stage.show(model, resolveSetup(model.inventory));
+      stage.gaze([0, 0]);
+      const at = (id: string) => rig.parameterValues()[rig.parameters.indexOf(id)] ?? Number.NaN;
+      return { rig, stage, at };
+    };
+    const first = make(0, 0x1234_5678);
+    const second = make(1, 0x9abc_def0);
+
+    // At frame 0, both have open eyes, settled physics, and distinct Idle and breathing poses.
+    for (const frame of frames.splice(0)) frame(0);
+    expect(first.at("ParamEyeLOpen")).toBeCloseTo(1, 2);
+    expect(second.at("ParamEyeLOpen")).toBeCloseTo(1, 2);
+    const settledArm = first.at("ParamArmLSwing");
+    expect(Math.abs(settledArm)).toBeGreaterThan(1e-4);
+    expect(
+      Math.abs((first.rig.layerState(0)?.time ?? 0) - (second.rig.layerState(0)?.time ?? 0)),
+    ).toBeGreaterThan(1);
+    expect(
+      Math.hypot(
+        first.at("ParamAngleX") - second.at("ParamAngleX"),
+        first.at("ParamBreath") * 10 - second.at("ParamBreath") * 10,
+      ),
+    ).toBeGreaterThan(0.5);
+
+    const blinksA: number[] = [];
+    const blinksB: number[] = [];
+    for (let step = 1; step <= 360; step++) {
+      for (const frame of frames.splice(0)) frame((step * 1000) / 60);
+      if (step === 1) expect(first.at("ParamArmLSwing")).toBeCloseTo(settledArm, 3);
+      if (first.at("ParamEyeLOpen") < 0.5) blinksA.push(step);
+      if (second.at("ParamEyeLOpen") < 0.5) blinksB.push(step);
+    }
+    expect(blinksA.length).toBeGreaterThan(0);
+    expect(blinksB.length).toBeGreaterThan(0);
+    expect(blinksA[0]).not.toBe(blinksB[0]);
+    first.stage.dispose();
+    second.stage.dispose();
+  });
+
+  test("advance wraps non-looping idle clips and ends one-shots before settling physics", () => {
+    const renderer = { dispose() {}, draw() {} } as unknown as Psd2liveRenderer;
+    const a = new Psd2liveModel(load(), renderer);
+    const b = new Psd2liveModel(load(), renderer);
+    const talk = a.inventory.clips.find((clip) => clip.group === "Talk");
+    const nod = a.inventory.clips.find((clip) => clip.group === "Nod");
+    expect(talk?.looping).toBe(false);
+    a.play(talk?.id ?? null, 0, { loop: true });
+    b.play(talk?.id ?? null, 0, { loop: true });
+    a.play(nod?.id ?? null, 2, { priority: 2 });
+    a.advance(7.5);
+    b.advance(10.2);
+    expect(a.rig.layerState(0)).toMatchObject({ clip: talk?.id, finished: false });
+    expect(b.rig.layerState(0)).toMatchObject({ clip: talk?.id, finished: false });
+    expect(
+      Math.abs((a.rig.layerState(0)?.time ?? 0) - (b.rig.layerState(0)?.time ?? 0)),
+    ).toBeGreaterThan(1);
+    expect(a.rig.layerState(2)).toMatchObject({ clip: null, priority: 0 });
+    a.dispose();
+    b.dispose();
   });
 });

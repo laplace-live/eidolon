@@ -1,7 +1,13 @@
 // One stage per member of a call who had a model, made as the call is placed and kept for its life,
 // steered by the call's signals. A view only holds a stage's canvas, which moves between views: a
 // canvas out of the page pauses its stage, and its GL context survives the move.
-import type { AvatarStage, AvatarStageOptions, FrameClock } from "@laplace.live/eidolon-sdk/avatar";
+import {
+  type AvatarStage,
+  type AvatarStageMotion,
+  type AvatarStageOptions,
+  type FrameClock,
+  stageMotions,
+} from "@laplace.live/eidolon-sdk/avatar";
 import type { LoadedModel } from "./cast";
 import { type CallSignals, MouthTap } from "./signals";
 import type { CallTarget, CastMember } from "./target";
@@ -112,8 +118,9 @@ export class CallStages {
     this.#group = target.kind === "chat" && target.group;
     // Each call's end, and StrictMode's unmount, disposes the stages: the next call routes again.
     this.#unsubscribe ??= this.#signals.subscribe(this.#route);
-    for (const member of target.cast) {
-      if (member.appearance.model === null) continue;
+    const members = target.cast.filter((member) => member.appearance.model !== null);
+    const motions = this.#group && members.length > 1 ? stageMotions(members.length) : [];
+    for (const [i, member] of members.entries()) {
       const entry: Entry = {
         persona: member.id,
         canvas: this.#parts.canvas(member.id, ++this.#made),
@@ -124,7 +131,7 @@ export class CallStages {
         stage: null,
       };
       this.#entries.push(entry);
-      void this.#start(entry, member, how);
+      void this.#start(entry, member, how, motions[i]);
     }
     this.#changed();
   }
@@ -170,12 +177,18 @@ export class CallStages {
     this.#changed();
   }
 
-  async #start(entry: Entry, member: CastMember, how: StageLoad): Promise<void> {
+  async #start(
+    entry: Entry,
+    member: CastMember,
+    how: StageLoad,
+    motion?: AvatarStageMotion,
+  ): Promise<void> {
     const { signal } = entry.loading;
     let stage: StageLike;
     let loaded: LoadedModel | null;
     try {
       stage = await this.#parts.stage(entry.canvas, {
+        ...motion,
         reducedMotion: how.reducedMotion,
         fps: CALL_FPS,
         onError: () => this.#set(entry, "failed"),

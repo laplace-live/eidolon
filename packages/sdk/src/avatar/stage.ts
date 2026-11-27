@@ -15,6 +15,7 @@ import {
   type ParameterHold,
   type ResolvedSetup,
 } from "./model.ts";
+import { type AvatarStageMotion, AWAY } from "./motions.ts";
 import type { MouthSource } from "./mouth.ts";
 
 /** Animation frames, which tests replace with a clock of their own. */
@@ -24,7 +25,7 @@ export interface FrameClock {
   cancel(handle: unknown): void;
 }
 
-export interface AvatarStageOptions {
+export interface AvatarStageOptions extends AvatarStageMotion {
   /** The most device pixels drawn per CSS pixel; 2 unless given. */
   readonly maxPixelRatio?: number;
   /** Frames a second at most; 0 (the default) draws every animation frame. */
@@ -48,10 +49,11 @@ const ANIMATION_FRAMES: FrameClock = {
 const MAX_DT = 0.1;
 /** Slack for an fps cap, since animation frames land a little early or late. */
 const FPS_SLACK_MS = 2;
+const MIN_PACE = 0.25;
+const MAX_PACE = 4;
 const IDLE = 0;
 const TALK = 1;
 const GESTURE = 2;
-const AWAY: readonly [number, number] = [0.35, 0.45];
 /** How far idle eyes wander from the viewer, and how long they rest between moves. */
 const SACCADE = 0.15;
 const SACCADE_MIN_MS = 2000;
@@ -104,6 +106,11 @@ export class AvatarStage {
   readonly #maxPixelRatio: number;
   readonly #fps: number;
   readonly #reducedMotion: boolean;
+  readonly #pace: number;
+  readonly #offset: number;
+  readonly #sway: number;
+  readonly #away: readonly [number, number];
+  readonly #reaction: number;
   readonly #onError: ((error: AvatarError) => void) | undefined;
   readonly #clock: FrameClock;
   #model: AvatarModel | null = null;
@@ -112,14 +119,18 @@ export class AvatarStage {
   #direction: Direction = NEUTRAL;
   #applied: Applied = { idle: null, expressions: null, talk: null, outfit: false, look: null };
   #moods = new MoodHolds();
+  /** A model was shown anew since the last frame: its starting offset is applied once. */
+  #fresh = false;
   /** A setup was shown since the last frame: its moods' parameters take their values at once. */
   #settle = true;
   /** What the model was last told to hold. */
   #held: readonly ParameterHold[] = [];
   #gestureSeq: number | null = null;
+  /** A non-speaking direction gesture waiting out `#reaction`. */
+  #delayed: { readonly name: Gesture; readonly at: number } | null = null;
   /** A gesture a page asked for, made at the next frame. */
   #asked: Gesture | null = null;
-  /** Seconds of frames applied, each at most MAX_DT, so a pause holds it as it holds the clips. */
+  /** Seconds of frames applied, scaled by `#pace`, so a pause holds it as it holds the clips. */
   #time = 0;
   /** A nod or a shake the stage plays through her head's parameters, from a `#time`. */
   #motion: { readonly name: HeadGesture; readonly at: number } | null = null;
@@ -144,6 +155,19 @@ export class AvatarStage {
     this.#maxPixelRatio = o.maxPixelRatio ?? 2;
     this.#fps = o.fps ?? 0;
     this.#reducedMotion = o.reducedMotion ?? false;
+    this.#pace =
+      o.pace !== undefined && Number.isFinite(o.pace) && o.pace > 0
+        ? Math.min(Math.max(o.pace, MIN_PACE), MAX_PACE)
+        : 1;
+    this.#offset =
+      o.offset !== undefined && Number.isFinite(o.offset) && o.offset > 0 ? o.offset : 0;
+    this.#sway = o.sway !== undefined && Number.isFinite(o.sway) && o.sway >= 0 ? o.sway : 1;
+    this.#away =
+      o.away !== undefined && Number.isFinite(o.away[0]) && Number.isFinite(o.away[1])
+        ? [clamp(o.away[0], 1), clamp(o.away[1], 1)]
+        : AWAY;
+    this.#reaction =
+      o.reaction !== undefined && Number.isFinite(o.reaction) && o.reaction > 0 ? o.reaction : 0;
     this.#onError = o.onError;
     this.#clock = o.clock ?? ANIMATION_FRAMES;
     canvas.addEventListener("webglcontextlost", this.#onContextLost);
@@ -182,8 +206,10 @@ export class AvatarStage {
       this.#last = null;
       this.#moods = new MoodHolds();
       this.#held = [];
+      this.#delayed = null;
       this.#motion = null;
       this.#roles = new Map();
+      this.#fresh = true;
     }
     this.#model = model;
     this.#setup = setup;
@@ -311,12 +337,19 @@ export class AvatarStage {
       return;
     }
     const dt = last === null ? 0 : Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
+    const step = dt * this.#pace;
     this.#last = now;
     const reads = this.#reads.splice(0);
+    const advancing = this.#fresh && !this.#reducedMotion && this.#offset > 0;
+    this.#fresh = false;
     try {
-      this.#apply(model, now, dt);
+      this.#apply(model, now, step, !advancing);
       model.mouth(this.#level(dt));
-      model.update(dt);
+      model.update(step);
+      if (advancing) {
+        model.advance?.(this.#offset);
+        if (this.#setup !== null) this.#gestures(model, this.#setup);
+      }
       model.draw(this.#pixelRatio(), this.#view(model));
       // The drawing buffer is cleared once the page composites the frame, so it is read now.
       for (const read of reads) read.done(model.alphaAt(read.x, read.y));
@@ -351,8 +384,8 @@ export class AvatarStage {
     );
   }
 
-  #apply(model: AvatarModel, now: number, dt: number): void {
-    this.#time += dt;
+  #apply(model: AvatarModel, now: number, step: number, gestures: boolean): void {
+    this.#time += step;
     const setup = this.#setup;
     if (setup === null) return;
     const direction = this.#direction;
@@ -362,7 +395,8 @@ export class AvatarStage {
       applied.outfit = true;
     }
     if (setup.look !== applied.look) {
-      model.lookStrength(setup.look);
+      if (this.#sway === 1) model.lookStrength(setup.look);
+      else model.lookStrength(setup.look, { sway: this.#sway });
       applied.look = setup.look;
     }
     const idle = this.#reducedMotion ? null : setup.gestures.idle;
@@ -383,25 +417,44 @@ export class AvatarStage {
       model.play(talk, TALK, { loop: true });
       applied.talk = talk;
     }
-    const gesture = direction.gesture;
-    if (gesture !== null && gesture.seq !== this.#gestureSeq) {
-      this.#gestureSeq = gesture.seq;
-      if (!this.#reducedMotion) this.#make(model, setup, gesture.name);
-    }
-    if (this.#asked !== null) {
-      this.#make(model, setup, this.#asked);
-      this.#asked = null;
-    }
+    if (gestures) this.#gestures(model, setup);
     this.#moods.set(moodSettings(setup, tags), this.#settle);
     this.#settle = false;
     // The head's turn goes over a mood that holds the same parameter.
-    const holds = [...this.#moods.step(dt), ...this.#motionHolds(model)];
+    const holds = [...this.#moods.step(step), ...this.#motionHolds(model)];
     if (!sameHolds(holds, this.#held)) {
       model.hold(holds);
       this.#held = holds;
     }
     const [x, y] = this.#lookTarget(direction, now);
     model.lookAt(x, y);
+  }
+
+  #gestures(model: AvatarModel, setup: ResolvedSetup): void {
+    const direction = this.#direction;
+    const gesture = direction.gesture;
+    if (gesture !== null && gesture.seq !== this.#gestureSeq) {
+      this.#gestureSeq = gesture.seq;
+      if (!this.#reducedMotion) {
+        if (!direction.speaking && this.#reaction > 0) {
+          this.#delayed = { name: gesture.name, at: this.#time + this.#reaction * this.#pace };
+        } else {
+          this.#delayed = null;
+          this.#make(model, setup, gesture.name);
+        }
+      }
+    }
+    if (gesture === null || direction.speaking) this.#delayed = null;
+    if (this.#delayed !== null && this.#time >= this.#delayed.at) {
+      const { name } = this.#delayed;
+      this.#delayed = null;
+      this.#make(model, setup, name);
+    }
+    if (this.#asked !== null) {
+      this.#delayed = null;
+      this.#make(model, setup, this.#asked);
+      this.#asked = null;
+    }
   }
 
   /**
@@ -446,17 +499,18 @@ export class AvatarStage {
     if (gaze !== "direction") return gaze;
     if (direction.looking === "viewer") return [0, 0];
     if (direction.looking === "away") {
-      if (this.#reducedMotion) return AWAY;
-      const t = now / 1000;
-      return [AWAY[0] + 0.04 * Math.sin(t * 0.9), AWAY[1] + 0.03 * Math.sin(t * 1.3)];
+      if (this.#reducedMotion) return this.#away;
+      const t = this.#offset + this.#time;
+      return [this.#away[0] + 0.04 * Math.sin(t * 0.9), this.#away[1] + 0.03 * Math.sin(t * 1.3)];
     }
     if (this.#reducedMotion) return [0, 0];
     const saccade = this.#saccade;
     if (saccade !== null && saccade.until > now) return [saccade.x, saccade.y];
+    const dwell = (SACCADE_MIN_MS + Math.random() * (SACCADE_MAX_MS - SACCADE_MIN_MS)) / this.#pace;
     const next = {
       x: (Math.random() * 2 - 1) * SACCADE,
       y: (Math.random() * 2 - 1) * SACCADE,
-      until: now + SACCADE_MIN_MS + Math.random() * (SACCADE_MAX_MS - SACCADE_MIN_MS),
+      until: now + dwell,
     };
     this.#saccade = next;
     return [next.x, next.y];

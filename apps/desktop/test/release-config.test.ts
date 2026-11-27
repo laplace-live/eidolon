@@ -194,4 +194,18 @@ describe("electron-builder's loader", () => {
     });
     await validateConfiguration(merged, { isEnabled: false });
   });
+
+  test("passes the schema for unsigned CI's stored NSIS build without a differential blockmap", async () => {
+    const { getConfig, validateConfiguration } = loader();
+    const config = await getConfig(DESKTOP, "electron-builder.yml", {
+      compression: "store",
+      nsis: { differentialPackage: false },
+    });
+    expect(config.compression).toBe("store");
+    expect(config.nsis).toMatchObject({
+      include: "resources/installer.nsh",
+      differentialPackage: false,
+    });
+    await validateConfiguration(config, { isEnabled: false });
+  });
 });

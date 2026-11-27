@@ -18,6 +18,7 @@ import {
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { killTree } from "@eidolon/config";
 import type { AccountsResponse } from "../../../bot/src/local/api.ts";
 import { hintFrom, originOf, readServerInfo, readToken } from "../../src/main/attach.ts";
 import { BACKGROUND_LINE, FAKE_MEDIA_DEVICE } from "../../src/main/background.ts";
@@ -25,7 +26,9 @@ import { COMPANION_LINES } from "../../src/main/companion.ts";
 import { appEnv } from "./env.ts";
 import { type Fakes, type FakesOptions, startFakes } from "./fakes.ts";
 import { type FocusWatch, watchFocus } from "./focus.ts";
-import { Processes, type Started } from "./processes.ts";
+import { Processes, type Started, within } from "./processes.ts";
+
+export { within };
 
 export const DESKTOP = resolve(import.meta.dirname, "../..");
 export const ROOT = resolve(DESKTOP, "../..");
@@ -201,11 +204,6 @@ export function readLog(run: Run, name: LogName): string {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((done) => setTimeout(done, ms));
-}
-
-/** `promise`'s value, or null once `ms` have passed. */
-export function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([promise, sleep(ms).then(() => null)]);
 }
 
 /** `read()`'s value once `done` holds for it, or its last one at the timeout. */
@@ -450,7 +448,7 @@ export async function startSmoke({
   argv = process.argv.slice(2),
   restoresPreferences = false,
   fakes: fakesOptions,
-}: SmokeOptions): Promise<Smoke & { finish(): Promise<number> }> {
+}: SmokeOptions): Promise<Smoke & { finish(): Promise<number>; abortSync(): void }> {
   const args = parseSmokeArgs(argv);
   const run = makeRun(label);
   const canary = `eidolon-smoke-canary-${randomBytes(9).toString("hex")}`;
@@ -467,14 +465,20 @@ export async function startSmoke({
     process.platform !== "darwin" ? "it runs on macOS only" : args.headful ? "--headful" : null;
   const focus = watchFocus({ ours: (pid) => processes.ours(pid), skip });
 
-  // Synchronous: Playwright's own handler exits the process once it has closed Electron.
-  const interrupted = (signal: NodeJS.Signals): void => {
-    process.stderr.write(`\n${label}: ${signal}, stopping what the smoke started\n`);
+  function abortSync(): void {
+    process.off("SIGINT", interrupted);
+    process.off("SIGTERM", interrupted);
     processes.killAllSync();
     preferences?.restore();
+  }
+
+  // Synchronous: Playwright's own handler exits the process once it has closed Electron.
+  function interrupted(signal: NodeJS.Signals): void {
+    process.stderr.write(`\n${label}: ${signal}, stopping what the smoke started\n`);
+    abortSync();
     process.stderr.write(`${label}: the run's folder is kept: ${run.root}\n`);
     process.exit(signal === "SIGINT" ? 130 : 143);
-  };
+  }
   process.once("SIGINT", interrupted);
   process.once("SIGTERM", interrupted);
 
@@ -521,10 +525,23 @@ export async function startSmoke({
     async quit(app, timeoutMs = 30_000) {
       const startedAt = Date.now();
       const second = smoke.launch("quit", app, ["--quit"]);
-      const timer = setTimeout(() => second.child.kill("SIGKILL"), timeoutMs);
-      const { code, signal } = await second.exited;
-      clearTimeout(timer);
-      return { code: signal === "SIGKILL" ? null : code, signal, ms: Date.now() - startedAt };
+      let exit = await within(second.exited, timeoutMs);
+      const timedOut = exit === null;
+      if (timedOut) {
+        if (
+          second.child.pid !== undefined &&
+          second.child.exitCode === null &&
+          second.child.signalCode === null
+        ) {
+          killTree(second.child.pid, { wait: true });
+        }
+        exit = await within(second.exited, 5000);
+      }
+      return {
+        code: timedOut ? null : (exit?.code ?? null),
+        signal: exit?.signal ?? (timedOut ? "SIGKILL" : null),
+        ms: Date.now() - startedAt,
+      };
     },
     log: (name) => readLog(run, name),
     waitForLine: (name, pattern, options) => waitForLine(run, name, pattern, options),
@@ -595,7 +612,7 @@ export async function startSmoke({
     return checks.pass ? 0 : 1;
   }
 
-  return { ...smoke, finish };
+  return { ...smoke, finish, abortSync };
 }
 
 /** Runs `body` as a smoke and exits with its verdict; a throw fails it with the error. */

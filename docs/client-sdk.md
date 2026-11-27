@@ -16,13 +16,13 @@ Three entries ship in the npm package, licensed under `AGPL-3.0-only`:
   `useEidolonTransportState`, `useEidolonMicControl`, `useEidolonMediaState`,
   `useEidolonMediaTrack`, `useEidolonNetworkInfo`, `useEidolonWatchdog`, `useEidolonConversation`,
   `useEidolonAudioLevel`, and `useEidolonMicDevices`.
-- **`@laplace.live/eidolon-sdk/avatar`** (`./avatar`): `AvatarStage`, `loadPsd2liveModel`,
-  `inspectPsd2liveRig`, `resolveSetup`, the direction reducer (`direct`, `directionOf`,
-  `directionState`), the mood table (`moodTags`, `soundCueEffect`, `DEFAULT_MOOD_EXPRESSIONS`), the
-  mouth (`MouthMeter`, `mouthCurve`), framing (`bustBox`, `companionBox`, `viewFor`, `panBox`,
-  `zoomBox`) and the runtime's loader (`compilePsd2liveRuntime`, `psd2liveRuntimeUrl`). It
-  includes PSD2Live's web player, ported, and ships its runtime: both are MIT
-  ([Avatars](#avatars-eidolon-sdkavatar)).
+- **`@laplace.live/eidolon-sdk/avatar`** (`./avatar`): `AvatarStage`, `stageMotions`,
+  `loadPsd2liveModel`, `inspectPsd2liveRig`, `resolveSetup`, the direction reducer (`direct`,
+  `directionOf`, `directionState`), the mood table (`moodTags`, `soundCueEffect`,
+  `DEFAULT_MOOD_EXPRESSIONS`), the mouth (`MouthMeter`, `mouthCurve`), framing (`bustBox`,
+  `companionBox`, `viewFor`, `panBox`, `zoomBox`) and the runtime's loader
+  (`compilePsd2liveRuntime`, `psd2liveRuntimeUrl`). It includes PSD2Live's web player, ported, and
+  ships its runtime: both are MIT ([Avatars](#avatars-eidolon-sdkavatar)).
 
 The SDK sits on top of `@pipecat-ai/client-js` and `@pipecat-ai/small-webrtc-transport` (exact
 versions in `packages/sdk/package.json`) and hides their transport quirks so downstream apps import
@@ -248,8 +248,9 @@ call's turns. The local app's Studio previews a persona's models with it.
 
 ### Models
 
-- **`loadPsd2liveModel(canvas, bytes, {runtime?})`** loads a rig, checking every chunk's CRC,
-  uploads its texture pages and resolves to a `Psd2liveModel`, the stage's `AvatarModel`.
+- **`loadPsd2liveModel(canvas, bytes, {runtime?, seed?})`** loads a rig, checking every chunk's CRC,
+  seeds its blink timing so rigs in separate runtime instances don't blink together, uploads its
+  texture pages and resolves to a `Psd2liveModel`, the stage's `AvatarModel`.
   `model.rig` reaches what the stage doesn't drive: poses, parameters and part opacity.
 - **`inspectPsd2liveRig(bytes, {runtime?})`** reads the same file without WebGL into a
   `ModelInventory`: the runtime's version, the generator, the canvas, the clips (id, name, group,
@@ -274,10 +275,11 @@ call's turns. The local app's Studio previews a persona's models with it.
   `Idle`, `Talk`, `Nod` or `Shake`), and `look`, how far her gaze turns her (0 to 1, 1 unless
   given).
 - **`AvatarModel`**, the adapter the stage drives, whose one kind is `psd2live`, besides drawing
-  and playing scales how far gaze turns her (`lookStrength`), names the parameters a role such as
-  `AngleX` moves (`roleParameters`), and holds parameters over its clips, expressions and outfit
-  (`hold`, each `ParameterHold` moving one from what the layers below give it toward a value by a
-  weight, a later hold over an earlier one).
+  and playing scales how far gaze turns her and how strongly breathing sways her (`lookStrength`),
+  advances her clips and idle behaviors (`advance`), names the parameters a role such as `AngleX`
+  moves (`roleParameters`), and holds parameters over its clips, expressions and outfit (`hold`,
+  each `ParameterHold` moving one from what the layers below give it toward a value by a weight, a
+  later hold over an earlier one).
 - **Errors** are `AvatarError`s with a `code`: `runtime` (the runtime didn't load), `rig` (the file
   isn't a rig it reads, with the runtime's reason), `webgl` (no WebGL 1, or a mesh past 65,535
   vertices without `OES_element_index_uint`), `lost` (the browser took the context back) and
@@ -285,8 +287,14 @@ call's turns. The local app's Studio previews a persona's models with it.
 
 ### The stage
 
-`new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, onError?, clock?})` owns the frame
-loop; the model has none of its own.
+`new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, pace?, offset?, sway?, away?, reaction?, onError?, clock?})`
+owns the frame loop; the model has none of its own. `pace` (0.25..4) scales clip, mood-fade,
+behavior, head-gesture and saccade speed, `offset` advances a freshly shown model's idle and
+breathing phase unless `reducedMotion` is on (`advance`), `sway` scales breathing sway, `away` sets
+her thinking gaze target, and `reaction` delays non-speaking direction gestures.
+`stageMotions(count, random?)` produces stratified, shuffled motion settings (`pace`, `offset`,
+`sway`, `away`, `reaction`) so stages side by side don't move in unison, while lip sync stays on
+real audio time.
 
 - **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
   setup in place, without starting over a clip the setup didn't change, and stops one it took
@@ -306,10 +314,11 @@ loop; the model has none of its own.
   twice in 0.7 s, each easing in and letting go where it started. A new gesture replaces one still
   playing. `gesture(name)` makes one outside her direction, its clip or this, under reduced motion
   too.
-- **`gaze(mode)`:** `"direction"` looks at the viewer while she listens, up and aside while she
-  thinks, and around the viewer (within 0.15, every 2 to 5 s) otherwise; `"pointer"` follows the
-  pointer; a pair `[x, y]` holds a point. How far a look turns her head, body and eyes is the
-  setup's `look`, applied whenever a setup is shown.
+- **`gaze(mode)`:** `"direction"` looks at the viewer while she listens, at `away` (`[0.35, 0.45]`
+  unless given) while she thinks, and around the viewer (within 0.15, every 2 to 5 s scaled by
+  `pace`) otherwise; `"pointer"` follows the pointer; a pair `[x, y]` holds a point. How far a look
+  turns her head, body and eyes is the setup's `look`, applied alongside `sway` whenever a setup is
+  shown.
 - **`mouth(source)`** reads a `MouthSource` once a frame; `wear(outfit)` shows an outfit's pose
   entries, holds its parameters and hides its parts. A mood's parameters and a nod's go over an
   outfit's.

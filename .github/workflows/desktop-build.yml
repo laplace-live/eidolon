@@ -48,7 +48,7 @@ jobs:
   build:
     name: ${{ inputs.target }}
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ inputs.signed && 90 || 30 }}
     # Bash on Windows too: PowerShell splits -c.compression=store into -c and a config path.
     defaults:
       run:
@@ -100,11 +100,14 @@ jobs:
         run: pnpm build:desktop
 
       # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
-      # (scripts/package.ts), NSIS on Windows.
+      # (scripts/package.ts), NSIS on Windows. differentialPackage off skips the unused blockmap and
+      # 7za's level-9 LZMA2 override; level-1 on Windows packs fast without a 650 MB uncompressed setup.
       - id: package
         if: env.SIGNED != 'true'
         timeout-minutes: 20
-        run: pnpm package:desktop -c.compression=store
+        run: |
+          if [[ $RUNNER_OS == Windows ]]; then export ELECTRON_BUILDER_COMPRESSION_LEVEL=1; fi
+          pnpm package:desktop -c.compression=store -c.nsis.differentialPackage=false
 
       # electron-builder's notarization reads the App Store Connect key from a file.
       - name: Materialize the App Store Connect key
