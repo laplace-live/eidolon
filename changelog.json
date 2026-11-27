@@ -2,6 +2,36 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-27T13:47:31.921Z",
+      "versions": {
+        "laplace-eidolon": "0.23.0",
+        "@laplace.live/eidolon": "0.23.0",
+        "laplace-eidolon-desktop": "0.11.0",
+        "@laplace.live/eidolon-sdk": "0.5.1"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Add desktop Permissions settings and macOS Local Network Subspace support"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "@laplace.live/eidolon-sdk",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Vary each persona's 2D model motion pace and timing on group calls"
+        }
+      ]
+    },
+    {
       "date": "2026-11-27T09:13:46.748Z",
       "versions": {
         "laplace-eidolon": "0.22.0",

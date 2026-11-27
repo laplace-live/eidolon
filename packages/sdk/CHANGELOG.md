@@ -1,5 +1,11 @@
 # @laplace.live/eidolon-sdk
 
+## 0.5.1
+
+### Patch Changes
+
+- c0d6b4d: Vary each persona's 2D model motion pace and timing on group calls
+
 ## 0.5.0
 
 ### Minor Changes
