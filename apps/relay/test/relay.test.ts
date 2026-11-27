@@ -81,6 +81,7 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
 
   let failJwks = false;
   let jwksRequests = 0;
+  const extraJwks: Record<string, unknown>[] = [];
   const issuer = "https://id.laplace.live";
   const srvx = serve({
     hostname: "127.0.0.1",
@@ -93,7 +94,7 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
       if (pathname === "/.well-known/jwks.json") {
         jwksRequests += 1;
         if (failJwks) return new Response("unavailable", { status: 503 });
-        return Response.json({ keys: [edJwk, ecJwk] });
+        return Response.json({ keys: [edJwk, ecJwk, ...extraJwks] });
       }
       if (pathname === "/api/auth/token") {
         const auth = request.headers.get("authorization") ?? "";
@@ -127,6 +128,9 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
     ec,
     setFailJwks: (next: boolean) => {
       failJwks = next;
+    },
+    addJwk: (jwk: Record<string, unknown>) => {
+      extraJwks.push(jwk);
     },
     jwksRequests: () => jwksRequests,
   };
@@ -380,6 +384,123 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     });
     cleanups.push(() => wsBad.terminate());
     expect((await waitForClose(wsBad)).code).toBe(RELAY_CLOSE_CODE.UNAUTHORIZED);
+  });
+
+  test("treats uncached kid during 30s cooldown or outage fallback as RelayJwksUnavailableError (4503) instead of 4401", async () => {
+    const auth = await startMockAuthServer(new Map());
+    let nowMs = Date.now();
+    const verifier = createRelayTokenVerifier(
+      {
+        authIssuer: auth.issuer,
+        authAudience: "eidolon-relay",
+        jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      },
+      { now: () => nowMs },
+    );
+
+    const ed1Token = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed1",
+      exp: Math.floor(nowMs / 1000) + 1800,
+    });
+    expect(await verifier(`Bearer ${ed1Token}`)).toEqual({ userId: "user-ed1" });
+    expect(auth.jwksRequests()).toBe(1);
+
+    const ed2 = generateKeyPairSync("ed25519");
+    const ed2Jwk = {
+      ...(ed2.publicKey.export({ format: "jwk" }) as Record<string, unknown>),
+      kid: "ed-2",
+      alg: "EdDSA",
+      use: "sig",
+    };
+    auth.addJwk(ed2Jwk);
+
+    // Within 30s cooldown after initial JWKS fetch, new kid triggers retryable RelayJwksUnavailableError (4503).
+    nowMs += 5_000;
+    const ed2Token = signEdDsaJwt(ed2.privateKey, "ed-2", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed2",
+      exp: Math.floor(nowMs / 1000) + 1800,
+    });
+    await expect(verifier(`Bearer ${ed2Token}`)).rejects.toBeInstanceOf(RelayJwksUnavailableError);
+    expect(auth.jwksRequests()).toBe(1);
+
+    // Once past 30s cooldown, verifier refreshes JWKS and accepts the rotated kid.
+    nowMs += 26_000;
+    expect(await verifier(`Bearer ${ed2Token}`)).toEqual({ userId: "user-ed2" });
+    expect(auth.jwksRequests()).toBe(2);
+
+    // After cooldown expires again, a genuinely unknown kid triggers a fresh fetch and returns null (4401).
+    nowMs += 31_000;
+    const unknownToken = signEdDsaJwt(ed2.privateKey, "unknown-kid", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-unknown",
+      exp: Math.floor(nowMs / 1000) + 1800,
+    });
+    expect(await verifier(`Bearer ${unknownToken}`)).toBeNull();
+    expect(auth.jwksRequests()).toBe(3);
+
+    // During a later JWKS outage, cached kid ed-2 still verifies from stale cache while an uncached kid yields 4503.
+    auth.setFailJwks(true);
+    nowMs += 11 * 60_000;
+    const ed3Token = signEdDsaJwt(ed2.privateKey, "ed-3", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed3",
+      exp: Math.floor(nowMs / 1000) + 1800,
+    });
+    expect(await verifier(`Bearer ${ed2Token}`)).toEqual({ userId: "user-ed2" });
+    await expect(verifier(`Bearer ${ed3Token}`)).rejects.toBeInstanceOf(RelayJwksUnavailableError);
+
+    // Live relay server E2E: warm cache with ed-1, add key ed-4 during cooldown -> host socket closes 4503 instead of 4401.
+    const liveAuth = await startMockAuthServer(new Map());
+    const liveDir = mkdtempSync(join(tmpdir(), "eidolon-relay-kid-cooldown-"));
+    cleanups.push(() => rmSync(liveDir, { recursive: true, force: true }));
+    const relay = await startRelayServer({
+      port: 0,
+      host: "127.0.0.1",
+      dbPath: join(liveDir, "relay.sqlite"),
+      authIssuer: liveAuth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${liveAuth.url}/.well-known/jwks.json`,
+      publicUrl: "http://127.0.0.1:0",
+    });
+    cleanups.push(() => relay.stop());
+
+    const liveEd1 = signEdDsaJwt(liveAuth.ed.privateKey, "ed-1", {
+      iss: liveAuth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed1",
+      exp: Math.floor(Date.now() / 1000) + 300,
+    });
+    const warm = await connectRawRelayHost(relay.url, liveEd1);
+    warm.ws.close(1000, "done");
+    await warm.closed;
+
+    const ed4 = generateKeyPairSync("ed25519");
+    liveAuth.addJwk({
+      ...(ed4.publicKey.export({ format: "jwk" }) as Record<string, unknown>),
+      kid: "ed-4",
+      alg: "EdDSA",
+      use: "sig",
+    });
+    const liveEd4 = signEdDsaJwt(ed4.privateKey, "ed-4", {
+      iss: liveAuth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed4",
+      exp: Math.floor(Date.now() / 1000) + 300,
+    });
+    const wsRotated = new WebSocket(
+      `${relay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      {
+        headers: { authorization: `Bearer ${liveEd4}` },
+      },
+    );
+    cleanups.push(() => wsRotated.terminate());
+    expect((await waitForClose(wsRotated)).code).toBe(RELAY_CLOSE_CODE.AUTH_UNAVAILABLE);
   });
 
   test("serves /healthz, validates JWT + X25519 challenge, blocks hijack, splices E2EE, and enforces revocation", async () => {

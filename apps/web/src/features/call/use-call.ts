@@ -6,7 +6,6 @@ import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } 
 import {
   type ChatCallRequestData,
   getExpectedSubspaceHost,
-  getHostMutationEpoch,
   notifyExpectedHostConflict,
   subscribeHostMutationEpoch,
 } from "@/lib/api";
@@ -258,8 +257,7 @@ export function useCall(signals: CallSignals): Call {
       const attempt = ++attemptRef.current;
       dialingAttemptRef.current = attempt;
       const expectedHost = getExpectedSubspaceHost();
-      const startEpoch = getHostMutationEpoch();
-      const stale = () => attempt !== attemptRef.current || getHostMutationEpoch() !== startEpoch;
+      const stale = () => attempt !== attemptRef.current;
       dispatchPhase({ type: "start", at: Date.now() });
       dispatchTranscript({ type: "reset" });
       watchdog.clear();

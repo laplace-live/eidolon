@@ -142,8 +142,7 @@ export function createRelayTokenVerifier(
 
   async function refreshJwks(): Promise<CachedKey[]> {
     if (inflightFetch !== null) return inflightFetch;
-    const attemptAt = now();
-    lastFetchAttemptAt = attemptAt;
+    lastFetchAttemptAt = now();
     const task = (async () => {
       try {
         const res = await fetchFn(config.jwksUrl, {
@@ -158,9 +157,6 @@ export function createRelayTokenVerifier(
         return keys;
       } catch (error) {
         lastFailedAt = now();
-        if (cache !== null && now() - cache.fetchedAt <= maxStaleMs) {
-          return cache.keys;
-        }
         throw error;
       } finally {
         inflightFetch = null;
@@ -170,17 +166,27 @@ export function createRelayTokenVerifier(
     return task;
   }
 
+  function hasMatchingKey(keys: readonly CachedKey[], kid: string | undefined): boolean {
+    return kid === undefined || keys.some((k) => k.kid === kid);
+  }
+
   async function resolveKeys(kid: string | undefined): Promise<CachedKey[]> {
     const current = now();
     const fresh = cache !== null && current - cache.fetchedAt < CACHE_TTL_MS;
     const inBackoff = lastFailedAt !== null && current - lastFailedAt < FETCH_RETRY_COOLDOWN_MS;
     if (fresh) {
-      const hasKid = kid === undefined || cache!.keys.some((k) => k.kid === kid);
-      if (hasKid || current - lastFetchAttemptAt < FETCH_RETRY_COOLDOWN_MS) {
-        return cache!.keys;
+      if (hasMatchingKey(cache!.keys, kid)) return cache!.keys;
+      if (inflightFetch === null && current - lastFetchAttemptAt < FETCH_RETRY_COOLDOWN_MS) {
+        throw new RelayJwksUnavailableError(
+          "Signing key not in cached JWKS during refresh cooldown",
+        );
       }
     } else if (inBackoff) {
-      if (cache !== null && current - cache.fetchedAt <= maxStaleMs) {
+      if (
+        cache !== null &&
+        current - cache.fetchedAt <= maxStaleMs &&
+        hasMatchingKey(cache.keys, kid)
+      ) {
         return cache.keys;
       }
       throw new RelayJwksUnavailableError();
@@ -188,6 +194,14 @@ export function createRelayTokenVerifier(
     try {
       return await refreshJwks();
     } catch (error) {
+      const afterErr = now();
+      if (
+        cache !== null &&
+        afterErr - cache.fetchedAt <= maxStaleMs &&
+        hasMatchingKey(cache.keys, kid)
+      ) {
+        return cache.keys;
+      }
       throw new RelayJwksUnavailableError(
         error instanceof Error ? error.message : "Relay JWKS temporarily unavailable",
       );

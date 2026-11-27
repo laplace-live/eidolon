@@ -29,10 +29,6 @@ export function bumpHostMutationEpoch(): void {
   for (const listener of [...hostMutationEpochListeners]) listener();
 }
 
-export function getHostMutationEpoch(): number {
-  return hostMutationEpoch;
-}
-
 export function subscribeHostMutationEpoch(listener: () => void): () => void {
   hostMutationEpochListeners.add(listener);
   return () => {
