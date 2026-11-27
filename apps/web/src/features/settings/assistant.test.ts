@@ -101,16 +101,11 @@ describe("Models by Kind", () => {
     expect(said).not.toContain("Quick tasks run on");
   });
 
-  test("a kind with no account of its own says it follows Assistant Tasks, and search says it is off", () => {
+  test("only realtime keeps an off-by-default label; kinds and search default via OpenRouter", () => {
     const off = Object.fromEntries(
       Object.entries(PROVIDER_OFF_LABELS).map(([role, label]) => [role, label?.message]),
     );
-    expect(off).toMatchObject({
-      "assistant-quick": "Same as Assistant Tasks",
-      "assistant-coding": "Same as Assistant Tasks",
-      "assistant-research": "Same as Assistant Tasks",
-      search: "Off: No Web Search",
-    });
+    expect(off).toEqual({ realtime: "Off: Three Models" });
   });
 });
 

@@ -227,12 +227,14 @@ describe("the manager", () => {
     expect((await api("GET", `/api/local/tasks/${cli.id}`)).status).toBe(404);
     expect(await onDisk(cli.id)).toEqual(cli);
     // Not ready, so nothing resumed: the crashed task waits for Continue.
+    const missingKey =
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment";
     expect(await assistantStatus()).toEqual({
       enabled: true,
       ready: false,
-      problem: "No provider fills ASSISTANT_PROVIDER",
+      problem: missingKey,
       running: 0,
-      search: { on: false, problem: null },
+      search: { on: false, problem: missingKey },
       kinds: { quick: null, coding: null, research: null },
     });
   });
@@ -267,7 +269,7 @@ describe("the manager", () => {
       ready: true,
       problem: null,
       running: 1,
-      search: { on: false, problem: null },
+      search: { on: true, problem: null },
       kinds: { quick: null, coding: null, research: null },
     });
 
@@ -286,7 +288,7 @@ describe("the manager", () => {
       ready: true,
       problem: null,
       running: 0,
-      search: { on: false, problem: null },
+      search: { on: true, problem: null },
       kinds: { quick: null, coding: null, research: null },
     });
   });

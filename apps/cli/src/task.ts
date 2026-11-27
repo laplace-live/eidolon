@@ -61,7 +61,7 @@ import {
   type TaskRequest,
   UsageMeter,
 } from "@eidolon/engine";
-import { ProviderConfigError, roleById, roleSearcher } from "@eidolon/providers";
+import { ProviderConfigError, roleSearcher, selectRequired } from "@eidolon/providers";
 import { ArgparseExit, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CliIo, type CommandDeps, reportExit, resolveIo } from "./io.ts";
 
@@ -90,8 +90,8 @@ options:
   --allow PATH          Another folder the task may read and write; repeat
                         for more. assistant.folders are allowed too
   --web {any,off}       Whether the task may fetch web pages, from any site,
-                        and search the web once assistant.search.provider
-                        is set (default: off; with --resume, the task's own)
+                        and search the web with assistant.search.provider
+                        (default: off; with --resume, the task's own)
   --model ACCOUNT/MODEL
                         The account and model to run on, as in
                         openrouter/anthropic/claude-sonnet-5.5 (default:
@@ -135,11 +135,6 @@ const PARSER: ParserSpec = {
 
 const DEFAULT_DELIVERABLE = "Whatever the goal asks for";
 const DEFAULT_CHECK = "The result does what the goal asks";
-
-const NO_MODEL =
-  "no model to run the task on: pass --model ACCOUNT/MODEL, or choose the assistant's account " +
-  "and model under Assistant Mode in the app's Settings (assistant.provider and " +
-  "assistant.model in settings.yaml, or ASSISTANT_PROVIDER and ASSISTANT_MODEL)";
 
 const EXIT_CODES: Readonly<Record<TaskOutcome["status"], number>> = {
   succeeded: 0,
@@ -279,12 +274,10 @@ async function namedSkills(names: readonly string[], deps: TaskDeps): Promise<re
   throw parserError(PARSER, `argument --skill: ${why.join("; ")}${choose}`);
 }
 
-/** The assistant role's account and model as the settings name them; null while either is unset. */
-function settingsModel(): ModelChoice | null {
-  const { providerEnv, modelEnv } = roleById("assistant");
-  const account = pyStrip(envOptional(providerEnv) ?? "").toLowerCase();
-  const model = pyStrip(envOptional(modelEnv) ?? "");
-  return account === "" || model === "" ? null : { account, model };
+/** The assistant role's account and model, filling defaults from the catalog. */
+function settingsModel(): ModelChoice {
+  const { account, model } = selectRequired("assistant");
+  return { account: account.id, model };
 }
 
 /** `--web any`. web_fetch still refuses this computer and its network. */
@@ -465,7 +458,6 @@ async function newTask(
   signal: AbortSignal,
 ): Promise<Prepared> {
   const model = args.model ?? settingsModel();
-  if (model === null) throw parserError(PARSER, NO_MODEL);
   const settings = assistantSettings();
   const grants = [...new Set([...args.allow, ...settings.folders])].map(
     (path): FolderGrant => ({ path, access: "read-write" }),

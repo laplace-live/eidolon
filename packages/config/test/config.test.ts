@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { setFileLayer } from "../src/env.ts";
 import {
   cliEntry,
   consoleSink,
@@ -45,6 +46,7 @@ function setEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 afterEach(() => {
+  setFileLayer(new Map(), new Set());
   for (const name of touched) delete process.env[name];
   touched.clear();
 });
@@ -244,6 +246,9 @@ describe("flags, raw values and paths", () => {
     expect(envFlag("EIDOLON_TEST_X", false)).toBe(false);
     setEnv("EIDOLON_TEST_X", "Yes");
     expect(envFlag("EIDOLON_TEST_X", false)).toBe(true);
+    setFileLayer(new Map([["EIDOLON_TEST_X", "false"]]), new Set());
+    setEnv("EIDOLON_TEST_X", " \t　");
+    expect(envFlag("EIDOLON_TEST_X", true)).toBe(false);
   });
 
   test("project paths join like pathlib", () => {

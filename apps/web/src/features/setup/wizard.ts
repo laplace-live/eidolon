@@ -272,9 +272,9 @@ export function createRequest(draft: PersonaDraft, voiceId: string): CreatePerso
 }
 
 export interface MemoryStepState {
-  /** Memory is enabled: turned on during this visit, in settings.yaml, or by status. */
+  /** Memory is enabled: by default, turned on during this visit, in settings.yaml, or by status. */
   readonly on: boolean;
-  /** The environment sets MEM0_ENABLED, so the step can't change it. */
+  /** The environment sets MEM0_ENABLED or legacy MEM0_QDRANT_HOST, so the step can't change it. */
   readonly fromEnv: boolean;
 }
 

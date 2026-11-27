@@ -3644,6 +3644,10 @@ msgstr "Memory is off, so she forgets you after every call. Turn it on to keep w
 msgid "Memory is off: turn it on in <0>Settings</0>."
 msgstr "Memory is off: turn it on in <0>Settings</0>."
 
+#: src/features/setup/memory-step.tsx
+msgid "Memory is off."
+msgstr "Memory is off."
+
 #: src/features/call/call-page.tsx
 msgid "Memory is off. Turn it on in Settings so {name} remembers your calls."
 msgstr "Memory is off. Turn it on in Settings so {name} remembers your calls."
@@ -4180,14 +4184,6 @@ msgstr "Off"
 msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 msgstr "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 
-#: src/components/settings-form/labels.ts
-msgid "Off: No Tasks"
-msgstr "Off: No Tasks"
-
-#: src/components/settings-form/labels.ts
-msgid "Off: No Web Search"
-msgstr "Off: No Web Search"
-
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "Off: she won't remember you between calls."
@@ -4210,8 +4206,8 @@ msgid "On, a task may ask to run commands on this computer, each waiting for you
 msgstr "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash, or Cygwin's or MSYS2's bash on your PATH."
 
 #: src/components/settings-form/labels.ts
-msgid "On, each persona remembers what she learns about you across calls and chats. Default off."
-msgstr "On, each persona remembers what she learns about you across calls and chats. Default off."
+msgid "On, each persona remembers what she learns about you across calls and chats. Default on."
+msgstr "On, each persona remembers what she learns about you across calls and chats. Default on."
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -5197,10 +5193,6 @@ msgstr "Sad"
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "Same as {role} ({value})"
-
-#: src/components/settings-form/labels.ts
-msgid "Same as Assistant Tasks"
-msgstr "Same as Assistant Tasks"
 
 #: src/components/picture-viewer.tsx
 #: src/components/settings-form/settings-card.tsx
@@ -6366,8 +6358,8 @@ msgid "The account has no credit left."
 msgstr "The account has no credit left."
 
 #: src/components/settings-form/labels.ts
-msgid "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
-msgstr "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
+msgid "The account tasks search the web with. Default OpenRouter."
+msgstr "The account tasks search the web with. Default OpenRouter."
 
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
@@ -7044,6 +7036,7 @@ msgid "TURN Credential Lifetime"
 msgstr "TURN Credential Lifetime"
 
 #: src/features/settings/assistant.tsx
+#: src/features/setup/memory-step.tsx
 msgid "Turn Off"
 msgstr "Turn Off"
 
@@ -7612,8 +7605,8 @@ msgid "Wide"
 msgstr "Wide"
 
 #: src/features/setup/memory-step.tsx
-msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. Skip it and everything else still works."
-msgstr "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. Skip it and everything else still works."
+msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
+msgstr "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
 
 #: src/features/setup/keys-step.tsx
 msgid "Without it, calls can't start, and these stay off: {off}."

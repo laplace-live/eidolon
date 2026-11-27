@@ -3240,6 +3240,7 @@ describe("profiles", () => {
 
   test("a kind whose own settings can't run starts on Assistant Mode's model, with a warning saying why", async () => {
     settings = { ...settings, folders: [work] };
+    setEnv("ANTHROPIC_API_KEY", "");
     setEnv("ASSISTANT_RESEARCH_PROVIDER", "anthropic");
     const tasks = await booted();
     const research = await tasks.start(
@@ -3251,7 +3252,7 @@ describe("profiles", () => {
       model: { account: "openrouter", model: "test/model" },
     });
     expect(logs.lines()).toContain(
-      "WARNING A research task runs on the assistant's model: Anthropic needs a model: set ASSISTANT_RESEARCH_MODEL",
+      "WARNING A research task runs on the assistant's model: Anthropic needs an API key: set ANTHROPIC_API_KEY in credentials.json or the environment",
     );
   });
 

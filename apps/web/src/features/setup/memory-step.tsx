@@ -39,17 +39,15 @@ export function MemoryStep({
 
   const enabledRow = settings.data.settings.find((row) => row.path === ENABLED);
   const fromEnv = Boolean(enabledRow?.envOverride);
-  const on = fromEnv
-    ? flagOn(enabledRow, false)
-    : flagOn(enabledRow, false) || status.data?.memory.configured === true;
+  const on = enabledRow ? flagOn(enabledRow, true) : status.data?.memory.configured !== false;
   const action = memoryStepAction({ on, fromEnv });
 
-  async function turnOn() {
+  async function saveEnabled(enabled: boolean) {
     setBusy(true);
     setFailure(null);
     try {
       const response = await call("PUT /api/local/settings", {
-        body: { scope: "app", values: { [ENABLED]: true } },
+        body: { scope: "app", values: { [ENABLED]: enabled } },
       });
       await refreshSettings(queryClient, undefined, response);
     } catch (error) {
@@ -62,18 +60,25 @@ export function MemoryStep({
   return (
     <StepCard
       title={t`Memory (Optional)`}
-      description={t`With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. Skip it and everything else still works.`}
+      description={t`With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime.`}
       onBack={onBack}
       busy={busy}
       footer={
         action === "next" ? (
-          <Button onClick={onDone}>{t`Continue`}</Button>
+          <>
+            {!fromEnv && (
+              <Button variant="ghost" onClick={() => void saveEnabled(false)} disabled={busy}>
+                {t`Turn Off`}
+              </Button>
+            )}
+            <Button onClick={onDone} disabled={busy}>{t`Continue`}</Button>
+          </>
         ) : (
           <>
             <Button variant="ghost" onClick={onDone} disabled={busy}>
               {t`Skip`}
             </Button>
-            <Button onClick={() => void turnOn()} disabled={busy}>
+            <Button onClick={() => void saveEnabled(true)} disabled={busy}>
               {busy && <Spinner />}
               {t`Turn On Memory`}
             </Button>
@@ -81,12 +86,10 @@ export function MemoryStep({
         )
       }
     >
-      {on && (
-        <Alert>
-          <CircleCheckIcon className="text-success" />
-          <AlertTitle>{t`Memory is on.`}</AlertTitle>
-        </Alert>
-      )}
+      <Alert>
+        {on && <CircleCheckIcon className="text-success" />}
+        <AlertTitle>{on ? t`Memory is on.` : t`Memory is off.`}</AlertTitle>
+      </Alert>
       {fromEnv && (
         <FieldDescription>
           {t`Set by ${ph({ env: enabledRow?.envName ?? "MEM0_ENABLED" })} in the environment, which wins over the value saved here. Change it there.`}

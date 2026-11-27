@@ -29,13 +29,13 @@ function embedder({ selection, dims }: EmbedderSettings) {
 }
 
 describe("enablement", () => {
-  test("unset or empty is off", () => {
+  test("unset or empty is on", () => {
     setEnv({ MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: undefined });
-    expect(isMemoryConfigured()).toBe(false);
+    expect(isMemoryConfigured()).toBe(true);
     setEnv({ MEM0_ENABLED: "" });
-    expect(isMemoryConfigured()).toBe(false);
+    expect(isMemoryConfigured()).toBe(true);
     setEnv({ MEM0_ENABLED: " \t　" });
-    expect(isMemoryConfigured()).toBe(false);
+    expect(isMemoryConfigured()).toBe(true);
   });
 
   test("MEM0_ENABLED turns memory on and off explicitly, overriding legacy MEM0_QDRANT_HOST", () => {
@@ -55,6 +55,8 @@ describe("enablement", () => {
     try {
       expect(isMemoryConfigured()).toBe(true);
       setEnv({ MEM0_QDRANT_HOST: " \t　" });
+      expect(isMemoryConfigured()).toBe(false);
+      setEnv({ MEM0_ENABLED: " \t　" });
       expect(isMemoryConfigured()).toBe(false);
     } finally {
       resetSettings();

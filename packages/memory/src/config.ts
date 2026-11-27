@@ -55,14 +55,17 @@ export interface MemorySearchSettings {
 }
 
 /**
- * `MEM0_ENABLED` when set, else whether legacy `MEM0_QDRANT_HOST` is non-empty so an existing
- * deployment's `.env` keeps memory on without edits.
+ * `MEM0_ENABLED` when set (defaulting to true), else `true` if legacy `MEM0_QDRANT_HOST` is
+ * non-empty so an existing `.env` still keeps memory on.
  */
 export function isMemoryConfigured(): boolean {
-  const envExplicit = pyStrip(envVariable("MEM0_ENABLED") ?? "");
-  if (envExplicit !== "") return envFlag("MEM0_ENABLED", false);
-  if (pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== "") return true;
-  return envFlag("MEM0_ENABLED", false);
+  if (
+    pyStrip(envVariable("MEM0_ENABLED") ?? "") === "" &&
+    pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== ""
+  ) {
+    return true;
+  }
+  return envFlag("MEM0_ENABLED", true);
 }
 
 /** The memory role: `memory.provider` and `memory.model`, else the persona's chat model. */

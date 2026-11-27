@@ -397,9 +397,10 @@ installed persona alone. Each viewer line costs one turn of a quota counted over
 `assistant.*` is Assistant Mode: tasks a persona runs on this computer, which she starts when asked
 in one of the local app's chats, or `laplace-task` runs; production never has them.
 `assistant.enabled` (default on) turns them off in the local app, and stops the live ones;
-`laplace-task`, a command run on purpose, ignores it. Tasks also stay off until
-`assistant.provider` and `assistant.model` name an account and a model: the role has no default
-for either, and her chat model is never the fallback. `assistant.folders` lists folders every
+`laplace-task`, a command run on purpose, ignores it. `assistant.provider` defaults to
+`openrouter` and `assistant.model` to the chosen provider's default model
+(`~google/gemini-flash-latest` on OpenRouter; providers without a default model still require a
+model named), and her chat model is never the fallback. `assistant.folders` lists folders every
 task may read and write besides its own, where a task she starts runs without asking first
 ([assistant.md](assistant.md)). `assistant.bash` (default on) lets a task ask to run commands on
 macOS and Linux, and on Windows in Git Bash, or in Cygwin's or MSYS2's bash on PATH, each waiting
@@ -420,11 +421,12 @@ fills).
 
 `assistant.quick`, `assistant.coding` and `assistant.research` name the account and model for the
 tasks she marks quick, coding or research. Unset, they follow `assistant.provider` and
-`assistant.model`; a model alone runs on the assistant's account, and another account needs its
-model too. A kind whose own can't run (no model, no key) runs on the assistant's, and so does a
-task she marks as anything else. `assistant.search.provider` names the OpenRouter account tasks
-search the web with, at about $0.007 a search, and `assistant.search.model` its engine, `exa`, the
-one offered. Unset, tasks can't search, though they can still read the pages you allow.
+`assistant.model`; a model alone runs on the assistant's account, and another provider's account
+uses its own model or, unset, that provider's default model. A kind whose own can't run (a
+modelless provider with no model, no key) runs on the assistant's, and so does a task she marks as
+anything else. `assistant.search.provider` (default `openrouter`) names the OpenRouter account
+tasks search the web with, at about $0.007 a search, and `assistant.search.model` its engine,
+`exa`, the one offered.
 
 `chats.display` is how much of her tasks a chat in the local app shows, until the chat picks its
 own with `/focus`, `/normal` or `/verbose` ([assistant.md](assistant.md#display)). `normal`, the

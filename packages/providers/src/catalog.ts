@@ -936,7 +936,7 @@ export interface Role {
   readonly defaultProvider: ProviderId | null;
   /**
    * Where a role wants another model than its provider's default, by provider. null: no default
-   * fills it, so the model must be named, as the assistant's is.
+   * fills it, so the model must be named.
    */
   readonly defaultModels?: Readonly<Partial<Record<ProviderId, string>>> | null;
   /** Unset, the provider and model follow this role's. */
@@ -1093,13 +1093,11 @@ export const ROLES: readonly Role[] = [
     path: "assistant",
     providerEnv: "ASSISTANT_PROVIDER",
     modelEnv: "ASSISTANT_MODEL",
-    defaultProvider: null,
-    // Tasks run tools unattended, so they never fall back to a model nobody picked for them.
-    defaultModels: null,
+    defaultProvider: "openrouter",
     phase: "call",
   },
   // A kind of task she starts. Unset, it takes the assistant's account and model; on another
-  // provider's account, it must name its model, since the assistant's belongs to its own provider.
+  // provider's account with no model named, it uses that provider's default model.
   {
     id: "assistant-quick",
     label: "quick tasks",
@@ -1109,7 +1107,6 @@ export const ROLES: readonly Role[] = [
     providerEnv: "ASSISTANT_QUICK_PROVIDER",
     modelEnv: "ASSISTANT_QUICK_MODEL",
     defaultProvider: null,
-    defaultModels: null,
     follows: "assistant",
     phase: "call",
   },
@@ -1122,7 +1119,6 @@ export const ROLES: readonly Role[] = [
     providerEnv: "ASSISTANT_CODING_PROVIDER",
     modelEnv: "ASSISTANT_CODING_MODEL",
     defaultProvider: null,
-    defaultModels: null,
     follows: "assistant",
     phase: "call",
   },
@@ -1135,7 +1131,6 @@ export const ROLES: readonly Role[] = [
     providerEnv: "ASSISTANT_RESEARCH_PROVIDER",
     modelEnv: "ASSISTANT_RESEARCH_MODEL",
     defaultProvider: null,
-    defaultModels: null,
     follows: "assistant",
     phase: "call",
   },
@@ -1147,8 +1142,7 @@ export const ROLES: readonly Role[] = [
     path: "assistant.search",
     providerEnv: "ASSISTANT_SEARCH_PROVIDER",
     modelEnv: "ASSISTANT_SEARCH_MODEL",
-    // Each search bills while a task runs unattended: off until the owner picks an account.
-    defaultProvider: null,
+    defaultProvider: "openrouter",
     phase: "call",
   },
 ];

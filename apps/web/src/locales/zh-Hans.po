@@ -3644,6 +3644,10 @@ msgstr "记忆功能未开启，因此每次通话结束后她都会忘记你。
 msgid "Memory is off: turn it on in <0>Settings</0>."
 msgstr "记忆功能未开启：请在<0>设置</0>中开启。"
 
+#: src/features/setup/memory-step.tsx
+msgid "Memory is off."
+msgstr "记忆已关闭。"
+
 #: src/features/call/call-page.tsx
 msgid "Memory is off. Turn it on in Settings so {name} remembers your calls."
 msgstr "记忆功能未开启。请在设置中开启，以便{name}记住你们的通话。"
@@ -4180,14 +4184,6 @@ msgstr "关"
 msgid "Off, she can't start tasks, the running ones stop, and the Tasks list is hidden."
 msgstr "关闭后，她不能开始任务，正在运行的任务会停止，「任务」列表也会隐藏。"
 
-#: src/components/settings-form/labels.ts
-msgid "Off: No Tasks"
-msgstr "关闭：不运行任务"
-
-#: src/components/settings-form/labels.ts
-msgid "Off: No Web Search"
-msgstr "关闭：不搜索网页"
-
 #: src/features/home/readiness-labels.ts
 msgid "Off: she won't remember you between calls."
 msgstr "已关闭：她不会在多次通话之间记得你。"
@@ -4210,8 +4206,8 @@ msgid "On, a task may ask to run commands on this computer, each waiting for you
 msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。在 Windows 上，运行命令需要 Git Bash，或者 PATH 中有 Cygwin 或 MSYS2 的 bash。"
 
 #: src/components/settings-form/labels.ts
-msgid "On, each persona remembers what she learns about you across calls and chats. Default off."
-msgstr "开启后，每位人设都会在通话与聊天之间记住她了解到的你的信息。默认关闭。"
+msgid "On, each persona remembers what she learns about you across calls and chats. Default on."
+msgstr "开启后，每位人设都会在通话与聊天之间记住她了解到的你的信息。默认开启。"
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -5197,10 +5193,6 @@ msgstr "难过"
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "与{role}相同（{value}）"
-
-#: src/components/settings-form/labels.ts
-msgid "Same as Assistant Tasks"
-msgstr "与助手任务相同"
 
 #: src/components/picture-viewer.tsx
 #: src/components/settings-form/settings-card.tsx
@@ -6366,8 +6358,8 @@ msgid "The account has no credit left."
 msgstr "账户余额已用完。"
 
 #: src/components/settings-form/labels.ts
-msgid "The account tasks search the web with. Off, they can still read the pages you allow, but can't search."
-msgstr "任务搜索网页用的账号。关闭时任务仍能读取你允许的网页，但不能搜索。"
+msgid "The account tasks search the web with. Default OpenRouter."
+msgstr "任务搜索网页用的账号。默认 OpenRouter。"
 
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
@@ -7044,6 +7036,7 @@ msgid "TURN Credential Lifetime"
 msgstr "TURN 凭据有效期"
 
 #: src/features/settings/assistant.tsx
+#: src/features/setup/memory-step.tsx
 msgid "Turn Off"
 msgstr "关闭"
 
@@ -7612,8 +7605,8 @@ msgid "Wide"
 msgstr "横屏"
 
 #: src/features/setup/memory-step.tsx
-msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. Skip it and everything else still works."
-msgstr "开启记忆后，她会在一次次通话与聊天之间记住你。记忆保存在这台电脑的数据目录中，无需额外的服务器或 Docker 容器。跳过它，其余所有功能也依然可用。"
+msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. It's on by default, and you can turn it off anytime."
+msgstr "开启记忆后，她会在一次次通话与聊天之间记住你。记忆保存在这台电脑的数据目录中，无需额外的服务器或 Docker 容器。默认开启，你可以随时关闭。"
 
 #: src/features/setup/keys-step.tsx
 msgid "Without it, calls can't start, and these stay off: {off}."

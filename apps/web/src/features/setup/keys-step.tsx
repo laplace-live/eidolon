@@ -35,6 +35,7 @@ import { listOf, ROLE_LABELS } from "@/lib/labels";
 import { providerName, providerOfAccount, roleById, SETUP_ROLES } from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
 import {
+  activeRiders,
   callNeeds,
   choicesFor,
   envLock,
@@ -44,11 +45,10 @@ import {
   type Picked,
   type PickedRole,
   pickChanges,
-  RIDERS,
 } from "./choices";
 import { RECOMMENDED_ROLES, requiredKeyMissing } from "./first-run";
 import { StepCard } from "./step-card";
-import { cookieDefault, flagOn, isNewInstall } from "./wizard";
+import { cookieDefault, isNewInstall } from "./wizard";
 
 const ROLE_HINTS = {
   hearing: msg`Hears you on calls and in voice messages.`,
@@ -175,15 +175,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const required = picks.filter((role) => callNeeds(role) && !RECOMMENDED_ROLES.has(role));
   const recommended = picks.filter((role) => RECOMMENDED_ROLES.has(role));
   const optional = picks.filter((role) => !callNeeds(role));
-  // Reranking, unless she turned it off, and selfies, once she has an outfit to draw.
-  const riders = RIDERS.filter((role) =>
-    role === "rerank"
-      ? flagOn(
-          rows.find((row) => row.path === "knowledge.rerank.enabled"),
-          true,
-        )
-      : (status.data?.selfieReferences ?? 0) > 0,
-  );
+  const riders = activeRiders(rows, status.data?.selfieReferences ?? 0);
   const picked: Picked[] = [
     ...(realtime === null ? [] : [{ role: "realtime" as const, account: realtime, call: true }]),
     // In the order the step shows them, so the keys a chat needs come first.

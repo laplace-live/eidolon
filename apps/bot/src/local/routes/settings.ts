@@ -63,7 +63,7 @@ function environmentValue(
   layers: SettingsLayers,
 ): { value: string; name: string } | null {
   const own = envVariable(field.env);
-  if (own !== undefined && (field.env !== "MEM0_ENABLED" || pyStrip(own) !== "")) {
+  if (own !== undefined && (field.kind !== "flag" || pyStrip(own) !== "")) {
     return { value: own, name: field.env };
   }
   if (field.env === "MEM0_ENABLED") {

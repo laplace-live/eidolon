@@ -35,6 +35,11 @@ describe("select", () => {
     expect(select("gate", read)?.model).toBe("~typesafe/jev-latest");
     expect(select("rerank", read)?.model).toBe("cohere/rerank-4-fast");
     expect(select("embeddings", read)?.model).toBe("google/gemini-embedding-2-preview");
+    expect(select("assistant", read)?.model).toBe("~google/gemini-flash-latest");
+    expect(select("assistant-quick", read)?.model).toBe("~google/gemini-flash-latest");
+    expect(select("assistant-coding", read)?.model).toBe("~google/gemini-flash-latest");
+    expect(select("assistant-research", read)?.model).toBe("~google/gemini-flash-latest");
+    expect(select("search", read)?.model).toBe("exa");
     expect(select("realtime", read)).toBeNull();
   });
 
@@ -113,18 +118,28 @@ describe("select", () => {
     expect(local?.baseUrl).toBe("http://localhost:11434/v1");
   });
 
-  test("the assistant is off until it names a provider, and then a model: no default fills either", () => {
+  test("the assistant defaults to OpenRouter and its default model, independent of the chat model", () => {
     // Her chat model, either way it is set, is never the assistant's.
     const chat = { OPENROUTER_API_KEY: "or", LLM_MODEL: "a/b", OPENROUTER_MODEL: "c/d" };
-    expect(select("assistant", reader(chat))).toBeNull();
-    expect(() => selectRequired("assistant", reader(chat))).toThrow(
-      "No provider fills ASSISTANT_PROVIDER",
-    );
-    for (const provider of ["openrouter", "anthropic", "deepseek", "openai"]) {
-      expect(() => select("assistant", reader({ ...chat, ASSISTANT_PROVIDER: provider }))).toThrow(
-        "needs a model: set ASSISTANT_MODEL",
+    const fallback = select("assistant", reader(chat));
+    expect([fallback?.provider.id, fallback?.model, fallback?.apiKey]).toEqual([
+      "openrouter",
+      "~google/gemini-flash-latest",
+      "or",
+    ]);
+    for (const [provider, expected] of [
+      ["openrouter", "~google/gemini-flash-latest"],
+      ["anthropic", "claude-opus-5-5"],
+      ["deepseek", "deepseek-flash"],
+      ["openai", "gpt-6-luna"],
+    ] as const) {
+      expect(select("assistant", reader({ ...chat, ASSISTANT_PROVIDER: provider }))?.model).toBe(
+        expected,
       );
     }
+    expect(() =>
+      select("assistant", reader({ ...chat, ASSISTANT_PROVIDER: "openai-compatible" })),
+    ).toThrow("needs a model: set ASSISTANT_MODEL");
     const picked = select(
       "assistant",
       reader({ ...chat, ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: "x/y" }),
@@ -191,6 +206,14 @@ describe("selectTask", () => {
     const expected = ["assistant-coding", "anthropic", "claude-sonnet-5-5", "ak", null];
     expect(task("coding", { ...assistant, ...coding })).toEqual(expected);
     expect(task("coding", coding)).toEqual(expected);
+    // Another provider with no model named uses its own default model, not the assistant's.
+    expect(
+      task("coding", {
+        ...assistant,
+        ASSISTANT_CODING_PROVIDER: "anthropic",
+        ANTHROPIC_API_KEY: "ak",
+      }),
+    ).toEqual(["assistant-coding", "anthropic", "claude-opus-5-5", "ak", null]);
     // Another account of the assistant's provider takes the assistant's model.
     const work = {
       id: "openrouter-work",
@@ -211,10 +234,12 @@ describe("selectTask", () => {
       expect([role, account, model]).toEqual(["assistant", "openrouter", "x/assistant"]);
       return why;
     };
-    // The assistant's model belongs to its own provider.
-    expect(fallback({ ASSISTANT_CODING_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "ak" })).toBe(
-      "Anthropic needs a model: set ASSISTANT_CODING_MODEL",
-    );
+    expect(
+      fallback({
+        ASSISTANT_CODING_PROVIDER: "openai-compatible",
+        OPENAI_COMPATIBLE_BASE_URL: "http://localhost:1234/v1",
+      }),
+    ).toBe("OpenAI-compatible endpoint needs a model: set ASSISTANT_CODING_MODEL");
     expect(
       fallback({
         ASSISTANT_CODING_PROVIDER: "anthropic",
@@ -231,12 +256,27 @@ describe("selectTask", () => {
     );
   });
 
-  test("with the assistant role unset, a kind that can't run on its own throws as selectRequired does", () => {
+  test("with the assistant role unset, OpenRouter and its default model fill it; an unusable assistant throws", () => {
     const keyOnly = { OPENROUTER_API_KEY: "or" };
-    for (const values of [keyOnly, { ...keyOnly, ASSISTANT_QUICK_MODEL: "x/quick" }]) {
-      expect(() => task("quick", values)).toThrow("No provider fills ASSISTANT_PROVIDER");
+    expect(task("other", keyOnly)).toEqual([
+      "assistant",
+      "openrouter",
+      "~google/gemini-flash-latest",
+      "or",
+      null,
+    ]);
+    expect(task("quick", { ...keyOnly, ASSISTANT_QUICK_MODEL: "x/quick" })).toEqual([
+      "assistant-quick",
+      "openrouter",
+      "x/quick",
+      "or",
+      null,
+    ]);
+    const badAssistant = { ASSISTANT_PROVIDER: "openai-compatible" };
+    for (const values of [badAssistant, { ...badAssistant, ASSISTANT_QUICK_MODEL: "x/quick" }]) {
+      expect(() => task("quick", values)).toThrow("OpenAI-compatible endpoint needs a model");
     }
-    expect(() => task("other", keyOnly)).toThrow(ProviderConfigError);
+    expect(() => task("other", badAssistant)).toThrow(ProviderConfigError);
   });
 });
 

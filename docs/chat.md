@@ -1009,7 +1009,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
   `recall_streams` or get archive context), and ask for a selfie, which must still show after
-  `SELFIE_TTL_SECONDS`. Turn Mem0 on with `MEM0_ENABLED=true`.
+  `SELFIE_TTL_SECONDS` (Mem0 is on by default unless `MEM0_ENABLED=false`).
 - **By hand, billed:** a group of two personas on OpenRouter. Its `decision` events must come
   from `mention` or `model` with scores, not `fallback`, and neither persona may write the other's
   lines.

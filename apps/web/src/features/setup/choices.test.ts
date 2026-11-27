@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { AccountView, SettingRow } from "../../lib/api";
 import { roleById, SETUP_ROLES } from "../../lib/providers";
 import {
+  activeRiders,
   callNeeds,
   choicesFor,
   envLock,
@@ -276,7 +277,20 @@ describe("the keys the picks need", () => {
       "gate",
       "rerank",
       "selfie",
+      "assistant",
+      "search",
     ]);
+  });
+
+  test("activeRiders drops rerank or assistant roles when switched off, and selfies without outfits", () => {
+    expect(activeRiders(rows(), 0)).toEqual(["rerank", "assistant", "search"]);
+    expect(activeRiders(rows(), 2)).toEqual(["rerank", "selfie", "assistant", "search"]);
+    expect(
+      activeRiders(rows({ "knowledge.rerank.enabled": { value: false, source: "persona" } }), 1),
+    ).toEqual(["selfie", "assistant", "search"]);
+    expect(activeRiders(rows({ "assistant.enabled": { value: false, source: "app" } }), 1)).toEqual(
+      ["rerank", "selfie"],
+    );
   });
 
   test("MiniMax's group id, unless it is set or typed", () => {

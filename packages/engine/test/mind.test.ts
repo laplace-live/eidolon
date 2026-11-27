@@ -1438,11 +1438,13 @@ describe("a task's mind", () => {
       { choices: [], usage },
     ]);
 
-  test("fills the assistant role, which nothing fills by default: no provider, then no model", () => {
+  test("fills the assistant role by default, independent of the chat model; a provider without a default needs a model", () => {
     setEnv({ LLM_MODEL: "a/b", OPENROUTER_MODEL: "c/d" });
-    expect(() => createMind("assistant")).toThrow("No provider fills ASSISTANT_PROVIDER");
-    setEnv({ ASSISTANT_PROVIDER: "openrouter" });
-    expect(() => createMind("assistant")).toThrow("OpenRouter needs a model: set ASSISTANT_MODEL");
+    expect(createMind("assistant")).toBeDefined();
+    setEnv({ ASSISTANT_PROVIDER: "openai-compatible" });
+    expect(() => createMind("assistant")).toThrow(
+      "OpenAI-compatible endpoint needs a model: set ASSISTANT_MODEL",
+    );
     expect(seen).toEqual([]);
   });
 
@@ -1505,10 +1507,11 @@ describe("a task's mind", () => {
       ["assistant", "openrouter"],
       ["assistant", "deepseek"],
     ]);
-    // The role's model belongs to its own provider, so another account brings none.
-    expect(() => createMind("assistant", { account: "deepseek" })).toThrow(
-      "DeepSeek needs a model: set ASSISTANT_MODEL",
+    // Another account with its own default model fills it; one without a default still needs a model named.
+    expect(() => createMind("assistant", { account: "openai-compatible" })).toThrow(
+      "OpenAI-compatible endpoint needs a model: set ASSISTANT_MODEL",
     );
+    expect(createMind("assistant", { account: "deepseek" })).toBeDefined();
     expect(createMind("assistant", { account: "openrouter" })).toBeDefined();
   });
 

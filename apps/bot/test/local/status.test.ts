@@ -45,7 +45,6 @@ function fakeApp(): FakeApp {
   return app;
 }
 
-const NO_SEARCH = { on: false, problem: null };
 const NO_KINDS = { quick: null, coding: null, research: null };
 
 const json = (status: number, body: unknown) =>
@@ -114,7 +113,7 @@ afterEach(async () => {
 });
 
 describe("GET status", () => {
-  test("on a fresh home: no keys, the demo persona, nothing built, memory off", () => {
+  test("on a fresh home: no keys, the demo persona, nothing built, memory on by default", () => {
     const { deps, asked } = fakeDeps({});
     statusRoutes(app, deps);
     const status = buildStatus(app, deps);
@@ -161,7 +160,12 @@ describe("GET status", () => {
         catalogBuiltAt: null,
       },
       selfieReferences: 2,
-      memory: { configured: false, ready: false, problem: null },
+      memory: {
+        configured: true,
+        ready: false,
+        problem:
+          "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone",
+      },
       lastSessionError: null,
       activeCalls: 0,
     });
@@ -257,28 +261,29 @@ describe("GET status", () => {
     });
   });
 
-  test("Assistant Mode is on, and ready once its account and model are set and the key is there", () => {
+  test("Assistant Mode defaults to OpenRouter and its default model, and is ready once the key is there", () => {
     const { deps } = fakeDeps({});
+    const missingKey =
+      "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment";
     expect(buildStatus(app, deps).assistant).toEqual({
       enabled: true,
       ready: false,
-      problem: "No provider fills ASSISTANT_PROVIDER",
+      problem: missingKey,
       running: 0,
-      search: NO_SEARCH,
+      search: { on: false, problem: missingKey },
       kinds: NO_KINDS,
     });
-    write("settings.yaml", "assistant:\n  provider: openrouter\n");
+    write("settings.yaml", "assistant:\n  provider: openai-compatible\n");
     reinstallSettings(app);
     expect(buildStatus(app, deps).assistant).toMatchObject({
       ready: false,
-      problem: "OpenRouter needs a model: set ASSISTANT_MODEL",
+      problem: "OpenAI-compatible endpoint needs a model: set ASSISTANT_MODEL",
     });
     write("settings.yaml", "assistant:\n  provider: openrouter\n  model: z-ai/glm-5\n");
     reinstallSettings(app);
     expect(buildStatus(app, deps).assistant).toMatchObject({
       ready: false,
-      problem:
-        "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment",
+      problem: missingKey,
     });
     setEnv("OPENROUTER_API_KEY", "k");
     expect(buildStatus(app, deps).assistant).toEqual({
@@ -286,7 +291,7 @@ describe("GET status", () => {
       ready: true,
       problem: null,
       running: 0,
-      search: NO_SEARCH,
+      search: { on: true, problem: null },
       kinds: NO_KINDS,
     });
     write("settings.yaml", "assistant:\n  enabled: false\n  provider: openrouter\n  model: m\n");
@@ -294,11 +299,8 @@ describe("GET status", () => {
     expect(buildStatus(app, deps).assistant).toMatchObject({ enabled: false, ready: true });
   });
 
-  test("web search is off until its account is chosen, and says why a chosen one can't search", () => {
+  test("web search defaults to OpenRouter, and says why a chosen account can't search", () => {
     const { deps } = fakeDeps({});
-    expect(buildStatus(app, deps).assistant.search).toEqual({ on: false, problem: null });
-    write("settings.yaml", "assistant:\n  search:\n    provider: openrouter\n");
-    reinstallSettings(app);
     expect(buildStatus(app, deps).assistant.search).toEqual({
       on: false,
       problem:
@@ -326,18 +328,21 @@ describe("GET status", () => {
         "  quick:",
         "    model: openai/gpt-6-luna",
         "  coding:",
-        "    provider: anthropic",
+        "    provider: openai-compatible",
         "",
       ].join("\n"),
     );
     reinstallSettings(app);
     expect(buildStatus(app, deps).assistant.kinds).toEqual({
       quick: null,
-      coding: "Anthropic needs a model: set ASSISTANT_CODING_MODEL",
+      coding: "OpenAI-compatible endpoint needs a model: set ASSISTANT_CODING_MODEL",
       research: null,
     });
     // Assistant Mode's own problem is the one to tell.
-    write("settings.yaml", "assistant:\n  coding:\n    provider: anthropic\n");
+    write(
+      "settings.yaml",
+      "assistant:\n  provider: openai-compatible\n  coding:\n    provider: anthropic\n",
+    );
     reinstallSettings(app);
     expect(buildStatus(app, deps).assistant).toMatchObject({ ready: false, kinds: NO_KINDS });
   });
@@ -353,7 +358,7 @@ describe("GET status", () => {
       ready: false,
       problem: `No task may be granted ${homedir()}: it is or holds the home folder`,
       running: 0,
-      search: NO_SEARCH,
+      search: { on: true, problem: null },
       kinds: NO_KINDS,
     });
     write("settings.yaml", ready);
@@ -405,20 +410,21 @@ describe("GET status", () => {
     expect(buildStatus(app, deps).persona.appearance).toEqual({ model: null });
   });
 
-  test("memory status reports off, missing keys, and ready once keys are set", () => {
+  test("memory status reports missing keys by default, off when disabled, and ready once keys are set", () => {
     const { deps, asked } = fakeDeps({});
-    expect(buildStatus(app, deps).memory).toEqual({
-      configured: false,
-      ready: false,
-      problem: null,
-    });
-    setEnv("MEM0_ENABLED", "true");
     expect(buildStatus(app, deps).memory).toEqual({
       configured: true,
       ready: false,
       problem:
         "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone",
     });
+    setEnv("MEM0_ENABLED", "false");
+    expect(buildStatus(app, deps).memory).toEqual({
+      configured: false,
+      ready: false,
+      problem: null,
+    });
+    setEnv("MEM0_ENABLED", "true");
     setEnv("OPENROUTER_API_KEY", "k");
     expect(buildStatus(app, deps).memory).toEqual({
       configured: true,

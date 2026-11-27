@@ -122,7 +122,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
 /** The line under a row, for the rows that have one. */
 export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "local.viewerName": msg`What she calls you in calls. Leave it empty and she uses no name.`,
-  "memory.enabled": msg`On, each persona remembers what she learns about you across calls and chats. Default off.`,
+  "memory.enabled": msg`On, each persona remembers what she learns about you across calls and chats. Default on.`,
   "memory.dir": msg`Default mem0/vectors in the data home.`,
   "memory.historyDb": msg`Default mem0/history.db in the data home.`,
   "embeddings.model": msg`Changing it means building every persona's knowledge index again.`,
@@ -138,7 +138,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.quick.provider": msg`Jobs of a few minutes, such as a list or a few edits to a file. A cheaper model suits them, though a task still uses tools, and a weaker model is easier to mislead with what it reads.`,
   "assistant.coding.provider": msg`Code, web pages and small programs.`,
   "assistant.research.provider": msg`Looking things up on the web and writing up what it found.`,
-  "assistant.search.provider": msg`The account tasks search the web with. Off, they can still read the pages you allow, but can't search.`,
+  "assistant.search.provider": msg`The account tasks search the web with. Default OpenRouter.`,
   "assistant.search.model": msg`Which index the account searches. Each search costs under a cent.`,
   "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
   "assistant.bash": msg`On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash, or Cygwin's or MSYS2's bash on your PATH.`,
@@ -211,12 +211,6 @@ export const FLAG_LABELS = {
 /** An optional role's default, where it has none: what being off means. */
 export const PROVIDER_OFF_LABELS: Readonly<Partial<Record<RoleId, MessageDescriptor>>> = {
   realtime: msg`Off: Three Models`,
-  assistant: msg`Off: No Tasks`,
-  // A kind follows the assistant's account, which is unset too.
-  "assistant-quick": msg`Same as Assistant Tasks`,
-  "assistant-coding": msg`Same as Assistant Tasks`,
-  "assistant-research": msg`Same as Assistant Tasks`,
-  search: msg`Off: No Web Search`,
 };
 
 /** Why controls.ts refused a value, by the code it gives; `{min}` and `{max}` are the row's limits. */
