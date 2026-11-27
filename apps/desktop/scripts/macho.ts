@@ -46,7 +46,8 @@ function fdSource(fd: number, size: number, file: string): Source {
 export function deriveMachoUuid(seed: string): Buffer {
   const hash = createHash("sha256").update(`eidolon-macho-uuid:${seed}`, "utf8").digest();
   const uuid = Buffer.from(hash.subarray(0, 16));
-  if (uuid[0] === 0x4c && uuid[1] === 0x4c && uuid[2] === 0x44) uuid[0] ^= 0x01;
+  // Keep the LC_UUID out of the stock lld prefix that signed-check rejects.
+  if (uuid.subarray(0, 3).toString("hex") === STOCK_LLD_UUID_PREFIX) uuid[0] ^= 0x01;
   uuid[6] = (uuid[6]! & 0x0f) | 0x80;
   uuid[8] = (uuid[8]! & 0x3f) | 0x80;
   return uuid;

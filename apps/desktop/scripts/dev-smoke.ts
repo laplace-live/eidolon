@@ -1749,9 +1749,10 @@ async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
     : await permRows
         .locator("button")
         .evaluateAll(
-          (elements) =>
-            elements.length >= expectedIds.length &&
+          (elements, minButtons) =>
+            elements.length >= minButtons &&
             elements.every((element) => (element as HTMLButtonElement).disabled),
+          expectedIds.length,
         );
   const bgAllSayNote = !walk.background
     ? true

@@ -147,11 +147,12 @@ if (net.isIP(host) !== 0 && !isLanAddress(host)) {
           callback(Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" }));
           return;
         }
-        if (!address.every((entry) => isLanAddress(entry && entry.address))) {
+        const lanAddresses = address.filter((entry) => isLanAddress(entry && entry.address));
+        if (lanAddresses.length === 0) {
           callback(Object.assign(new Error("INVALID_TARGET"), { code: "INVALID_TARGET" }));
           return;
         }
-        callback(null, address);
+        callback(null, lanAddresses);
         return;
       }
       if (!isLanAddress(address)) {

@@ -470,6 +470,62 @@ describe("testLocalNetwork", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
+    const dualStackRunner: LocalNetworkChildRunner = (_file, args, options, callback) => {
+      const preload = `(() => {
+        const dns = require("node:dns");
+        const net = require("node:net");
+        const { EventEmitter } = require("node:events");
+        dns.lookup = (_hostname, opts, cb) => {
+          const fn = typeof opts === "function" ? opts : cb;
+          const all = typeof opts === "object" && opts !== null && opts.all === true;
+          process.nextTick(() => {
+            if (all) {
+              fn(null, [
+                { address: "2001:db8::1", family: 6 },
+                { address: "10.0.1.5", family: 4 },
+              ]);
+            } else {
+              fn(null, "10.0.1.5", 4);
+            }
+          });
+        };
+        net.createConnection = (opts) => {
+          const socket = new EventEmitter();
+          socket.setTimeout = () => {};
+          socket.destroy = () => {};
+          opts.lookup(opts.host, { all: true }, (err, filtered) => {
+            if (err) {
+              socket.emit("error", err);
+              return;
+            }
+            const ok =
+              Array.isArray(filtered) &&
+              filtered.length === 1 &&
+              filtered[0].address === "10.0.1.5";
+            socket.remoteAddress = ok ? filtered[0].address : "invalid";
+            socket.emit("connect");
+          });
+          return socket;
+        };
+      })();\n`;
+      const script = args.at(-3) ?? "";
+      const target = args.slice(-2);
+      execFile(
+        process.execPath,
+        ["-e", `${preload}${script}`, ...target],
+        { timeout: options.timeout },
+        callback,
+      );
+    };
+    const dualStackHost = createDesktopPermissions(makeHost({ runChild: dualStackRunner }));
+    expect(
+      await dualStackHost.testLocalNetwork({ host: "dualstack.local", port: 63427 }),
+    ).toMatchObject({
+      ok: true,
+      host: "dualstack.local",
+      port: 63427,
+    });
+
     const runWithCodes = (codes: readonly string[]): LocalNetworkChildRunner => {
       const preload = `(() => {
         const net = require("node:net");
