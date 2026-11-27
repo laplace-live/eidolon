@@ -1958,6 +1958,7 @@ msgstr "Discard"
 msgid "Discard Changes"
 msgstr "Discard Changes"
 
+#: src/components/route-error.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Disconnect"
 msgstr "Disconnect"

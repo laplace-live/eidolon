@@ -300,7 +300,6 @@ export class ClientCallBridgePool {
     if (candidate === null) {
       return new Response(text, response);
     }
-    this.#bridges.get(payload.pc_id)?.close(false);
     const bridge = await this.#openBridge(payload.pc_id, candidate, mux);
     this.#options.onCallOpened?.(payload.pc_id);
     const rewrittenSdp = rewriteSdpAnswer(payload.sdp, {

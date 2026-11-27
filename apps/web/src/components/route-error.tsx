@@ -7,7 +7,11 @@ import { LockedScreen } from "@/components/locked-screen";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { WindowDragStrip } from "@/components/window-drag-strip";
-import { activeSubspaceServer, subspaceQuery } from "@/features/subspace/queries";
+import {
+  activeSubspaceServer,
+  subspaceQuery,
+  useDisconnectSubspaceServer,
+} from "@/features/subspace/queries";
 import { ApiError, call, errorDetail } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { errorMessage } from "@/lib/labels";
@@ -85,13 +89,15 @@ function RemoteTargetNote() {
 
 function RemoteRecoveryButtons() {
   const { t } = useLingui();
-  const hasRemote =
+  const activeServer =
     useQuery({
       ...subspaceQuery,
-      select: (state) => activeSubspaceServer(state) !== null,
-    }).data ?? false;
+      select: activeSubspaceServer,
+    }).data ?? null;
+  const disconnect = useDisconnectSubspaceServer();
   const [switching, setSwitching] = useState(false);
-  if (!hasRemote) return null;
+  if (activeServer === null) return null;
+  const busy = switching || disconnect.isPending;
 
   async function switchLocal(destination: string) {
     setSwitching(true);
@@ -106,16 +112,25 @@ function RemoteRecoveryButtons() {
 
   return (
     <>
-      <Button variant="outline" disabled={switching} onClick={() => void switchLocal("/")}>
+      <Button variant="outline" disabled={busy} onClick={() => void switchLocal("/")}>
         {t`Switch to This Computer`}
       </Button>
       <Button
         variant="outline"
-        disabled={switching}
+        disabled={busy}
         onClick={() => void switchLocal("/settings?tab=subspace")}
       >
         {t`Open Subspace Settings`}
       </Button>
+      {activeServer.connectionState !== "disconnected" && (
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => disconnect.mutate(activeServer.id)}
+        >
+          {t`Disconnect`}
+        </Button>
+      )}
     </>
   );
 }

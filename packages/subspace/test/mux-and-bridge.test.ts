@@ -865,4 +865,66 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       hostMux.close();
     }
   });
+
+  test("keeps the existing bridge open if opening a replacement bridge throws", async () => {
+    const hostEcho = createSocket("udp4");
+    await new Promise<void>((resolve) => hostEcho.bind(0, "127.0.0.1", () => resolve()));
+    const hostPort = hostEcho.address().port;
+
+    const { clientMux, hostMux } = await wiredMuxPair(async () => ({
+      status: 404,
+      statusText: "Not Found",
+      headers: [],
+      body: null,
+    }));
+    const closedEvents: string[] = [];
+    const pool = new ClientCallBridgePool({
+      onBridgeClosed: (pcId, closedByAlert) => closedEvents.push(`${pcId}:${closedByAlert}`),
+    });
+
+    try {
+      const sdp = [
+        "v=0",
+        "o=- 1 1 IN IP4 127.0.0.1",
+        "s=-",
+        "t=0 0",
+        "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+        "c=IN IP4 127.0.0.1",
+        `a=candidate:1 1 udp 2122260223 127.0.0.1 ${hostPort} typ host generation 0`,
+        "a=end-of-candidates",
+        "",
+      ].join("\r\n");
+
+      const first = await pool.adaptOfferResponse(
+        new Response(JSON.stringify({ pc_id: "pc-replace-fail", sdp }), { status: 200 }),
+        clientMux,
+        { mode: "direct" },
+      );
+      expect(first.status).toBe(200);
+      expect(pool.hasBridge("pc-replace-fail")).toBe(true);
+
+      const failingMux = Object.create(clientMux, {
+        openCallChannel: {
+          value: () => {
+            throw new Error("channel open failed");
+          },
+        },
+      }) as typeof clientMux;
+      await expect(
+        pool.adaptOfferResponse(
+          new Response(JSON.stringify({ pc_id: "pc-replace-fail", sdp }), { status: 200 }),
+          failingMux,
+          { mode: "direct" },
+        ),
+      ).rejects.toThrow("channel open failed");
+
+      expect(pool.hasBridge("pc-replace-fail")).toBe(true);
+      expect(closedEvents).toEqual([]);
+    } finally {
+      pool.closeAll();
+      hostEcho.close();
+      clientMux.close();
+      hostMux.close();
+    }
+  });
 });

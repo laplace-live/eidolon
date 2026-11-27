@@ -92,8 +92,7 @@ function ServerMenu({
   const { t } = useLingui();
   // Open dialogs only after DropdownMenu finishes closing so focus traps don't fight.
   const opening = useRef<(() => void) | null>(null);
-  const connectedOrBusy =
-    server.connectionState === "connected" || server.connectionState === "connecting";
+  const canDisconnect = server.connectionState !== "disconnected";
 
   return (
     <DropdownMenu>
@@ -117,7 +116,7 @@ function ServerMenu({
           <RefreshCwIcon />
           {t`Reconnect`}
         </DropdownMenuItem>
-        {connectedOrBusy && (
+        {canDisconnect && (
           <DropdownMenuItem onSelect={onDisconnect}>
             <UnplugIcon />
             {t`Disconnect`}

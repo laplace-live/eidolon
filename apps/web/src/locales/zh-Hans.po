@@ -1958,6 +1958,7 @@ msgstr "放弃修改"
 msgid "Discard Changes"
 msgstr "放弃修改"
 
+#: src/components/route-error.tsx
 #: src/features/subspace/servers-card.tsx
 msgid "Disconnect"
 msgstr "断开连接"

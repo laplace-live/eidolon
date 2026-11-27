@@ -2118,4 +2118,91 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
       "Host 2 Updated",
     );
   });
+
+  test("disconnectServer clears retained offline Direct call counts so recovery actions succeed", async () => {
+    const hostDir = tempDir("subspace-offline-disconnect-host-");
+    const clientDir = tempDir("subspace-offline-disconnect-client-");
+
+    const udpSock = createSocket("udp4");
+    cleanups.push(() => {
+      udpSock.close();
+    });
+    await new Promise<void>((resolve) => udpSock.bind(0, "127.0.0.1", () => resolve()));
+    const udpPort = udpSock.address().port;
+    const sdp = [
+      "v=0",
+      "o=- 1 1 IN IP4 127.0.0.1",
+      "s=-",
+      "t=0 0",
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+      "c=IN IP4 127.0.0.1",
+      `a=candidate:1 1 udp 2122260223 127.0.0.1 ${udpPort} typ host generation 0`,
+      "a=end-of-candidates",
+      "",
+    ].join("\r\n");
+
+    const host = new SubspaceHost({
+      store: new SubspaceStore(hostDir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: async (req) => {
+        if (new URL(req.url).pathname === "/api/offer" && req.method === "POST") {
+          return Response.json({ pc_id: "pc-offline-disconnect", sdp });
+        }
+        return Response.json({ ok: true });
+      },
+    });
+    const hostStopped = { done: false };
+    cleanups.push(async () => {
+      if (!hostStopped.done) await host.stop();
+    });
+
+    const directPort = await host.startDirect(0);
+    const offer = await host.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: directPort,
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: clientDir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      callBridgeIdleMs: 30_000,
+      dispatchLocal: async () => new Response("local"),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const paired = await mgr.pairServer({ code: encodePairingUrl(offer), activate: true });
+    await mgr.proxyToActive(
+      new Request("http://127.0.0.1/api/offer", { method: "POST", body: "{}" }),
+      "/api/offer",
+    );
+    expect(mgr.activeCallCount).toBe(1);
+
+    await host.stop();
+    hostStopped.done = true;
+    await vi.waitFor(
+      async () => {
+        const state = await mgr.getState();
+        expect(state.servers.find((s) => s.id === paired.pairedServerId)?.connectionState).toBe(
+          "error",
+        );
+      },
+      { timeout: 3_000 },
+    );
+
+    await expect(mgr.setActiveHostId(null)).rejects.toMatchObject({ code: "call-active" });
+
+    const disconnected = await mgr.disconnectServer(paired.pairedServerId);
+    expect(disconnected.servers.find((s) => s.id === paired.pairedServerId)?.connectionState).toBe(
+      "disconnected",
+    );
+    expect(mgr.activeCallCount).toBe(0);
+
+    const switched = await mgr.setActiveHostId(null);
+    expect(switched.activeHostId).toBeNull();
+    const updated = await mgr.updateServer(paired.pairedServerId, { port: 65002 });
+    expect(updated.servers.find((s) => s.id === paired.pairedServerId)?.endpoint?.port).toBe(65002);
+  });
 });

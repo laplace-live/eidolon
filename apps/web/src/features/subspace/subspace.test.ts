@@ -207,6 +207,7 @@ const {
   useSwitchSubspaceHost,
 } = await import("./queries");
 const { SubspaceSwitcher } = await import("@/components/subspace-switcher");
+const { RouteError } = await import("@/components/route-error");
 const { SidebarProvider } = await import("@/components/ui/sidebar");
 const { resetExpectedSubspaceHost, send, StaleHostMutationError } = await import("@/lib/api");
 const { toastError } = await import("@/lib/feedback");
@@ -759,6 +760,136 @@ describe("Subspace web UI regressions", () => {
         params: { id: "srv_edit" },
         body: { name: "Editable Peer", host: "10.0.0.5", port: 9000 },
       });
+    } finally {
+      history.dispose();
+    }
+  });
+
+  test("ServersCard and RouteError expose Disconnect when an active remote server is in error state", async () => {
+    const baseServer = {
+      id: "srv_err",
+      name: "Unreachable Peer",
+      mode: "direct" as const,
+      endpoint: { host: "10.0.0.9", port: 45123 },
+      relay: null,
+      addedAt: 1,
+      lastConnectedAt: null,
+      lastVersion: null,
+      lastError: "Connection failed",
+      latencyMs: null,
+    };
+    const errState = makeState({
+      activeHostId: "srv_err",
+      servers: [{ ...baseServer, connectionState: "error" }],
+    });
+    const offlineState = makeState({
+      activeHostId: "srv_err",
+      servers: [{ ...baseServer, connectionState: "disconnected", lastError: null }],
+    });
+
+    const client = new QueryClient();
+    client.setQueryData(subspaceQuery.queryKey, errState);
+    mockCall.mockResolvedValue(offlineState);
+    const history = createBrowserHistory(null);
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+
+    try {
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(ServersCard),
+            ),
+          ),
+        ),
+      );
+      const disconnectMenuItem = dropdownSelectHandlers.get("Disconnect");
+      expect(disconnectMenuItem).toBeDefined();
+      await mounted.act(async () => {
+        disconnectMenuItem!();
+      });
+      expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/servers/:id/disconnect", {
+        params: { id: "srv_err" },
+      });
+
+      await mounted.unmount();
+      dropdownSelectHandlers.clear();
+      buttonProps.length = 0;
+      mockCall.mockClear();
+      client.setQueryData(subspaceQuery.queryKey, offlineState);
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(ServersCard),
+            ),
+          ),
+        ),
+      );
+      expect(dropdownSelectHandlers.has("Disconnect")).toBe(false);
+
+      await mounted.unmount();
+      dropdownSelectHandlers.clear();
+      buttonProps.length = 0;
+      client.setQueryData(subspaceQuery.queryKey, errState);
+      mockCall.mockResolvedValue(offlineState);
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(RouteError, { error: new Error("host offline") }),
+            ),
+          ),
+        ),
+      );
+      expect(buttonProps.some((b) => b.text === "Switch to This Computer")).toBe(true);
+      expect(buttonProps.some((b) => b.text === "Open Subspace Settings")).toBe(true);
+      const disconnectBtn = buttonProps.find((b) => b.text === "Disconnect");
+      expect(disconnectBtn).toBeDefined();
+      await mounted.act(async () => {
+        disconnectBtn!.onClick?.();
+      });
+      expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/servers/:id/disconnect", {
+        params: { id: "srv_err" },
+      });
+
+      await mounted.unmount();
+      buttonProps.length = 0;
+      client.setQueryData(subspaceQuery.queryKey, offlineState);
+      mounted = await mountFakeDom(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(RouteError, { error: new Error("host offline") }),
+            ),
+          ),
+        ),
+      );
+      expect(buttonProps.some((b) => b.text === "Disconnect")).toBe(false);
     } finally {
       history.dispose();
     }
