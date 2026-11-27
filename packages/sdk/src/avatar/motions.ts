@@ -20,7 +20,7 @@ export const AWAY: readonly [number, number] = [0.35, 0.45];
 const PACE_RANGE: readonly [number, number] = [0.82, 1.18];
 const SWAY_RANGE: readonly [number, number] = [0.82, 1.18];
 // Matches PSD2Live's 12 s Idle loop while staying inside its 15.535 s BodyAngleX breath period,
-// so a pair separated around 12 s starts well apart on both.
+// so a pair about half a loop (6 s) apart starts well apart on both.
 const OFFSET_SPAN = 12;
 const AWAY_X_RANGE: readonly [number, number] = [0.28, 0.42];
 const AWAY_Y_RANGE: readonly [number, number] = [0.36, 0.52];

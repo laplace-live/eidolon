@@ -881,6 +881,7 @@ describe("motion variation across stages", () => {
       expect(Math.abs((a?.pace ?? 1) - (b?.pace ?? 1))).toBeGreaterThan(0.05);
       const phaseGap = Math.abs((a?.offset ?? 0) - (b?.offset ?? 0));
       expect(Math.min(phaseGap, 12 - phaseGap)).toBeGreaterThan(1.5);
+      expect(Math.abs((a?.sway ?? 1) - (b?.sway ?? 1))).toBeGreaterThan(0.05);
       expect(Math.sign(a?.away?.[0] ?? 0)).toBe(-Math.sign(b?.away?.[0] ?? 0));
       expect(Math.abs((a?.reaction ?? 0) - (b?.reaction ?? 0))).toBeGreaterThan(0.02);
     }
@@ -888,6 +889,7 @@ describe("motion variation across stages", () => {
     const six = stageMotions(6, random);
     expect(six).toHaveLength(6);
     expect(new Set(six.map((m) => m.pace)).size).toBe(6);
+    expect(new Set(six.map((m) => m.sway)).size).toBe(6);
     expect(six.filter((m) => (m.away?.[0] ?? 0) < 0)).toHaveLength(3);
     expect(six.filter((m) => (m.away?.[0] ?? 0) > 0)).toHaveLength(3);
   });

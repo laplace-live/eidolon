@@ -290,10 +290,11 @@ call's turns. The local app's Studio previews a persona's models with it.
 `new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, pace?, offset?, sway?, away?, reaction?, onError?, clock?})`
 owns the frame loop; the model has none of its own. `pace` (0.25..4) scales clip, mood-fade,
 behavior, head-gesture and saccade speed, `offset` advances a freshly shown model's idle and
-breathing phase (`advance`), `sway` scales breathing sway, `away` sets her thinking gaze target,
-and `reaction` delays non-speaking direction gestures. `stageMotions(count, random?)` produces
-stratified, shuffled motion settings (`pace`, `offset`, `sway`, `away`, `reaction`) so stages side
-by side don't move in unison, while lip sync stays on real audio time.
+breathing phase unless `reducedMotion` is on (`advance`), `sway` scales breathing sway, `away` sets
+her thinking gaze target, and `reaction` delays non-speaking direction gestures.
+`stageMotions(count, random?)` produces stratified, shuffled motion settings (`pace`, `offset`,
+`sway`, `away`, `reaction`) so stages side by side don't move in unison, while lip sync stays on
+real audio time.
 
 - **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
   setup in place, without starting over a clip the setup didn't change, and stops one it took
