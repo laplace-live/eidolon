@@ -155,7 +155,7 @@ function run(): void {
   let fallbackUpdates: FallbackUpdateBoxes | null = null;
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
-  /** A login launch holds the updater's launch check until the window shows. */
+  /** A login launch holds the updater's quiet checks until the window shows. */
   let updatesHeld = false;
 
   const pages = new WindowPages({
@@ -384,6 +384,7 @@ function run(): void {
     strings,
     icon,
     approved: () => {
+      updates?.stop();
       chatWatch?.stop();
       watch?.stop();
       companion?.quit();

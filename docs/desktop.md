@@ -724,7 +724,7 @@ never an install, a launch or an update; a launch reads only whether it was the 
   tray, a second launch, a menu item or a notification's click shows it, and its first showing
   takes the saved maximize. The window is made all the same because Windows delivers
   `query-session-end` and `session-end` to windows: with none, a sign-out would skip [the backend's
-  stop](#the-backend). The updater's launch check, and the box it may open, waits for that first
+  stop](#the-backend). The updater's quiet checks, and any box they may open, wait for that first
   showing. NSIS's relaunch after an update passes `--updated`, not the switch, so that start shows.
   The [desktop companion](#the-desktop-companion), when she is on and Show at Login is, shows once
   drawn while the window stays hidden; her showing releases nothing the window's first showing
@@ -1323,8 +1323,9 @@ runs it on electron-updater's `autoUpdater`.
   itself only from a folder it can write to (move it to the Applications folder, then open it again).
   A folder that is only not the user's to write, `/Applications` for a standard account, still updates:
   Squirrel.Mac asks for an administrator's password there.
-- **Checking, badge, and toast:** once, quietly, 10 s after the backend is first ready (after a
-  [launch at login](#open-at-login), once the window has also shown), and from Check for Updates…
+- **Checking, badge, and toast:** quietly, 10 s after the backend is first ready (after a
+  [launch at login](#open-at-login), once the window has also shown) and every hour after while
+  idle or offering an update (stopped once a quit is approved), and from Check for Updates…
   (in macOS's app menu after About, in Windows' tray menu after Settings…), which opens the window
   and sends `check-updates` to the page. A quiet check logs up-to-date, errors, skipped
   versions (`userData/updates.json`), or available updates (`Eidolon: update available: X.Y.Z`),

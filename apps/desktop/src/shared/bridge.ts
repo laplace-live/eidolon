@@ -871,7 +871,7 @@ export interface EidolonDesktop {
   readonly updateDownload: () => Promise<void>;
   /** Restarts to install the downloaded update. */
   readonly updateInstall: () => Promise<void>;
-  /** Skips the offered version so quiet launch checks stay silent about it. */
+  /** Skips the offered version so quiet checks stay silent about it. */
   readonly updateSkip: () => Promise<void>;
   /** OS permissions relevant to LAPLACE Eidolon on this computer. */
   readonly permissions: () => Promise<PermissionsState>;

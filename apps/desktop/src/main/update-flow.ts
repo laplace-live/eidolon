@@ -4,6 +4,7 @@
 // updater.ts runs it on electron-updater and pushes each state change to the app page.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { MessageBoxOptions, NativeImage } from "electron";
 import type { UpdateInfo } from "electron-updater";
 import type { UpdateCheckOutcome, UpdateState } from "../shared/bridge.ts";
@@ -12,8 +13,11 @@ import { launchFlag } from "./environment.ts";
 import { loggedText } from "./policy.ts";
 import type { Strings } from "./strings.ts";
 
-/** How long after the backend is first ready the quiet check runs, clear of startup. */
+/** How long after the backend is first ready the first quiet check runs, clear of startup. */
 export const LAUNCH_CHECK_DELAY_MS = 10_000;
+
+/** Period between background update checks once the launch check has run. */
+export const CHECK_INTERVAL_MS = 60 * 60_000;
 
 /**
  * NSIS's per-user install folder, %LOCALAPPDATA%\Programs\<name>, from electron-builder.yml's
@@ -191,7 +195,7 @@ export interface UpdateFlowOptions {
    * update test under EIDOLON_DESKTOP_UPDATE_TEST).
    */
   readonly autoProceed?: boolean;
-  /** Previously skipped version, kept silent on quiet launch checks. */
+  /** Previously skipped version, kept silent on quiet checks. */
   readonly skippedVersion?: () => string | null;
   /** Persists a newly skipped version. */
   readonly saveSkippedVersion?: (version: string) => void;
@@ -222,8 +226,8 @@ function reason(error: unknown): string {
 }
 
 /**
- * A quiet check 10 s after the backend is first ready, and manual checks from the app menu or
- * tray; state changes push to the renderer's title-bar badge and in-app update dialog.
+ * Quiet checks 10 s after the backend is first ready and every hour after, plus manual checks from
+ * the app menu or tray; state changes push to the renderer's title-bar badge and update dialog.
  */
 export class UpdateFlow {
   readonly #options: UpdateFlowOptions;
@@ -233,7 +237,9 @@ export class UpdateFlow {
   #checking: Promise<UpdateCheckOutcome> | null = null;
   /** Whether the running check reports skipped versions too: Check for Updates… asked too. */
   #manual = false;
-  #scheduled = false;
+  #stopped = false;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #pendingDownload = false;
   /** quitAndInstall was called: the app is meant to be quitting. */
   #committed = false;
   #relaunched = false;
@@ -253,11 +259,17 @@ export class UpdateFlow {
     return this.#state;
   }
 
-  /** The backend is ready: the first time, the quiet check is set for 10 s later. */
+  /** The backend is ready: the first time, schedules a quiet check 10 s later and every hour after. */
   backendReady(): void {
-    if (this.#driver === null || this.#scheduled) return;
-    this.#scheduled = true;
-    setTimeout(() => void this.check(false), LAUNCH_CHECK_DELAY_MS);
+    if (this.#driver === null || this.#timer !== undefined || this.#stopped) return;
+    this.#schedule(LAUNCH_CHECK_DELAY_MS);
+  }
+
+  /** Cancels scheduled background checks once the app is quitting. */
+  stop(): void {
+    this.#stopped = true;
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
   }
 
   /** One check of the feed; one asked while another runs joins it, a manual one surfacing skipped versions. */
@@ -267,53 +279,35 @@ export class UpdateFlow {
       return this.#checking;
     }
     const state = this.#state;
-    if (state.phase === "available") {
+    if (manual && state.phase === "available") {
       return Promise.resolve({ outcome: "available", version: state.version });
     }
-    if (state.phase !== "idle" || this.#driver === null) {
+    if ((state.phase !== "idle" && state.phase !== "available") || this.#driver === null) {
       return Promise.resolve({ outcome: "none" });
     }
     this.#manual = manual;
-    const checking = this.#check(this.#driver).finally(() => {
-      this.#checking = null;
-    });
-    this.#checking = checking;
-    return checking;
+    const { promise, resolve, reject } = Promise.withResolvers<UpdateCheckOutcome>();
+    this.#checking = promise;
+    this.#check(this.#driver).then(resolve, reject);
+    return promise;
   }
 
   /** Download, from an update found or one whose download failed. */
   download(): void {
     const state = this.#state;
     const driver = this.#driver;
-    if (driver === null || (state.phase !== "available" && state.phase !== "error")) return;
-    const { version } = state;
-    this.#set({ phase: "downloading", version, percent: 0 });
-    this.#options.log.info(`Eidolon: downloading ${version}`);
-    this.#options.progress(0);
-    driver
-      .download((percent) => {
-        const now = this.#state;
-        const rounded = Math.min(100, Math.max(0, Math.round(percent)));
-        if (now.phase !== "downloading" || rounded === now.percent) return;
-        this.#set({ phase: "downloading", version, percent: rounded });
-        this.#options.progress(rounded / 100);
-      })
-      .then(
-        () => {
-          if (this.#state.phase !== "downloading") return;
-          this.#options.progress(null);
-          this.#set({ phase: "downloaded", version, notes: this.#notes });
-          this.#options.log.info(`Eidolon: update downloaded: ${version}`);
-          if (this.#options.autoProceed) this.install();
-        },
-        (error: unknown) => {
-          if (this.#state.phase !== "downloading") return;
-          this.#options.progress(null);
-          const message = reason(error);
-          this.#set({ phase: "error", version, message });
-          this.#options.log.warn(`Eidolon: the download of ${version} failed: ${message}`);
-        },
-      );
+    if (
+      driver === null ||
+      this.#stopped ||
+      (state.phase !== "available" && state.phase !== "error")
+    ) {
+      return;
+    }
+    if (this.#checking !== null) {
+      this.#pendingDownload = true;
+      return;
+    }
+    this.#startDownload(driver, state.version);
   }
 
   /** Restart, once: the hop to installing comes first, so a second Restart does nothing. */
@@ -354,6 +348,8 @@ export class UpdateFlow {
   skip(): void {
     const state = this.#state;
     if (state.phase !== "available") return;
+    this.#pendingDownload = false;
+    this.#manual = false;
     const { version } = state;
     this.#options.saveSkippedVersion?.(version);
     this.#options.log.info(`Eidolon: skipped update ${version}`);
@@ -375,7 +371,7 @@ export class UpdateFlow {
   }
 
   async #check(driver: UpdateDriver): Promise<UpdateCheckOutcome> {
-    this.#set({ phase: "checking" });
+    if (this.#state.phase === "idle") this.#set({ phase: "checking" });
     this.#options.log.info("Eidolon: checking for updates");
     let found: UpdateInfo | null = null;
     let failedMessage: string | null = null;
@@ -383,14 +379,23 @@ export class UpdateFlow {
       found = await driver.check();
     } catch (error) {
       failedMessage = reason(error);
+    } finally {
+      this.#checking = null;
     }
     const manual = this.#manual;
     this.#manual = false;
+    const pendingDownload = this.#pendingDownload;
+    this.#pendingDownload = false;
     const { log, version: current } = this.#options;
     if (failedMessage !== null) {
-      this.#set({ phase: "idle" });
+      if (this.#state.phase === "checking") this.#set({ phase: "idle" });
       log.warn(`Eidolon: the update check failed: ${failedMessage}`);
-      return { outcome: "error", message: failedMessage };
+      const outcome: UpdateCheckOutcome =
+        manual && this.#state.phase === "available"
+          ? { outcome: "available", version: this.#state.version }
+          : { outcome: "error", message: failedMessage };
+      if (pendingDownload) this.download();
+      return outcome;
     }
     if (found === null) {
       this.#set({ phase: "idle" });
@@ -398,16 +403,60 @@ export class UpdateFlow {
       return { outcome: "none" };
     }
     const skipped = this.#options.skippedVersion?.() ?? null;
-    if (!this.#options.autoProceed && !manual && found.version === skipped) {
+    const alreadyOffered =
+      this.#state.phase === "available" && this.#state.version === found.version;
+    if (!this.#options.autoProceed && !manual && !alreadyOffered && found.version === skipped) {
       this.#set({ phase: "idle" });
       log.info(`Eidolon: update available: ${found.version} (skipped)`);
       return { outcome: "none" };
     }
     this.#notes = this.#options.notes?.(found, current) ?? [];
-    this.#set({ phase: "available", version: found.version, notes: this.#notes });
     log.info(`Eidolon: update available: ${found.version}`);
-    if (this.#options.autoProceed) this.download();
+    if (!this.#stopped && (this.#options.autoProceed || pendingDownload)) {
+      this.#startDownload(driver, found.version);
+    } else {
+      this.#set({ phase: "available", version: found.version, notes: this.#notes });
+    }
     return { outcome: "available", version: found.version };
+  }
+
+  #startDownload(driver: UpdateDriver, version: string): void {
+    this.#set({ phase: "downloading", version, percent: 0 });
+    this.#options.log.info(`Eidolon: downloading ${version}`);
+    this.#options.progress(0);
+    driver
+      .download((percent) => {
+        const now = this.#state;
+        const rounded = Math.min(100, Math.max(0, Math.round(percent)));
+        if (now.phase !== "downloading" || rounded === now.percent) return;
+        this.#set({ phase: "downloading", version, percent: rounded });
+        this.#options.progress(rounded / 100);
+      })
+      .then(
+        () => {
+          if (this.#state.phase !== "downloading") return;
+          this.#options.progress(null);
+          this.#set({ phase: "downloaded", version, notes: this.#notes });
+          this.#options.log.info(`Eidolon: update downloaded: ${version}`);
+          if (this.#options.autoProceed) this.install();
+        },
+        (error: unknown) => {
+          if (this.#state.phase !== "downloading") return;
+          this.#options.progress(null);
+          const message = reason(error);
+          this.#set({ phase: "error", version, message });
+          this.#options.log.warn(`Eidolon: the download of ${version} failed: ${message}`);
+        },
+      );
+  }
+
+  #schedule(delay: number): void {
+    this.#timer = setTimeout(() => {
+      if (this.#stopped) return;
+      this.#schedule(CHECK_INTERVAL_MS);
+      void this.check(false);
+    }, delay);
+    this.#timer.unref?.();
   }
 
   /** The restart has stopped everything: quitAndInstall, or the app back without the update. */
@@ -431,36 +480,10 @@ export class UpdateFlow {
   }
 
   #set(next: UpdateState): void {
-    if (sameUpdateState(this.#state, next)) return;
+    if (isDeepStrictEqual(this.#state, next)) return;
     this.#state = next;
     this.#options.changed?.(next);
   }
-}
-
-function sameUpdateState(a: UpdateState, b: UpdateState): boolean {
-  if (a === b) return true;
-  if (a.phase !== b.phase) return false;
-  if (
-    a.phase === "unsupported" ||
-    a.phase === "read-only" ||
-    a.phase === "idle" ||
-    a.phase === "checking"
-  ) {
-    return true;
-  }
-  if (a.phase === "downloading" && b.phase === "downloading") {
-    return a.version === b.version && a.percent === b.percent;
-  }
-  if (a.phase === "error" && b.phase === "error") {
-    return a.version === b.version && a.message === b.message;
-  }
-  if (
-    (a.phase === "available" || a.phase === "downloaded" || a.phase === "installing") &&
-    (b.phase === "available" || b.phase === "downloaded" || b.phase === "installing")
-  ) {
-    return a.version === b.version && a.notes === b.notes;
-  }
-  return false;
 }
 
 /** The mock's update, beyond any real one. */
@@ -619,11 +642,16 @@ export class FallbackUpdateBoxes {
 
   /** Prompts on passive or post-check state transitions when the active page cannot render them. */
   async stateChanged(state: UpdateState): Promise<void> {
+    if (state.phase === "installing") return;
+    if (state.phase !== "available" && state.phase !== "downloaded" && state.phase !== "error") {
+      this.#prompted = null;
+      return;
+    }
+    const key = `${state.phase}:${state.version}`;
+    if (this.#prompted === key || this.#open || this.#options.quitting()) return;
+    this.#prompted = key;
+    const { label, text } = this.#options.strings();
     if (state.phase === "available") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
       const clicked = await this.#ask({
         type: "info",
         message: text.updateAvailableTitle(state.version),
@@ -633,13 +661,7 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
-      return;
-    }
-    if (state.phase === "downloaded") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
+    } else if (state.phase === "downloaded") {
       const clicked = await this.#ask({
         type: "info",
         message: text.updateDownloadedTitle,
@@ -649,13 +671,7 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.install();
-      return;
-    }
-    if (state.phase === "error") {
-      const key = `${state.phase}:${state.version}`;
-      if (this.#prompted === key) return;
-      this.#prompted = key;
-      const { label, text } = this.#options.strings();
+    } else {
       const clicked = await this.#ask({
         type: "warning",
         message: text.updateFailedTitle,
@@ -665,10 +681,8 @@ export class FallbackUpdateBoxes {
         cancelId: 1,
       });
       if (clicked === 0 && !this.#options.quitting()) this.#options.flow.download();
-      return;
     }
-    if (state.phase === "installing") return;
-    this.#prompted = null;
+    void this.stateChanged(this.#options.flow.state);
   }
 
   /** Handles Check for Updates… when the active page cannot handle `check-updates`. */
@@ -701,6 +715,7 @@ export class FallbackUpdateBoxes {
         detail: text.upToDate(this.#options.version),
         buttons: [label.ok],
       });
+      void this.stateChanged(this.#options.flow.state);
       return;
     }
     if (res.outcome === "error") {
@@ -710,6 +725,7 @@ export class FallbackUpdateBoxes {
         detail: res.message,
         buttons: [label.ok],
       });
+      void this.stateChanged(this.#options.flow.state);
       return;
     }
     if (this.#prompted !== `available:${res.version}`) {
