@@ -1,5 +1,12 @@
 # laplace-eidolon-desktop
 
+## 0.9.0
+
+### Minor Changes
+
+- bc20092: Enable Assistant Mode and viewer memory by default
+- 8415ff7: Replace native updater prompts with a title-bar badge and in-app dialog
+
 ## 0.8.0
 
 ### Minor Changes

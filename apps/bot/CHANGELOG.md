@@ -1,5 +1,11 @@
 # laplace-eidolon
 
+## 0.21.0
+
+### Minor Changes
+
+- bc20092: Enable Assistant Mode and viewer memory by default
+
 ## 0.20.0
 
 ### Minor Changes
