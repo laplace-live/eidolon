@@ -12,6 +12,14 @@ export interface VerifiedRelayCaller {
   readonly userId: string;
 }
 
+export class RelayJwksUnavailableError extends Error {
+  override readonly name = "RelayJwksUnavailableError";
+
+  constructor(message = "Relay JWKS temporarily unavailable") {
+    super(message);
+  }
+}
+
 export type RelayTokenVerifier = (
   authorizationHeader: string | undefined,
 ) => Promise<VerifiedRelayCaller | null>;
@@ -162,7 +170,7 @@ export function createRelayTokenVerifier(
     return task;
   }
 
-  async function resolveKeys(kid: string | undefined): Promise<CachedKey[] | null> {
+  async function resolveKeys(kid: string | undefined): Promise<CachedKey[]> {
     const current = now();
     const fresh = cache !== null && current - cache.fetchedAt < CACHE_TTL_MS;
     const inBackoff = lastFailedAt !== null && current - lastFailedAt < FETCH_RETRY_COOLDOWN_MS;
@@ -175,12 +183,14 @@ export function createRelayTokenVerifier(
       if (cache !== null && current - cache.fetchedAt <= maxStaleMs) {
         return cache.keys;
       }
-      return null;
+      throw new RelayJwksUnavailableError();
     }
     try {
       return await refreshJwks();
-    } catch {
-      return null;
+    } catch (error) {
+      throw new RelayJwksUnavailableError(
+        error instanceof Error ? error.message : "Relay JWKS temporarily unavailable",
+      );
     }
   }
 
@@ -222,7 +232,6 @@ export function createRelayTokenVerifier(
 
     const kid = typeof header.kid === "string" && header.kid !== "" ? header.kid : undefined;
     const keys = await resolveKeys(kid);
-    if (keys === null) return null;
 
     const matching = kid !== undefined ? keys.filter((k) => k.kid === kid) : keys;
     if (matching.length === 0) return null;

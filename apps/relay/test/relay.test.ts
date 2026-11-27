@@ -22,7 +22,7 @@ import { RELAY_CLOSE_CODE, RELAY_PATHS } from "@eidolon/subspace/relay-contract"
 import { serve } from "srvx";
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
-import { createRelayTokenVerifier } from "../src/jwks-verifier.ts";
+import { createRelayTokenVerifier, RelayJwksUnavailableError } from "../src/jwks-verifier.ts";
 import { openRelayDatabase, RelayStore } from "../src/relay-db.ts";
 import { startRelayServer } from "../src/server.ts";
 
@@ -276,7 +276,8 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     expect(await verifier(`Bearer ${expired}`)).toBeNull();
     expect(await verifier("Bearer not-a-jwt")).toBeNull();
 
-    // Advance past maxStaleMs (12m) while JWKS fails -> maxStaleMs exceeded, returns null (fail-closed).
+    // Advance past maxStaleMs (12m) while JWKS fails -> throws RelayJwksUnavailableError (503-equivalent retryable outage)
+    // while expired/invalid claims still return null (4401 UNAUTHORIZED).
     auth.setFailJwks(true);
     nowMs += 13 * 60_000;
     expect(await verifier(`Bearer ${validEd}`)).toBeNull();
@@ -286,7 +287,10 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       sub: "user-ed",
       exp: Math.floor(nowMs / 1000) + 300,
     });
-    expect(await verifier(`Bearer ${freshToken}`)).toBeNull();
+    await expect(verifier(`Bearer ${freshToken}`)).rejects.toBeInstanceOf(
+      RelayJwksUnavailableError,
+    );
+    expect(await verifier(`Bearer ${wrongIss}`)).toBeNull();
 
     // Re-seed cache after cooldown when auth recovers, then advance past CACHE_TTL_MS into stale window inside maxStaleMs.
     auth.setFailJwks(false);
@@ -308,7 +312,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     expect(auth.jwksRequests()).toBe(fetchesBeforeOutage + 1);
   });
 
-  test("returns null during retry cooldown without hammering JWKS when cache is empty", async () => {
+  test("throws RelayJwksUnavailableError during retry cooldown without hammering JWKS when cache is empty, and closes host sockets with 4503", async () => {
     const auth = await startMockAuthServer(new Map());
     auth.setFailJwks(true);
     let nowMs = Date.now();
@@ -328,17 +332,54 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
       exp: Math.floor(nowMs / 1000) + 300,
     });
 
-    expect(await verifier(`Bearer ${token}`)).toBeNull();
+    await expect(verifier(`Bearer ${token}`)).rejects.toBeInstanceOf(RelayJwksUnavailableError);
     expect(auth.jwksRequests()).toBe(1);
 
     nowMs += 10_000;
-    expect(await verifier(`Bearer ${token}`)).toBeNull();
+    await expect(verifier(`Bearer ${token}`)).rejects.toBeInstanceOf(RelayJwksUnavailableError);
     expect(auth.jwksRequests()).toBe(1);
+
+    // Invalid JWT still returns null without triggering JWKS fetch or 4503.
+    expect(await verifier("Bearer bad")).toBeNull();
 
     nowMs += 21_000;
     auth.setFailJwks(false);
     expect(await verifier(`Bearer ${token}`)).toEqual({ userId: "user-ed" });
     expect(auth.jwksRequests()).toBe(2);
+
+    // End-to-end relay WebSocket close code: 4503 during JWKS outage vs 4401 on invalid token.
+    auth.setFailJwks(true);
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-relay-4503-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    const relay = await startRelayServer({
+      port: 0,
+      host: "127.0.0.1",
+      dbPath: join(dir, "relay.sqlite"),
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      publicUrl: "http://127.0.0.1:0",
+    });
+    cleanups.push(() => relay.stop());
+
+    const outageToken = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed",
+      exp: Math.floor(Date.now() / 1000) + 300,
+    });
+    const wsOutage = new WebSocket(
+      `${relay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`,
+      { headers: { authorization: `Bearer ${outageToken}` } },
+    );
+    cleanups.push(() => wsOutage.terminate());
+    expect((await waitForClose(wsOutage)).code).toBe(RELAY_CLOSE_CODE.AUTH_UNAVAILABLE);
+
+    const wsBad = new WebSocket(`${relay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`, {
+      headers: { authorization: "Bearer not-a-jwt" },
+    });
+    cleanups.push(() => wsBad.terminate());
+    expect((await waitForClose(wsBad)).code).toBe(RELAY_CLOSE_CODE.UNAUTHORIZED);
   });
 
   test("serves /healthz, validates JWT + X25519 challenge, blocks hijack, splices E2EE, and enforces revocation", async () => {

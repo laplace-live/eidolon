@@ -1,6 +1,6 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { createElement, Fragment, type FunctionComponent, type ReactNode, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -15,8 +15,10 @@ vi.doMock("@lingui/react/macro", linguiReactMacro);
 vi.doMock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 
 const mockCall = vi.fn();
+let actualCall!: typeof import("@/lib/api").call;
 vi.doMock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  actualCall = actual.call;
   return { ...actual, call: mockCall };
 });
 
@@ -31,6 +33,7 @@ let switchCheckedHandler: ((checked: boolean) => void) | undefined;
 const dropdownSelectHandlers = new Map<string, () => void>();
 let dropdownCloseHandler: ((event: { preventDefault(): void }) => void) | undefined;
 const toastSuccess = vi.fn();
+const toastErrorSpy = vi.fn();
 
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -42,7 +45,7 @@ function textOf(node: ReactNode): string {
 }
 
 vi.doMock("sonner", () => ({
-  toast: { success: toastSuccess, error: vi.fn() },
+  toast: { success: toastSuccess, error: toastErrorSpy },
 }));
 vi.doMock("@/components/ui/button", () => ({
   Button: (props: {
@@ -191,6 +194,7 @@ const { ShareCard } = await import("./share-card");
 const { AddSubspaceServerDialog } = await import("./add-server-dialog");
 const { ServersCard } = await import("./servers-card");
 const {
+  resetHostCacheAndRoute,
   subspaceQuery,
   usePairSubspaceServer,
   useRemoveSubspaceServer,
@@ -200,7 +204,8 @@ const {
 } = await import("./queries");
 const { SubspaceSwitcher } = await import("@/components/subspace-switcher");
 const { SidebarProvider } = await import("@/components/ui/sidebar");
-const { resetExpectedSubspaceHost, send } = await import("@/lib/api");
+const { resetExpectedSubspaceHost, send, StaleHostMutationError } = await import("@/lib/api");
+const { toastError } = await import("@/lib/feedback");
 
 function findFormOnSubmit(root: unknown): ((event: { preventDefault(): void }) => void) | null {
   const queue: unknown[] = [root];
@@ -272,6 +277,7 @@ describe("Subspace web UI regressions", () => {
     dropdownSelectHandlers.clear();
     dropdownCloseHandler = undefined;
     toastSuccess.mockReset();
+    toastErrorSpy.mockReset();
     mockCall.mockReset();
     resetExpectedSubspaceHost();
     vi.restoreAllMocks();
@@ -923,5 +929,63 @@ describe("Subspace web UI regressions", () => {
     } finally {
       history.dispose();
     }
+  });
+
+  test("stale host-scoped mutation resolves after resetHostCacheAndRoute without writing cache or showing error toast", async () => {
+    const client = new QueryClient();
+    const promptKey = ["personas", "milky-green", "prompt"] as const;
+    let resolveFetch: ((res: Response) => void) | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    const onSuccess = vi.fn((saved: { text: string }) => {
+      client.setQueryData(promptKey, saved);
+    });
+
+    let triggerSave!: () => Promise<unknown>;
+    function PromptSaveHarness() {
+      const save = useMutation({
+        mutationFn: () =>
+          actualCall("PUT /api/local/personas/:id/prompt", {
+            params: { id: "milky-green" },
+            body: { text: "old-host-prompt" },
+          }),
+        onSuccess,
+        onError: toastError,
+      });
+      triggerSave = () => save.mutateAsync();
+      return null;
+    }
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(PromptSaveHarness)),
+      ),
+    );
+
+    let inflight!: Promise<unknown>;
+    await mounted.act(async () => {
+      inflight = triggerSave();
+      await vi.waitFor(() => {
+        expect(resolveFetch).not.toBeNull();
+      });
+    });
+    await mounted.act(async () => {
+      await resetHostCacheAndRoute(client, "/", vi.fn(), async () => {});
+      resolveFetch!(Response.json({ text: "old-host-prompt", source: "persona" }));
+      await expect(inflight).rejects.toBeInstanceOf(StaleHostMutationError);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(client.getQueryData(promptKey)).toBeUndefined();
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+    client.clear();
   });
 });

@@ -453,7 +453,7 @@ describe("Dual-DH X25519 + AES-256-GCM", () => {
     expect(() => subspaceRelayUrl()).toThrow(/https\/wss or loopback/);
 
     vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "http://auth.example.com");
-    expect(() => subspaceAuthUrl()).toThrow(/https\/wss or loopback/);
+    expect(() => subspaceAuthUrl()).toThrow(/https or loopback http/);
 
     expect(() => httpToWsUrl("http://relay.example.com", "/v1/host/control")).toThrow(
       /https\/wss or loopback/,

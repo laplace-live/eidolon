@@ -41,6 +41,20 @@ export function isAllowedRelayUrl(raw: string): boolean {
   return false;
 }
 
+export function isAllowedAuthUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "https:") return true;
+  if (parsed.protocol === "http:") {
+    return LOOPBACK_HOSTS.has(parsed.hostname);
+  }
+  return false;
+}
+
 export const DirectEndpointSchema = z.object({
   host: z.string().trim().min(1).max(255).refine(isValidDirectHost, "Invalid direct endpoint host"),
   port: z.number().int().min(1).max(65535),

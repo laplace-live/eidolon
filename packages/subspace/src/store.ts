@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   constantTimeEqual,
   generateX25519KeyPair,
+  isAllowedAuthUrl,
   isAllowedRelayUrl,
   sha256Hex,
   utf8Encode,
@@ -326,7 +327,7 @@ export class SubspaceStore {
       const auth = this.readRelayAuth();
       if (auth === null) return null;
       const authUrl = withoutTrailingSlashes(auth.authUrl.trim());
-      if (!isAllowedRelayUrl(authUrl)) return { corrupt: true };
+      if (!isAllowedAuthUrl(authUrl)) return { corrupt: true };
       return { authUrl, token: auth.token, corrupt: false };
     } catch {
       try {
@@ -336,7 +337,7 @@ export class SubspaceStore {
         } | null;
         const authUrl = typeof raw?.authUrl === "string" ? raw.authUrl.trim() : "";
         const token = typeof raw?.token === "string" ? raw.token.trim() : "";
-        if (authUrl && isAllowedRelayUrl(authUrl) && token) {
+        if (authUrl && isAllowedAuthUrl(authUrl) && token) {
           return { authUrl: withoutTrailingSlashes(authUrl), token, corrupt: false };
         }
       } catch {

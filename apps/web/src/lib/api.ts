@@ -12,7 +12,20 @@ export const CLIENT_ERROR_CODES = ["unreachable", "bad-response"] as const;
 export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
 
 let expectedSubspaceHost: string | undefined;
+let hostMutationEpoch = 0;
 const expectedHostConflictListeners = new Set<() => void>();
+
+export class StaleHostMutationError extends Error {
+  override readonly name = "StaleHostMutationError";
+
+  constructor() {
+    super("Active Subspace server changed before request completed");
+  }
+}
+
+export function bumpHostMutationEpoch(): void {
+  hostMutationEpoch += 1;
+}
 
 export function setExpectedSubspaceHost(activeHostId: string | null): void {
   expectedSubspaceHost = activeHostId ?? "local";
@@ -20,6 +33,7 @@ export function setExpectedSubspaceHost(activeHostId: string | null): void {
 
 export function resetExpectedSubspaceHost(): void {
   expectedSubspaceHost = undefined;
+  hostMutationEpoch = 0;
 }
 
 export function primeExpectedSubspaceHost(activeHostId: string | null): void {
@@ -144,20 +158,28 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
   return urlOf(route, input);
 }
 
-/** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
-export async function send(route: string, input: Loose = {}): Promise<Response> {
-  const { body, signal } = input;
-  const space = route.indexOf(" ");
-  const method = route.slice(0, space);
-  const path = route.slice(space + 1);
-  const headers = proofHeaders();
-  if (
-    expectedSubspaceHost !== undefined &&
+function isHostScopedWrite(method: string, path: string): boolean {
+  return (
     method !== "GET" &&
     method !== "HEAD" &&
     !path.startsWith("/api/local/session") &&
     !path.startsWith("/api/local/subspace")
-  ) {
+  );
+}
+
+function splitRoute(route: string): { readonly method: string; readonly path: string } {
+  const space = route.indexOf(" ");
+  return { method: route.slice(0, space), path: route.slice(space + 1) };
+}
+
+/** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
+export async function send(route: string, input: Loose = {}): Promise<Response> {
+  const { body, signal } = input;
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
+  const headers = proofHeaders();
+  if (expectedSubspaceHost !== undefined && hostScopedWrite) {
     headers["X-Eidolon-Expected-Host"] = expectedSubspaceHost;
   }
   const init: RequestInit = {
@@ -180,6 +202,9 @@ export async function send(route: string, input: Loose = {}): Promise<Response> 
     if (signal?.aborted) throw error;
     throw new ApiError(0, "unreachable", String(error));
   }
+  if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+    throw new StaleHostMutationError();
+  }
   if (!response.ok) {
     const err = await errorFrom(response);
     if (err.status === 409 && err.code === "conflict") {
@@ -195,10 +220,18 @@ export async function call<R extends JsonRoute>(
   route: R,
   ...[input]: Args<R>
 ): Promise<Spec<R>["response"]> {
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
   const response = await send(route, input);
   try {
-    return (await response.json()) as Spec<R>["response"];
-  } catch {
+    const parsed = (await response.json()) as Spec<R>["response"];
+    if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+      throw new StaleHostMutationError();
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof StaleHostMutationError) throw error;
     throw new ApiError(response.status, "bad-response", "not JSON");
   }
 }
@@ -218,11 +251,18 @@ export async function bytes<R extends RawRoute>(
   route: R,
   ...[input]: Args<R>
 ): Promise<ArrayBuffer> {
+  const { method, path } = splitRoute(route);
+  const hostScopedWrite = isHostScopedWrite(method, path);
+  const startedEpoch = hostMutationEpoch;
   const response = await send(route, input);
   try {
-    return await response.arrayBuffer();
+    const data = await response.arrayBuffer();
+    if (hostScopedWrite && hostMutationEpoch !== startedEpoch) {
+      throw new StaleHostMutationError();
+    }
+    return data;
   } catch (error) {
-    if (input?.signal?.aborted) throw error;
+    if (error instanceof StaleHostMutationError || input?.signal?.aborted) throw error;
     throw new ApiError(response.status, "bad-response", "the body stopped short");
   }
 }

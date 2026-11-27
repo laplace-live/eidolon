@@ -50,6 +50,7 @@ export {
   DirectEndpointSchema,
   encodePairingCode,
   encodePairingUrl,
+  isAllowedAuthUrl,
   isAllowedRelayUrl,
   isPairingExpired,
   isValidDirectHost,

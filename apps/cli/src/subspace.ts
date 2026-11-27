@@ -15,6 +15,7 @@ import {
   DEFAULT_SUBSPACE_AUTH_URL,
   DEFAULT_SUBSPACE_RELAY_URL,
   discoverRelayAuthUrl,
+  isAllowedAuthUrl,
   isAllowedRelayUrl,
   listShareableAddresses,
   resolveEffectiveRelayUrl,
@@ -459,10 +460,10 @@ export async function subspaceMain(
     typeof ns.authUrl === "string" && ns.authUrl.trim()
       ? withoutTrailingSlashes(ns.authUrl.trim())
       : undefined;
-  if (authUrl !== undefined && !isAllowedRelayUrl(authUrl)) {
+  if (authUrl !== undefined && !isAllowedAuthUrl(authUrl)) {
     return reportExit(
       io,
-      parserError(SUBSPACE_PARSER, `--auth-url must use https/wss or loopback http/ws: ${authUrl}`),
+      parserError(SUBSPACE_PARSER, `--auth-url must use https or loopback http: ${authUrl}`),
     );
   }
   try {

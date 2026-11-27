@@ -302,4 +302,88 @@ server.listen(listenPort, "127.0.0.1", () => {
       rmSync(work, { recursive: true, force: true });
     }
   });
+
+  test("pair --wait exits with stderr error when spawned headless server terminates unexpectedly, and subspace rejects ws auth URLs", async () => {
+    const authIo = captureIo();
+    expect(await subspaceMain(["login", "--auth-url", "wss://id.example.com"], authIo.io)).toBe(2);
+    expect(authIo.stderr()).toContain("must use https or loopback http");
+
+    const work = mkdtempSync(join(tmpdir(), "eidolon-pair-die-"));
+    const entry = join(work, "die-server.mjs");
+    const infoPath = lockInfoPath("local-server");
+    const tokenPath = join(dataHome(), "local-token");
+    writeFileSync(
+      entry,
+      `
+import { createHmac } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { dirname } from "node:path";
+
+const token = "die-test-token-0123456789abcdef";
+const server = createServer((req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+  res.setHeader("content-type", "application/json");
+  if (url.pathname === "/api/local/session") {
+    const probe = url.searchParams.get("probe") ?? "";
+    const proof = createHmac("sha256", token).update("probe:" + probe, "utf8").digest("base64url");
+    res.writeHead(200).end(JSON.stringify({ proof }));
+    return;
+  }
+  if (url.pathname === "/api/local/subspace") {
+    res.writeHead(200).end(JSON.stringify({
+      activeHostId: null,
+      servers: [],
+      share: { hostName: "DieTest", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants: [] },
+      relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
+    }));
+    return;
+  }
+  if (url.pathname === "/api/local/subspace/share/offer" && req.method === "POST") {
+    res.writeHead(200).end(JSON.stringify({
+      pairingUrl: "eidolon://pair?code=123",
+      pairingCode: "123",
+      qrSvg: "<svg/>",
+      expiresAt: Date.now() + 60_000,
+      state: {
+        activeHostId: null,
+        servers: [],
+        share: { hostName: "DieTest", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants: [] },
+        relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
+      },
+    }));
+    setTimeout(() => {
+      console.error("fatal headless boom");
+      process.exit(2);
+    }, 60);
+    return;
+  }
+  res.writeHead(404).end();
+});
+server.listen(0, "127.0.0.1", () => {
+  const port = server.address().port;
+  mkdirSync(${JSON.stringify(dirname(infoPath))}, { recursive: true });
+  writeFileSync(${JSON.stringify(tokenPath)}, token);
+  writeFileSync(${JSON.stringify(infoPath)}, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
+  process.send?.({ kind: "listening", port });
+});
+`,
+    );
+    const controller = new AbortController();
+    const io = captureIo();
+    try {
+      const code = await pairMain(["--json"], {
+        ...io.io,
+        signal: controller.signal,
+        serverEntry: entry,
+        pollMs: 10_000,
+      });
+      expect(code).toBe(2);
+      expect(io.stderr()).toContain("exited unexpectedly (status 2)");
+      expect(io.stderr()).toContain("fatal headless boom");
+    } finally {
+      controller.abort();
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
 });

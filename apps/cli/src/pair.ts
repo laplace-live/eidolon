@@ -87,6 +87,8 @@ export async function startHeadlessServer(
   options: { readonly entry?: string } = {},
 ): Promise<{
   readonly server: RunningLocalServer;
+  readonly waitExited: Promise<void>;
+  checkExited(): Promise<{ readonly code: number; readonly stderr: string } | null>;
   stop(): Promise<void>;
 }> {
   const entry = options.entry ?? serverEntry();
@@ -97,6 +99,10 @@ export async function startHeadlessServer(
   let exitCode: number | null = null;
   let stderrLines: string[] = [];
   let stderrDone: Promise<void> = Promise.resolve();
+  let notifyPermExit: (() => void) | null = null;
+  const waitExited = new Promise<void>((resolve) => {
+    notifyPermExit = resolve;
+  });
 
   const spawnChild = (port: number): Subprocess => {
     boundPort = null;
@@ -140,13 +146,21 @@ export async function startHeadlessServer(
           stderrLines.push(errorText(error));
           exitCode = 1;
           exited = true;
+          notifyPermExit?.();
           return;
         }
       }
       exitCode = code;
       exited = true;
+      notifyPermExit?.();
     });
     return child;
+  };
+
+  const checkExited = async () => {
+    if (!exited) return null;
+    await stderrDone;
+    return { code: exitCode ?? 1, stderr: stderrLines.join("").trim() };
   };
 
   const stop = async () => {
@@ -185,6 +199,8 @@ export async function startHeadlessServer(
       if (probed !== null) {
         return {
           server: { ...probed.server, pid: probed.server.pid ?? currentChild?.pid ?? null },
+          waitExited,
+          checkExited,
           stop,
         };
       }
@@ -251,7 +267,7 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
   }
 
   const existing = await probeRunningLocalServer();
-  let ownedServer: { readonly server: RunningLocalServer; stop(): Promise<void> } | null = null;
+  let ownedServer: Awaited<ReturnType<typeof startHeadlessServer>> | null = null;
   let server: RunningLocalServer;
 
   if (existing !== null) {
@@ -360,9 +376,24 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
       }
     };
     const pollMs = deps.pollMs ?? 2_000;
+    const reportOwnedExit = async () => {
+      const died = await ownedServer?.checkExited();
+      if (died === undefined || died === null) return null;
+      err(
+        `Local Eidolon server exited unexpectedly (status ${died.code})${died.stderr ? `: ${died.stderr}` : ""}`,
+      );
+      return died.code !== 0 ? died.code : 1;
+    };
     while (!deps.signal?.aborted) {
-      await abortableSleep(pollMs, deps.signal).catch(() => {});
+      const exitedNow = await reportOwnedExit();
+      if (exitedNow !== null) return exitedNow;
+      await Promise.race([
+        abortableSleep(pollMs, deps.signal).catch(() => {}),
+        ownedServer ? ownedServer.waitExited : new Promise<never>(() => {}),
+      ]);
       if (deps.signal?.aborted) break;
+      const exitedAfterWait = await reportOwnedExit();
+      if (exitedAfterWait !== null) return exitedAfterWait;
       const poll = await fetch(`${server.baseUrl}/api/local/subspace`, {
         headers: { authorization: `Bearer ${server.token}` },
         signal: deps.signal,
@@ -370,6 +401,8 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
       if (poll?.ok) {
         recordNewGrants((await poll.json()) as SubspaceStateSnapshot);
       } else if (!deps.signal?.aborted) {
+        const exitedAfterPoll = await reportOwnedExit();
+        if (exitedAfterPoll !== null) return exitedAfterPoll;
         const reprobed = await probeRunningLocalServer();
         if (reprobed !== null) {
           server = reprobed.server;

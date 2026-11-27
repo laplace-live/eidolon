@@ -1,7 +1,7 @@
 import { abortableSleep, envOptional, errorText, withoutTrailingSlashes } from "@eidolon/config";
 import { base64UrlToBytes, utf8Decode } from "./protocol/encoding.ts";
-import { isAllowedRelayUrl } from "./protocol/pairing.ts";
-import { DEFAULT_SUBSPACE_RELAY_URL, subspaceAuthUrl } from "./settings.ts";
+import { isAllowedAuthUrl } from "./protocol/pairing.ts";
+import { DEFAULT_SUBSPACE_RELAY_URL, relayUrlToHttpUrl, subspaceAuthUrl } from "./settings.ts";
 
 export const SUBSPACE_AUTH_CLIENT_ID = "eidolon-subspace";
 
@@ -40,7 +40,11 @@ export interface MintedRelayJwt {
 }
 
 function resolveAuthEndpoint(authUrl: string, pathname: string): string {
-  return new URL(pathname, `${withoutTrailingSlashes(authUrl)}/`).toString();
+  const clean = withoutTrailingSlashes(authUrl.trim());
+  if (!isAllowedAuthUrl(clean)) {
+    throw new Error(`Subspace Auth URL must use https or loopback http: ${clean}`);
+  }
+  return new URL(pathname, `${clean}/`).toString();
 }
 
 function decodeJwtExpiryMs(jwt: string): number {
@@ -70,12 +74,12 @@ export async function discoverRelayAuthUrl(
   if (envOptional("EIDOLON_SUBSPACE_AUTH_URL") !== undefined) {
     return subspaceAuthUrl();
   }
-  const cleanRelay = withoutTrailingSlashes(relayUrl);
-  if (cleanRelay !== DEFAULT_SUBSPACE_RELAY_URL) {
+  const httpRelay = relayUrlToHttpUrl(relayUrl);
+  if (httpRelay !== DEFAULT_SUBSPACE_RELAY_URL) {
     try {
       const timeout = AbortSignal.timeout(2_000);
       const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      const res = await fetch(`${cleanRelay}/healthz`, { signal: combined });
+      const res = await fetch(`${httpRelay}/healthz`, { signal: combined });
       if (res.ok) {
         const body = (await res.json().catch(() => null)) as {
           auth?: { issuer?: unknown };
@@ -84,10 +88,7 @@ export async function discoverRelayAuthUrl(
         if (typeof issuer === "string") {
           try {
             const parsed = new URL(issuer);
-            if (
-              (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-              isAllowedRelayUrl(parsed.toString())
-            ) {
+            if (isAllowedAuthUrl(parsed.toString())) {
               return withoutTrailingSlashes(parsed.toString());
             }
           } catch {

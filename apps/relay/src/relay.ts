@@ -22,7 +22,11 @@ import {
   RelayHostControlInboundSchema,
 } from "@eidolon/subspace/relay-contract";
 import WebSocket, { WebSocketServer } from "ws";
-import type { RelayTokenVerifier } from "./jwks-verifier.ts";
+import {
+  RelayJwksUnavailableError,
+  type RelayTokenVerifier,
+  type VerifiedRelayCaller,
+} from "./jwks-verifier.ts";
 import type { RelayStore } from "./relay-db.ts";
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -300,17 +304,42 @@ export class RelayHub {
     await new Promise<void>((resolve) => this.#wss.close(() => resolve()));
   }
 
+  async #authenticateHostSocket(
+    ws: WebSocket,
+    req: IncomingMessage,
+    queue: AttachedMessageQueue,
+  ): Promise<VerifiedRelayCaller | null> {
+    let caller: VerifiedRelayCaller | null;
+    try {
+      caller = await this.#verifyToken(req.headers.authorization);
+    } catch (error) {
+      queue.drainRaw();
+      if (error instanceof RelayJwksUnavailableError) {
+        safeClose(
+          ws,
+          RELAY_CLOSE_CODE.AUTH_UNAVAILABLE,
+          "Authentication service temporarily unavailable",
+        );
+      } else {
+        safeClose(ws, RELAY_CLOSE_CODE.UNAUTHORIZED, "Unauthorized");
+      }
+      return null;
+    }
+    if (caller === null) {
+      queue.drainRaw();
+      safeClose(ws, RELAY_CLOSE_CODE.UNAUTHORIZED, "Unauthorized");
+      return null;
+    }
+    return caller;
+  }
+
   async #onHostControl(
     ws: WebSocket,
     req: IncomingMessage,
     queue: AttachedMessageQueue,
   ): Promise<void> {
-    const caller = await this.#verifyToken(req.headers.authorization);
-    if (caller === null) {
-      queue.drainRaw();
-      safeClose(ws, RELAY_CLOSE_CODE.UNAUTHORIZED, "Unauthorized");
-      return;
-    }
+    const caller = await this.#authenticateHostSocket(ws, req, queue);
+    if (caller === null) return;
     const { userId } = caller;
     let relayHostId = "";
 
@@ -528,12 +557,8 @@ export class RelayHub {
     req: IncomingMessage,
     hostQueue: AttachedMessageQueue,
   ): Promise<void> {
-    const caller = await this.#verifyToken(req.headers.authorization);
-    if (caller === null) {
-      hostQueue.drainRaw();
-      safeClose(hostWs, RELAY_CLOSE_CODE.UNAUTHORIZED, "Unauthorized");
-      return;
-    }
+    const caller = await this.#authenticateHostSocket(hostWs, req, hostQueue);
+    if (caller === null) return;
     try {
       const raw = await hostQueue.nextText(HANDSHAKE_TIMEOUT_MS);
       const dataAuth = HostDataAuthSchema.parse(JSON.parse(raw));

@@ -6,6 +6,7 @@ export const RELAY_CLOSE_CODE = {
   TIMEOUT: 4408,
   HOST_OWNED_BY_OTHER: 4409,
   RATE_LIMITED: 4429,
+  AUTH_UNAVAILABLE: 4503,
 } as const;
 
 export const RELAY_PATHS = {

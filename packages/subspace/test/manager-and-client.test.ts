@@ -11,9 +11,11 @@ import {
   computeRelayControlProof,
   deriveRelayDeviceToken,
   deriveRelayInviteToken,
+  discoverRelayAuthUrl,
   encodePairingUrl,
   generateX25519KeyPair,
   importX25519PrivateKey,
+  isAllowedAuthUrl,
   parsePairingInput,
   RELAY_CLOSE_CODE,
   RELAY_PATHS,
@@ -25,6 +27,7 @@ import {
   SubspaceStore,
   sha256Hex,
   startClientHandshake,
+  subspaceAuthUrl,
   subspaceRelayUrl,
   utf8Encode,
 } from "../src/index.ts";
@@ -1263,6 +1266,7 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
 
     const relayA = await startMockRelay();
     const relayB = await startMockRelay();
+    const relayC = await startMockRelay();
 
     store.saveRelayAuth({
       authUrl: relayA.url,
@@ -1285,8 +1289,7 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(parsedA.ok && parsedA.offer.relay?.url).toBe(relayA.url);
     expect(relayA.inviteIds).toHaveLength(1);
 
-    // Switch saved relay login externally and invoke createShareOffer directly (without prior
-    // updateShareSettings): the first call must reconnect to relayB without self-cancelling.
+    // Path 1: `eidolon subspace login --relay-url B` updates settings via updateShareSettings({}).
     store.saveRelayAuth({
       authUrl: relayB.url,
       relayUrl: relayB.url,
@@ -1294,23 +1297,153 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
       user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
       savedAt: Date.now(),
     });
-    const offerB = await mgr.createShareOffer({ mode: "relay" });
-    expect(offerB.state.relayAuth.relayUrl).toBe(relayB.url);
-    expect(mgr.host.activeRelayUrl).toBe(relayB.url);
-    expect(mgr.host.relayConnected).toBe(true);
+    const switched = await mgr.updateShareSettings({});
+    expect(switched.relayAuth.relayUrl).toBe(relayB.url);
     await vi.waitFor(() => {
+      expect(mgr.host.activeRelayUrl).toBe(relayB.url);
+      expect(mgr.host.relayConnected).toBe(true);
       expect(relayA.closedCount()).toBeGreaterThanOrEqual(1);
     });
+
+    const offerB = await mgr.createShareOffer({ mode: "relay" });
     const parsedB = parsePairingInput(offerB.pairingUrl);
     expect(parsedB.ok && parsedB.offer.relay?.url).toBe(relayB.url);
-    expect(relayA.inviteIds).toHaveLength(1);
     expect(relayB.inviteIds).toHaveLength(1);
 
-    relayB.sendConnectionOpen("sess-on-b");
+    // Path 2: Switching to relayC and calling createShareOffer directly (without prior
+    // updateShareSettings) must reconnect before capturing offerEpoch and succeed on first try.
+    store.saveRelayAuth({
+      authUrl: relayC.url,
+      relayUrl: relayC.url,
+      token: "sess-c",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const offerC = await mgr.createShareOffer({ mode: "relay" });
+    expect(offerC.state.relayAuth.relayUrl).toBe(relayC.url);
+    expect(mgr.host.activeRelayUrl).toBe(relayC.url);
+    expect(mgr.host.relayConnected).toBe(true);
     await vi.waitFor(() => {
-      expect(relayB.dataConnections).toContain("sess-on-b");
+      expect(relayB.closedCount()).toBeGreaterThanOrEqual(1);
+    });
+    const parsedC = parsePairingInput(offerC.pairingUrl);
+    expect(parsedC.ok && parsedC.offer.relay?.url).toBe(relayC.url);
+    expect(relayA.inviteIds).toHaveLength(1);
+    expect(relayB.inviteIds).toHaveLength(1);
+    expect(relayC.inviteIds).toHaveLength(1);
+
+    relayC.sendConnectionOpen("sess-on-c");
+    await vi.waitFor(() => {
+      expect(relayC.dataConnections).toContain("sess-on-c");
     });
     expect(relayA.dataConnections).toEqual([]);
+    expect(relayB.dataConnections).toEqual([]);
+  });
+
+  test("discoverRelayAuthUrl converts ws/wss relay URLs to HTTP(S), rejects ws auth URLs, and host retries on 4503 AUTH_UNAVAILABLE", async () => {
+    vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "");
+    expect(isAllowedAuthUrl("https://id.example.com")).toBe(true);
+    expect(isAllowedAuthUrl("http://127.0.0.1:8788")).toBe(true);
+    expect(isAllowedAuthUrl("wss://id.example.com")).toBe(false);
+    expect(isAllowedAuthUrl("ws://127.0.0.1:8788")).toBe(false);
+    vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "wss://id.example.com");
+    expect(() => subspaceAuthUrl()).toThrowError(/https or loopback http/i);
+    vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "");
+
+    const healthServer = createServer((req, res) => {
+      if (req.url === "/healthz") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, auth: { issuer: "http://127.0.0.1:9999" } }));
+        return;
+      }
+      if (req.url === "/api/auth/token") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: "h.p.s", expiresAt: Date.now() + 60_000 }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    let controlAttempts = 0;
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+    healthServer.on("upgrade", (req, socket, head) => {
+      if (req.url === RELAY_PATHS.HOST_CONTROL) {
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          controlAttempts += 1;
+          if (controlAttempts === 1) {
+            ws.close(
+              RELAY_CLOSE_CODE.AUTH_UNAVAILABLE,
+              "Authentication service temporarily unavailable",
+            );
+            return;
+          }
+          let relayHostId = "";
+          ws.on("message", async (raw) => {
+            const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+            if (msg.type === "host_hello") {
+              relayHostId = String(msg.relayHostId);
+              const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString(
+                "base64",
+              );
+              await computeRelayControlProof(
+                relayPriv,
+                String(msg.hostPublicKeyB64),
+                challengeB64,
+                "alice",
+              );
+              ws.send(
+                JSON.stringify({
+                  type: "host_challenge",
+                  challengeB64,
+                  relayEphPubB64: relayKp.publicKeyB64,
+                  userId: "alice",
+                }),
+              );
+            } else if (msg.type === "host_challenge_ack") {
+              ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+            }
+          });
+        });
+      } else {
+        socket.destroy();
+      }
+    });
+    await new Promise<void>((resolve) => healthServer.listen(0, "127.0.0.1", resolve));
+    const addr = healthServer.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const c of wss.clients) c.terminate();
+          wss.close(() => healthServer.close(() => resolve()));
+        }),
+    );
+
+    expect(await discoverRelayAuthUrl(`ws://127.0.0.1:${port}`)).toBe("http://127.0.0.1:9999");
+
+    const dir = tempDir("subspace-4503-retry-");
+    const store = new SubspaceStore(dir);
+    store.saveRelayAuth({
+      authUrl: `http://127.0.0.1:${port}`,
+      relayUrl: `ws://127.0.0.1:${port}`,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const host = new SubspaceHost({
+      store,
+      serverVersion: () => "0.19.0",
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => host.stop());
+
+    // First attempt receives 4503 AUTH_UNAVAILABLE; createPairingOffer must wait through backoff
+    // reconnect rather than prematurely reusing an unestablished relay state.
+    const offer = await host.createPairingOffer({ mode: "relay" });
+    expect(controlAttempts).toBeGreaterThanOrEqual(2);
+    expect(host.relayConnected).toBe(true);
+    expect(offer.relay?.url).toBe(`ws://127.0.0.1:${port}`);
   });
 
   test("pairServer rejects re-pairing a host with active calls even when activate is false without dropping its tunnel", async () => {

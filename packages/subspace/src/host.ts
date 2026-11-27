@@ -458,7 +458,9 @@ export class SubspaceHost {
           if (
             currentRelayUrl !== null &&
             existing.relay?.url === currentRelayUrl &&
-            this.#relayControlUrl === currentRelayUrl
+            this.#relayControlUrl === currentRelayUrl &&
+            this.#relayConnected &&
+            this.#relayWs?.readyState === WebSocket.OPEN
           ) {
             return existing;
           }
@@ -768,8 +770,8 @@ export class SubspaceHost {
         return;
       }
       logger.warning(`[subspace] Could not mint Relay JWT: ${errorText(error)}`);
-      this.#setRelayState(false, "Could not reach Relay auth server");
       this.#scheduleRelayReconnect();
+      this.#setRelayState(false, "Could not reach Relay auth server");
       return;
     }
     if (this.#stopped || !this.#relayWanted || attemptId !== this.#relayAttemptId) return;
@@ -786,8 +788,8 @@ export class SubspaceHost {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
       logger.warning(`[subspace] Relay control URL error: ${message}`);
-      this.#setRelayState(false, message);
       this.#scheduleRelayReconnect();
+      this.#setRelayState(false, message);
       return;
     }
     guardWsErrors(ws);
@@ -833,8 +835,8 @@ export class SubspaceHost {
         this.#setRelayState(false, text || "Host identity belongs to another Relay account");
         return;
       }
-      this.#setRelayState(false, text || (code === 1000 ? null : `Disconnected (${code})`));
       if (this.#relayWanted && !this.#stopped) this.#scheduleRelayReconnect();
+      this.#setRelayState(false, text || (code === 1000 ? null : `Disconnected (${code})`));
     });
 
     ws.on("error", (err) => {

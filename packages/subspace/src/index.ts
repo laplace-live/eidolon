@@ -49,6 +49,7 @@ export {
   DEFAULT_SUBSPACE_AUTH_URL,
   DEFAULT_SUBSPACE_RELAY_URL,
   httpToWsUrl,
+  relayUrlToHttpUrl,
   resolveEffectiveRelayUrl,
   subspaceAuthUrl,
   subspaceRelayUrl,

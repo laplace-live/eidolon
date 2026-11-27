@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { avatarsResetForHost } from "@/components/avatar/version";
 import {
+  bumpHostMutationEpoch,
   call,
   primeExpectedSubspaceHost,
   type SubspaceConnectionState,
@@ -165,6 +166,7 @@ export async function resetHostCacheAndRoute(
   const nonSubspace = (query: { readonly queryKey: readonly unknown[] }) =>
     query.queryKey[0] !== SUBSPACE_KEY[0];
   avatarsResetForHost();
+  bumpHostMutationEpoch();
   bumpSubspaceHostEpoch();
   await queryClient.cancelQueries({ predicate: nonSubspace });
   queryClient.removeQueries({ predicate: nonSubspace });

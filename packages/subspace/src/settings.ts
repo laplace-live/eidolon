@@ -1,13 +1,23 @@
 import { envOptional, envStr, withoutTrailingSlashes } from "@eidolon/config";
-import { isAllowedRelayUrl } from "./protocol/pairing.ts";
+import { isAllowedAuthUrl, isAllowedRelayUrl } from "./protocol/pairing.ts";
 
 export const DEFAULT_SUBSPACE_RELAY_URL = "https://eidolon-relay.vrp.moe";
 export const DEFAULT_SUBSPACE_AUTH_URL = "https://id.laplace.live";
 
-function normalizeAllowedUrl(raw: string, fallback: string, label: string): string {
+function normalizeAllowedUrl(
+  raw: string,
+  fallback: string,
+  label: string,
+  kind: "relay" | "auth" = "relay",
+): string {
   const normalized = withoutTrailingSlashes(raw.trim() || fallback);
-  if (!isAllowedRelayUrl(normalized)) {
-    throw new Error(`${label} must use https/wss or loopback http/ws: ${normalized}`);
+  const allowed = kind === "auth" ? isAllowedAuthUrl(normalized) : isAllowedRelayUrl(normalized);
+  if (!allowed) {
+    throw new Error(
+      kind === "auth"
+        ? `${label} must use https or loopback http: ${normalized}`
+        : `${label} must use https/wss or loopback http/ws: ${normalized}`,
+    );
   }
   return normalized;
 }
@@ -44,7 +54,16 @@ export function subspaceAuthUrl(): string {
     envStr("EIDOLON_SUBSPACE_AUTH_URL", DEFAULT_SUBSPACE_AUTH_URL),
     DEFAULT_SUBSPACE_AUTH_URL,
     "Subspace Auth URL",
+    "auth",
   );
+}
+
+export function relayUrlToHttpUrl(baseUrl: string): string {
+  const normalized = normalizeAllowedUrl(baseUrl, baseUrl, "Subspace Relay URL");
+  const url = new URL(normalized);
+  if (url.protocol === "wss:") url.protocol = "https:";
+  else if (url.protocol === "ws:") url.protocol = "http:";
+  return withoutTrailingSlashes(url.toString());
 }
 
 export function httpToWsUrl(baseUrl: string, pathname: string): string {
