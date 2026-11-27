@@ -1247,6 +1247,10 @@ msgctxt "reply mode"
 msgid "Auto"
 msgstr "Auto"
 
+#: src/features/subspace/share-card.tsx
+msgid "Automatic Subspace Relay fallback will activate as soon as you generate a link."
+msgstr "Automatic Subspace Relay fallback will activate as soon as you generate a link."
+
 #: src/features/settings/desktop-notes.ts
 msgid "Available in the installed app only."
 msgstr "Available in the installed app only."
@@ -1745,12 +1749,8 @@ msgid "Connected"
 msgstr "Connected"
 
 #: src/features/subspace/share-card.tsx
-msgid "Connected to Subspace Relay with end-to-end encryption."
-msgstr "Connected to Subspace Relay with end-to-end encryption."
-
-#: src/features/subspace/share-card.tsx
-msgid "Connecting to Subspace Relay…"
-msgstr "Connecting to Subspace Relay…"
+msgid "Connecting to Subspace Relay for fallback…"
+msgstr "Connecting to Subspace Relay for fallback…"
 
 #: src/features/subspace/servers-card.tsx
 msgid "Connecting…"
@@ -2016,13 +2016,9 @@ msgstr "Details"
 msgid "Direct"
 msgstr "Direct"
 
-#: src/features/subspace/share-card.tsx
-msgid "Direct and Relay Subspace access is turned off for new pairings."
-msgstr "Direct and Relay Subspace access is turned off for new pairings."
-
-#: src/features/subspace/share-card.tsx
-msgid "Direct Network"
-msgstr "Direct Network"
+#: src/features/subspace/servers-card.tsx
+msgid "Direct · Relay"
+msgstr "Direct · Relay"
 
 #: src/features/settings/permissions-notes.ts
 msgid "Direct Subspace connections to remote servers on your LAN, plus local-network tools and MCP servers."
@@ -3608,8 +3604,8 @@ msgid "Links to"
 msgstr "Links to"
 
 #: src/features/subspace/share-card.tsx
-msgid "Listening directly on port {port} without a Relay account."
-msgstr "Listening directly on port {port} without a Relay account."
+msgid "Listening directly on port {port}."
+msgstr "Listening directly on port {port}."
 
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
@@ -4363,7 +4359,6 @@ msgstr "Notifications"
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
 #: src/features/setup/keys-step.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "Off"
 
@@ -5132,8 +5127,8 @@ msgid "Relay"
 msgstr "Relay"
 
 #: src/features/subspace/share-card.tsx
-msgid "Relay error: {error}"
-msgstr "Relay error: {error}"
+msgid "Relay fallback unavailable: {error}"
+msgstr "Relay fallback unavailable: {error}"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Relay sign-in failed."
@@ -5776,8 +5771,8 @@ msgid "Shared folder:"
 msgstr "Shared folder:"
 
 #: src/features/subspace/share-card.tsx
-msgid "Sharing Mode"
-msgstr "Sharing Mode"
+msgid "Sharing is off. Generating a pairing link starts Direct sharing on your local network."
+msgstr "Sharing is off. Generating a pairing link starts Direct sharing on your local network."
 
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
@@ -5983,8 +5978,8 @@ msgid "Sidebar"
 msgstr "Sidebar"
 
 #: src/features/subspace/share-card.tsx
-msgid "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
-msgstr "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
+msgid "Sign in to your Subspace Relay account below to add automatic Relay fallback."
+msgstr "Sign in to your Subspace Relay account below to add automatic Relay fallback."
 
 #: src/lib/labels.ts
 msgid "Sign in to your Subspace Relay account first."
@@ -6262,6 +6257,10 @@ msgstr "Stop a task in this chat"
 msgid "Stop Always Allowing {tool}"
 msgstr "Stop Always Allowing {tool}"
 
+#: src/features/subspace/share-card.tsx
+msgid "Stop Sharing"
+msgstr "Stop Sharing"
+
 #: src/features/tasks/task-card.tsx
 msgid "Stop Task"
 msgstr "Stop Task"
@@ -6366,13 +6365,16 @@ msgstr "Subspace Pairing QR Code"
 
 #: src/features/settings/route.tsx
 #: src/features/subspace/servers-card.tsx
-#: src/features/subspace/share-card.tsx
 msgid "Subspace Relay"
 msgstr "Subspace Relay"
 
 #: src/features/subspace/relay-account-card.tsx
 msgid "Subspace Relay Account"
 msgstr "Subspace Relay Account"
+
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Relay fallback is active."
+msgstr "Subspace Relay fallback is active."
 
 #: src/components/settings-form/labels.ts
 msgid "Subspace Relay URL"

@@ -17,8 +17,10 @@ import {
   type E2eeAuthResponse,
   type E2eeSession,
   importX25519PrivateKey,
+  isAllowedRelayUrl,
   isValidDirectHost,
   MuxEndpoint,
+  type RelayEndpoint,
   randomBytes,
   type SubspacePairingOffer,
   sha256Hex,
@@ -32,7 +34,13 @@ import {
   RelayHostControlOutboundSchema,
 } from "./relay-contract.ts";
 import { httpToWsUrl, resolveEffectiveRelayUrl } from "./settings.ts";
-import type { SubspaceHostIdentity, SubspaceRelayAuthRecord, SubspaceStore } from "./store.ts";
+import type {
+  SubspaceGrantRecord,
+  SubspaceHostIdentity,
+  SubspaceRelayAuthRecord,
+  SubspaceShareMode,
+  SubspaceStore,
+} from "./store.ts";
 import { extractHostUdpCandidates, openHostUdpBridge } from "./webrtc-bridge.ts";
 import {
   guardWsErrors,
@@ -63,11 +71,46 @@ function relayHostError(code: RelayHostErrorCode, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
+export function grantSupportsRelay(
+  grant: Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256">,
+): boolean {
+  return grant.mode === "relay" || grant.relayTokenSha256 !== undefined;
+}
+
+export function hostTransportNeeds(
+  shareMode: SubspaceShareMode,
+  grants: readonly Pick<SubspaceGrantRecord, "mode" | "relayTokenSha256">[],
+): { readonly needsDirect: boolean; readonly needsRelay: boolean } {
+  const hasDirectOrDualGrant = grants.some(
+    (g) => g.mode === "direct" || g.relayTokenSha256 !== undefined,
+  );
+  return {
+    needsDirect: shareMode === "direct" || (shareMode !== "relay" && hasDirectOrDualGrant),
+    needsRelay: shareMode !== "off" || grants.some(grantSupportsRelay),
+  };
+}
+
+export function readRelayAuthSafe(store: SubspaceStore): {
+  readonly auth: SubspaceRelayAuthRecord | null;
+  readonly error: string | null;
+} {
+  try {
+    return { auth: store.readRelayAuth(), error: null };
+  } catch (error) {
+    return {
+      auth: null,
+      error:
+        error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
+    };
+  }
+}
+
 interface ActiveInvite {
   readonly id: string;
-  readonly mode: "direct" | "relay";
+  readonly allowDirect: boolean;
+  readonly allowRelay: boolean;
   readonly ticket: string;
-  readonly ticketSha256: string;
+  readonly relayTicketSha256: string;
   readonly expiresAt: number;
   readonly offer: SubspacePairingOffer;
 }
@@ -201,7 +244,7 @@ export class SubspaceHost {
       if (invite.expiresAt <= now) this.#invites.delete(key);
     }
     const candidates = [...this.#invites.values()].filter((inv) =>
-      mode === undefined ? true : inv.mode === mode,
+      mode === undefined ? true : mode === "direct" ? inv.allowDirect : inv.allowRelay,
     );
     return candidates.at(-1)?.offer ?? null;
   }
@@ -209,15 +252,14 @@ export class SubspaceHost {
   async ensureStartedFromDisk(): Promise<void> {
     if (this.#stopped) return;
     const identity = await this.#ensureIdentity();
-    const grants = this.#deps.store.readGrants();
-    const needsDirect = identity.shareMode === "direct" || grants.some((g) => g.mode === "direct");
-    const needsRelay =
-      (identity.shareMode === "relay" || grants.some((g) => g.mode === "relay")) &&
-      this.#readRelayAuthSafe().auth !== null;
+    const { needsDirect, needsRelay } = hostTransportNeeds(
+      identity.shareMode,
+      this.#deps.store.readGrants(),
+    );
     if (needsDirect && !this.listening) {
       await this.startDirect(identity.directPort);
     }
-    if (needsRelay) {
+    if (needsRelay && this.#readRelayAuthSafe().auth !== null) {
       this.startRelay();
     }
   }
@@ -338,14 +380,7 @@ export class SubspaceHost {
     if (this.#stopped) return;
     this.#relayWanted = true;
     const { auth, error: authErr } = this.#readRelayAuthSafe();
-    let desiredUrl: string | null = null;
-    if (authErr === null) {
-      try {
-        desiredUrl = withoutTrailingSlashes(this.#resolveRelayUrl(auth));
-      } catch {
-        desiredUrl = null;
-      }
-    }
+    const desiredUrl = authErr === null ? this.#tryResolveRelayUrl(auth) : null;
     const hasActive =
       this.#relayConnectTask !== null ||
       (this.#relayWs !== null &&
@@ -389,19 +424,55 @@ export class SubspaceHost {
     this.#deleteInvites(mode);
   }
 
-  #deleteInvites(mode?: "direct" | "relay"): void {
-    for (const [key, invite] of this.#invites) {
-      if (mode === undefined || invite.mode === mode) {
-        this.#invites.delete(key);
-        const notify = this.#inviteAckWaiters.get(key);
-        this.#inviteAckWaiters.delete(key);
-        if (typeof notify === "function") notify();
-      }
+  #revokeRelayInvites(inviteIds: readonly string[]): void {
+    if (inviteIds.length === 0) return;
+    const ws = this.#relayWs;
+    if (ws === null || ws.readyState !== WebSocket.OPEN || !this.#relayConnected) return;
+    for (const inviteId of inviteIds) {
+      void sendWs(ws, JSON.stringify({ type: "invite_revoke", inviteId })).catch(() => {});
     }
   }
 
+  #resolveInviteAck(inviteId: string): void {
+    const notify = this.#inviteAckWaiters.get(inviteId);
+    if (notify === undefined) return;
+    this.#inviteAckWaiters.delete(inviteId);
+    notify();
+  }
+
+  #deleteInvites(mode?: "direct" | "relay"): void {
+    const revokedRelayIds: string[] = [];
+    for (const [key, invite] of this.#invites) {
+      const matches =
+        mode === undefined ? true : mode === "direct" ? invite.allowDirect : invite.allowRelay;
+      if (matches) {
+        if (invite.allowRelay) revokedRelayIds.push(key);
+        this.#invites.delete(key);
+        this.#resolveInviteAck(key);
+      }
+    }
+    this.#revokeRelayInvites(revokedRelayIds);
+  }
+
   clearRelayInvites(): void {
-    this.clearInvites("relay");
+    this.#shareEpoch += 1;
+    const revokedRelayIds: string[] = [];
+    for (const [key, invite] of this.#invites) {
+      if (!invite.allowRelay) continue;
+      revokedRelayIds.push(key);
+      if (!invite.allowDirect) {
+        this.#invites.delete(key);
+        this.#resolveInviteAck(key);
+      } else {
+        const { relay: _relay, ...offerWithoutRelay } = invite.offer;
+        this.#invites.set(key, {
+          ...invite,
+          allowRelay: false,
+          offer: { ...offerWithoutRelay, mode: "direct" },
+        });
+      }
+    }
+    this.#revokeRelayInvites(revokedRelayIds);
   }
 
   stopRelay(): void {
@@ -423,53 +494,112 @@ export class SubspaceHost {
     if (ws !== null) safeCloseWs(ws, 1000, "Relay stopped");
   }
 
-  async createPairingOffer(options: {
-    readonly mode: "direct" | "relay";
-    readonly address?: string;
-    readonly port?: number;
-    readonly rotate?: boolean;
-  }): Promise<SubspacePairingOffer> {
-    if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
-      throw Object.assign(new Error("Invalid direct endpoint host"), { code: "bad-request" });
+  #hasRejectedRelayAuth(): boolean {
+    return (
+      this.#relayErrorCode === "relay-auth-expired" ||
+      this.#relayErrorCode === "relay-auth-rejected" ||
+      this.#relayErrorCode === "bad-request"
+    );
+  }
+
+  #tryResolveRelayUrl(auth?: SubspaceRelayAuthRecord | null): string | null {
+    try {
+      return withoutTrailingSlashes(this.#resolveRelayUrl(auth));
+    } catch {
+      return null;
     }
-    if (options.mode === "relay") {
-      if (this.#readRelayAuthOrBadRequest() === null) {
-        throw Object.assign(
-          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
-          { code: "relay-auth-required" },
-        );
-      }
+  }
+
+  #requireRelayAuth(): SubspaceRelayAuthRecord {
+    const auth = this.#readRelayAuthOrBadRequest();
+    if (auth === null) {
+      throw relayHostError(
+        "relay-auth-required",
+        "Sign in to the Subspace Relay before creating a relay pairing link",
+      );
+    }
+    return auth;
+  }
+
+  async #currentRelayEndpoint(publicKeyB64: string): Promise<RelayEndpoint | undefined> {
+    const { auth, error } = this.#readRelayAuthSafe();
+    if (error !== null || auth === null) return undefined;
+    const relayUrl = this.#tryResolveRelayUrl(auth);
+    if (relayUrl === null || !isAllowedRelayUrl(relayUrl)) return undefined;
+    const relayHostId = await deriveRelayHostId(base64ToBytes(publicKeyB64));
+    return { url: relayUrl, relayHostId };
+  }
+
+  async #activeRelayEndpoint(publicKeyB64: string): Promise<RelayEndpoint | undefined> {
+    if (this.#hasRejectedRelayAuth()) return undefined;
+    const endpoint = await this.#currentRelayEndpoint(publicKeyB64);
+    return endpoint !== undefined && !this.#hasRejectedRelayAuth() ? endpoint : undefined;
+  }
+
+  async createPairingOffer(
+    options: {
+      readonly mode?: "auto" | "direct" | "relay";
+      readonly address?: string;
+      readonly port?: number;
+      readonly rotate?: boolean;
+    } = {},
+  ): Promise<SubspacePairingOffer> {
+    const requestedMode = options.mode ?? "auto";
+    if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
+      throw relayHostError("bad-request", "Invalid direct endpoint host");
+    }
+    let hasRelayAuth = false;
+    if (requestedMode === "relay") {
+      this.#requireRelayAuth();
+      hasRelayAuth = true;
       // Reconnect before capturing offerEpoch so switching relays doesn't self-cancel the new offer.
       this.startRelay();
+    } else if (requestedMode === "auto") {
+      const { auth, error } = this.#readRelayAuthSafe();
+      if (error !== null) {
+        this.#setRelayState(false, error, "bad-request");
+      } else if (auth !== null) {
+        hasRelayAuth = true;
+        this.startRelay();
+      }
     }
     const offerEpoch = this.#shareEpoch;
     const identity = await this.#ensureIdentity();
     if (!options.rotate) {
-      const existing = this.activeOffer(options.mode);
+      const lookupMode = requestedMode === "relay" ? "relay" : "direct";
+      const existing = this.activeOffer(lookupMode);
+      const expectedShareMode = requestedMode === "relay" ? "relay" : "direct";
       if (
         existing !== null &&
         existing.hostName === identity.hostName &&
-        identity.shareMode === options.mode
+        identity.shareMode === expectedShareMode
       ) {
         if (
-          options.mode === "direct" &&
+          requestedMode !== "relay" &&
           options.address === undefined &&
           options.port === undefined &&
           (identity.directAddress === null || existing.endpoint?.host === identity.directAddress) &&
           (this.#directPort === null || existing.endpoint?.port === this.#directPort)
         ) {
-          return existing;
-        }
-        if (options.mode === "relay") {
-          const { auth: existingAuth, error: existingErr } = this.#readRelayAuthSafe();
-          let currentRelayUrl: string | null = null;
-          if (existingErr === null && existingAuth !== null) {
-            try {
-              currentRelayUrl = withoutTrailingSlashes(this.#resolveRelayUrl(existingAuth));
-            } catch {
-              currentRelayUrl = null;
-            }
+          const expectedRelay =
+            requestedMode === "auto" && hasRelayAuth
+              ? await this.#activeRelayEndpoint(identity.publicKeyB64)
+              : undefined;
+          if (
+            expectedRelay === undefined
+              ? existing.relay === undefined
+              : existing.relay?.url === expectedRelay.url &&
+                existing.relay?.relayHostId === expectedRelay.relayHostId
+          ) {
+            return existing;
           }
+        }
+        if (requestedMode === "relay") {
+          const { auth: existingAuth, error: existingErr } = this.#readRelayAuthSafe();
+          const currentRelayUrl =
+            existingErr === null && existingAuth !== null
+              ? this.#tryResolveRelayUrl(existingAuth)
+              : null;
           if (
             currentRelayUrl !== null &&
             existing.relay?.url === currentRelayUrl &&
@@ -484,18 +614,27 @@ export class SubspaceHost {
     }
 
     const ticket = bytesToBase64Url(randomBytes(24));
-    const ticketSha256 =
-      options.mode === "relay"
-        ? await sha256Hex(utf8Encode(await deriveRelayInviteToken(ticket)))
-        : await sha256Hex(utf8Encode(ticket));
+    const relayTicketSha256 = await sha256Hex(utf8Encode(await deriveRelayInviteToken(ticket)));
     const expiresAt = Date.now() + OFFER_TTL_MS;
     const inviteId = newId();
 
     let offer: SubspacePairingOffer;
-    if (options.mode === "direct") {
+    if (requestedMode === "direct" || requestedMode === "auto") {
       const hostAddress = (options.address ?? identity.directAddress ?? "127.0.0.1").trim();
       const port = await this.startDirect(options.port);
       const refreshed = await this.#ensureIdentity();
+      let attachedRelay: RelayEndpoint | undefined;
+      if (requestedMode === "auto" && hasRelayAuth) {
+        const candidateRelay = await this.#currentRelayEndpoint(refreshed.publicKeyB64);
+        if (candidateRelay !== undefined) {
+          if (!this.#relayConnected && !this.#hasRejectedRelayAuth()) {
+            await this.#ensureRelayConnected(2_500).catch(() => {});
+          }
+          if (!this.#hasRejectedRelayAuth()) {
+            attachedRelay = candidateRelay;
+          }
+        }
+      }
       offer = {
         v: 1,
         mode: "direct",
@@ -504,17 +643,12 @@ export class SubspaceHost {
         ticket,
         expiresAt,
         endpoint: { host: hostAddress, port },
+        ...(attachedRelay !== undefined ? { relay: attachedRelay } : {}),
       };
     } else {
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
       await this.#ensureRelayConnected();
-      const currentAuth = this.#readRelayAuthOrBadRequest();
-      if (currentAuth === null) {
-        throw Object.assign(
-          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
-          { code: "relay-auth-required" },
-        );
-      }
+      const currentAuth = this.#requireRelayAuth();
       const relayUrl =
         this.#relayControlUrl ?? withoutTrailingSlashes(this.#resolveRelayUrl(currentAuth));
       offer = {
@@ -528,26 +662,30 @@ export class SubspaceHost {
       };
     }
 
-    this.#assertOfferActive(offerEpoch, options.mode);
+    const targetShareMode = requestedMode === "relay" ? "relay" : "direct";
+    this.#assertOfferActive(offerEpoch, targetShareMode);
 
     const currentIdentity = await this.#ensureIdentity();
-    if (currentIdentity.shareMode !== options.mode) {
-      this.#identity = { ...currentIdentity, shareMode: options.mode };
+    if (currentIdentity.shareMode !== targetShareMode) {
+      this.#identity = { ...currentIdentity, shareMode: targetShareMode };
       this.#deps.store.saveIdentity(this.#identity);
     }
 
-    this.#deleteInvites(options.mode);
+    const allowDirect = requestedMode !== "relay";
+    const allowRelay = requestedMode === "relay" || offer.relay !== undefined;
+    this.#deleteInvites();
     this.#invites.set(inviteId, {
       id: inviteId,
-      mode: options.mode,
+      allowDirect,
+      allowRelay,
       ticket,
-      ticketSha256,
+      relayTicketSha256,
       expiresAt,
       offer,
     });
-    if (options.mode === "relay") {
+    if (allowRelay) {
       const ws = this.#relayWs;
-      if (ws !== null && ws.readyState === WebSocket.OPEN) {
+      if (ws !== null && ws.readyState === WebSocket.OPEN && this.#relayConnected) {
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => {
             this.#inviteAckWaiters.delete(inviteId);
@@ -562,18 +700,16 @@ export class SubspaceHost {
             JSON.stringify({
               type: "invite_create",
               inviteId,
-              ticketHash: ticketSha256,
+              ticketHash: relayTicketSha256,
               expiresAt,
             }),
           ).catch(() => {
-            clearTimeout(timer);
-            this.#inviteAckWaiters.delete(inviteId);
-            resolve();
+            this.#resolveInviteAck(inviteId);
           });
         });
       }
     }
-    this.#assertOfferActive(offerEpoch, options.mode, inviteId);
+    this.#assertOfferActive(offerEpoch, targetShareMode, inviteId);
     return offer;
   }
 
@@ -744,28 +880,13 @@ export class SubspaceHost {
     readonly auth: SubspaceRelayAuthRecord | null;
     readonly error: string | null;
   } {
-    try {
-      return { auth: this.#deps.store.readRelayAuth(), error: null };
-    } catch (error) {
-      return {
-        auth: null,
-        error:
-          error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
-      };
-    }
+    return readRelayAuthSafe(this.#deps.store);
   }
 
   #readRelayAuthOrBadRequest(): SubspaceRelayAuthRecord | null {
-    try {
-      return this.#deps.store.readRelayAuth();
-    } catch (error) {
-      throw Object.assign(
-        new Error(
-          error instanceof Error ? error.message : "Corrupted Subspace Relay credentials on disk",
-        ),
-        { code: "bad-request" },
-      );
-    }
+    const { auth, error } = this.#readRelayAuthSafe();
+    if (error !== null) throw relayHostError("bad-request", error);
+    return auth;
   }
 
   #resolveRelayUrl(auth?: SubspaceRelayAuthRecord | null): string {
@@ -956,12 +1077,12 @@ export class SubspaceHost {
         ) {
           const pendingGrants = this.#deps.store
             .readGrants()
-            .filter((grant) => grant.mode === "relay" && !installedGrantIds.has(grant.id));
+            .filter((grant) => grantSupportsRelay(grant) && !installedGrantIds.has(grant.id));
           const now = Date.now();
           const pendingInvites = restoredInvites
             ? []
             : [...this.#invites.values()].filter(
-                (invite) => invite.mode === "relay" && invite.expiresAt > now,
+                (invite) => invite.allowRelay && invite.expiresAt > now,
               );
           restoredInvites = true;
           if (pendingGrants.length === 0 && pendingInvites.length === 0) break;
@@ -985,7 +1106,7 @@ export class SubspaceHost {
                 JSON.stringify({
                   type: "invite_create",
                   inviteId: invite.id,
-                  ticketHash: invite.ticketSha256,
+                  ticketHash: invite.relayTicketSha256,
                   expiresAt: invite.expiresAt,
                 }),
               ).catch(() => {});
@@ -1009,11 +1130,10 @@ export class SubspaceHost {
         return;
       }
       case "invite_created": {
-        const notify = this.#inviteAckWaiters.get(parsed.inviteId);
-        this.#inviteAckWaiters.delete(parsed.inviteId);
-        if (typeof notify === "function") notify();
+        this.#resolveInviteAck(parsed.inviteId);
         return;
       }
+      case "invite_revoked":
       case "device_installed":
       case "device_revoked":
         return;
@@ -1057,8 +1177,12 @@ export class SubspaceHost {
         this.#invites.delete(id);
         continue;
       }
-      if (invite.mode === mode && constantTimeEqual(utf8Encode(invite.ticket), ticketBytes)) {
+      const allowed = mode === "direct" ? invite.allowDirect : invite.allowRelay;
+      if (allowed && constantTimeEqual(utf8Encode(invite.ticket), ticketBytes)) {
         this.#invites.delete(id);
+        if (mode === "direct" && invite.allowRelay) {
+          this.#revokeRelayInvites([id]);
+        }
         return invite;
       }
     }
@@ -1133,11 +1257,15 @@ export class SubspaceHost {
       }
 
       let grantId: string;
+      const relayInfo = await this.#activeRelayEndpoint(identity.publicKeyB64);
       if (auth.kind === "pair") {
         const currentIdentity = await this.#ensureIdentity();
-        const invite =
-          currentIdentity.shareMode === mode ? this.#consumeTicket(auth.ticket, mode) : null;
-        if (invite === null || currentIdentity.shareMode !== mode || invite.mode !== mode) {
+        const modeAllowed =
+          mode === "direct"
+            ? currentIdentity.shareMode === "direct"
+            : currentIdentity.shareMode !== "off";
+        const invite = modeAllowed ? this.#consumeTicket(auth.ticket, mode) : null;
+        if (invite === null) {
           await rejectAuth(
             "invalid-ticket",
             "Pairing ticket is invalid or expired",
@@ -1163,7 +1291,6 @@ export class SubspaceHost {
           lastSeenAt: Date.now(),
         });
         if (
-          mode === "relay" &&
           this.#relayWs !== null &&
           this.#relayWs.readyState === WebSocket.OPEN &&
           this.#relayConnected
@@ -1186,6 +1313,7 @@ export class SubspaceHost {
             hostName: currentIdentity.hostName,
             serverVersion: this.#deps.serverVersion(),
             deviceToken,
+            ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
           } satisfies E2eeAuthResponse,
           (sealed) => sendWs(ws, sealed),
         );
@@ -1214,6 +1342,7 @@ export class SubspaceHost {
             grantId,
             hostName: identity.hostName,
             serverVersion: this.#deps.serverVersion(),
+            ...(relayInfo !== undefined ? { relay: relayInfo } : {}),
           } satisfies E2eeAuthResponse,
           (sealed) => sendWs(ws, sealed),
         );

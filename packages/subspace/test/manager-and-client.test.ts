@@ -2,6 +2,7 @@ import "../../../packages/config/test/isolated-guard.ts";
 import { createSocket } from "node:dgram";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createServer as createTcpServer, type Socket as TcpSocket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -2635,5 +2636,168 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     client.stop();
     expect(client.state).toBe("disconnected");
     expect(client.lastErrorCode).toBeNull();
+  });
+
+  test("mode=auto succeeds Direct-only when Relay is offline, upgrades Direct clients when Host signs in, and falls back on blackhole timeout", async () => {
+    const dirHost = tempDir("subspace-unified-host-");
+    const dirClient = tempDir("subspace-unified-client-");
+
+    // Minimal working Relay + auth server started up-front; host stays signed out initially.
+    const relayKp = await generateX25519KeyPair();
+    const { WebSocketServer: RelayWsServer } = await import("ws");
+    const authAndRelay = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        const exp = Math.floor(Date.now() / 1000) + 300;
+        const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+        const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString("base64url");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: `${header}.${payload}.sig` }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const controlWss = new RelayWsServer({ noServer: true });
+    const dataWss = new RelayWsServer({ noServer: true });
+    let onlineHostWs: import("ws").default | null = null;
+    const pendingData = new Map<string, import("ws").default>();
+    controlWss.on("connection", (ws) => {
+      let relayHostId = "";
+      ws.on("message", async (raw) => {
+        const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        if (msg.type === "host_hello") {
+          relayHostId = String(msg.relayHostId);
+          const challengeB64 = Buffer.from("ch-32-bytes-0123456789abcdef0123").toString("base64");
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64,
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          onlineHostWs = ws;
+          ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+        } else if (msg.type === "invite_create") {
+          ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+        } else if (msg.type === "device_install") {
+          ws.send(JSON.stringify({ type: "device_installed", grantId: msg.grantId }));
+        }
+      });
+    });
+    dataWss.on("connection", (ws, req) => {
+      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (path === RELAY_PATHS.CLIENT_CONNECT) {
+        ws.once("message", () => {
+          const sessionId = `sess_${Date.now()}`;
+          pendingData.set(sessionId, ws);
+          onlineHostWs?.send(JSON.stringify({ type: "connection_open", sessionId, grantId: null }));
+        });
+      } else if (path === RELAY_PATHS.HOST_DATA) {
+        ws.once("message", (raw) => {
+          const msg = JSON.parse(raw.toString("utf8")) as { sessionId: string };
+          const clientWs = pendingData.get(msg.sessionId);
+          pendingData.delete(msg.sessionId);
+          if (!clientWs) return;
+          clientWs.send(JSON.stringify({ type: "relay_ready", sessionId: msg.sessionId }));
+          clientWs.on("message", (d, b) => ws.readyState === 1 && ws.send(d, { binary: b }));
+          ws.on("message", (d, b) => clientWs.readyState === 1 && clientWs.send(d, { binary: b }));
+        });
+      }
+    });
+    authAndRelay.on("upgrade", (req, socket, head) => {
+      const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (path === RELAY_PATHS.HOST_CONTROL) {
+        controlWss.handleUpgrade(req, socket, head, (ws) => controlWss.emit("connection", ws, req));
+      } else if (path === RELAY_PATHS.CLIENT_CONNECT || path === RELAY_PATHS.HOST_DATA) {
+        dataWss.handleUpgrade(req, socket, head, (ws) => dataWss.emit("connection", ws, req));
+      } else {
+        socket.destroy();
+      }
+    });
+    await new Promise<void>((resolve) => authAndRelay.listen(0, "127.0.0.1", resolve));
+    const relayPort = (authAndRelay.address() as { port: number }).port;
+    const relayBase = `http://127.0.0.1:${relayPort}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const ws of [...controlWss.clients, ...dataWss.clients]) ws.terminate();
+          controlWss.close(() => dataWss.close(() => authAndRelay.close(() => resolve())));
+        }),
+    );
+
+    // 1. Signed out -> mode=auto creates Direct-only offer without error.
+    const hostMgr = new SubspaceManager({
+      dataHome: dirHost,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+      relayUrl: () => relayBase,
+    });
+    cleanups.push(() => hostMgr.stop());
+
+    const signedOutOffer = await hostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      port: 0,
+    });
+    expect(signedOutOffer.hasRelayFallback).toBe(false);
+
+    const clientMgr = new SubspaceManager({
+      dataHome: dirClient,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => clientMgr.stop());
+    const initialPair = await clientMgr.pairServer({
+      code: signedOutOffer.pairingUrl,
+      activate: true,
+    });
+    expect(initialPair.servers[0]?.relay).toBeNull();
+
+    // 2. Host later signs in to Relay -> reconnect over Direct automatically attaches host's Relay metadata.
+    hostMgr.store.saveRelayAuth({
+      authUrl: relayBase,
+      relayUrl: relayBase,
+      token: "sess-alice",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    await hostMgr.updateShareSettings({});
+    await vi.waitFor(() => expect(hostMgr.host.relayConnected).toBe(true));
+
+    await clientMgr.disconnectServer(initialPair.pairedServerId);
+    await clientMgr.connectServer(initialPair.pairedServerId);
+    const upgraded = await clientMgr.getState();
+    expect(upgraded.servers[0]?.activeTransport).toBe("direct");
+    expect(upgraded.servers[0]?.relay?.url).toBe(relayBase);
+
+    // 3. Direct blackhole (TCP accepts but never completes WS upgrade) falls back cleanly to Relay after timeout.
+    const heldSockets: TcpSocket[] = [];
+    const blackhole = createTcpServer((sock) => {
+      heldSockets.push(sock);
+    });
+    await new Promise<void>((resolve) => blackhole.listen(0, "127.0.0.1", resolve));
+    const blackholePort = (blackhole.address() as { port: number }).port;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const sock of heldSockets) sock.destroy();
+          blackhole.close(() => resolve());
+        }),
+    );
+
+    const saved = clientMgr.store.readServers().servers[0]!;
+    const fallbackClient = new SubspaceClient(
+      { ...saved, endpoint: { host: "127.0.0.1", port: blackholePort } },
+      {},
+      undefined,
+      { directFallbackTimeoutMs: 50 },
+    );
+    cleanups.push(() => fallbackClient.stop());
+    const tunnel = await fallbackClient.connect();
+    expect(tunnel.transport).toBe("relay");
+    expect(fallbackClient.activeTransport).toBe("relay");
   });
 });

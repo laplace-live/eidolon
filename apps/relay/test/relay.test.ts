@@ -10,9 +10,11 @@ import {
   deriveRelayInviteToken,
   generateX25519KeyPair,
   importX25519PrivateKey,
+  parsePairingInput,
   performPairingHandshake,
   SubspaceClient,
   SubspaceHost,
+  SubspaceManager,
   type SubspaceSavedServer,
   SubspaceStore,
   sha256Hex,
@@ -952,5 +954,112 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     } finally {
       restore();
     }
+  });
+
+  test("unified mode=auto offer falls back to Relay during pairing and reconnect, and revokes Relay invite when redeemed directly", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-auto", "alice"]]));
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => relay.stop());
+
+    const hostDir = mkdtempSync(join(tmpdir(), "relay-unified-host-"));
+    const clientADir = mkdtempSync(join(tmpdir(), "relay-unified-client-a-"));
+    const clientBDir = mkdtempSync(join(tmpdir(), "relay-unified-client-b-"));
+    cleanups.push(() => rmSync(hostDir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(clientADir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(clientBDir, { recursive: true, force: true }));
+
+    const hostMgr = new SubspaceManager({
+      dataHome: hostDir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async (req) => Response.json({ path: new URL(req.url).pathname }),
+      relayUrl: () => relay.url,
+    });
+    cleanups.push(() => hostMgr.stop());
+    hostMgr.store.saveRelayAuth({
+      authUrl: auth.url,
+      relayUrl: relay.url,
+      token: "sess-auto",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    // 1. Unified offer carries both direct endpoint and relay fallback.
+    const offer1 = await hostMgr.createShareOffer({ mode: "auto", address: "127.0.0.1", port: 0 });
+    expect(offer1.hasRelayFallback).toBe(true);
+    const parsed1 = parsePairingInput(offer1.pairingUrl);
+    expect(parsed1.ok).toBe(true);
+    if (!parsed1.ok) return;
+    expect(parsed1.offer.endpoint?.host).toBe("127.0.0.1");
+    expect(parsed1.offer.relay?.url).toBe(relay.url);
+
+    // 2. Client A pairs directly and single-use Relay invite is revoked so a Relay copy fails.
+    const clientAMgr = new SubspaceManager({
+      dataHome: clientADir,
+      serverVersion: () => "0.22.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => clientAMgr.stop());
+    const pairedA = await clientAMgr.pairServer({ code: offer1.pairingUrl, activate: true });
+    expect(pairedA.servers[0]?.relay?.url).toBe(relay.url);
+    expect(pairedA.servers[0]?.activeTransport).toBe("direct");
+
+    await expect(
+      performPairingHandshake({
+        ...parsed1.offer,
+        mode: "relay",
+        endpoint: undefined,
+      }),
+    ).rejects.toMatchObject({ code: "pairing-failed" });
+
+    // 3. Roaming: stop Direct listener -> Client A reconnects automatically via Relay and proxies requests.
+    await hostMgr.host.stopDirect();
+    const resThroughRelay = await clientAMgr.proxyToActive(
+      new Request("http://local/ping"),
+      "/ping",
+    );
+    expect(resThroughRelay.status).toBe(200);
+    expect(await resThroughRelay.json()).toEqual({ path: "/ping" });
+    const afterRoam = await clientAMgr.getState();
+    expect(afterRoam.servers[0]?.activeTransport).toBe("relay");
+
+    // 4. Pairing fallback: restart Direct, create offer2, then point Client B at a dead Direct port -> falls back to Relay.
+    await hostMgr.host.startDirect(0);
+    const offer2 = await hostMgr.createShareOffer({
+      mode: "auto",
+      address: "127.0.0.1",
+      rotate: true,
+    });
+    const parsed2 = parsePairingInput(offer2.pairingUrl);
+    expect(parsed2.ok).toBe(true);
+    if (!parsed2.ok || !parsed2.offer.endpoint || !parsed2.offer.relay) return;
+
+    const deadDirect = await import("node:net").then((net) => {
+      const s = net.createServer();
+      return new Promise<number>((resolve) => {
+        s.listen(0, "127.0.0.1", () => {
+          const port = (s.address() as { port: number }).port;
+          s.close(() => resolve(port));
+        });
+      });
+    });
+    const fallbackHand = await performPairingHandshake(
+      {
+        ...parsed2.offer,
+        endpoint: { host: "127.0.0.1", port: deadDirect },
+      },
+      { clientName: "Fallback Client" },
+    );
+    expect(fallbackHand.transport).toBe("relay");
+    fallbackHand.tunnel.mux.close();
+    fallbackHand.tunnel.ws.close();
   });
 });

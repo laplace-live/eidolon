@@ -41,7 +41,7 @@ foreground until Ctrl-C.
 
 options:
   -h, --help       show this help message and exit
-  --relay          Pair through the signed-in Subspace Relay (default: direct network)
+  --relay          Pair exclusively via Subspace Relay without advertising a Direct IP
   --address HOST   IP or hostname to advertise in the Direct pairing link
   --port PORT      TCP port for Direct WebSocket connections
   --name NAME      Display name for this computer
@@ -325,7 +325,7 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          mode: relay ? "relay" : "direct",
+          mode: relay ? "relay" : "auto",
           ...(address !== undefined ? { address } : {}),
           ...(port !== undefined ? { port } : {}),
           rotate,
@@ -348,7 +348,8 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
       out(
         JSON.stringify({
           event: "offer",
-          mode: relay ? "relay" : "direct",
+          mode: relay ? "relay" : "auto",
+          hasRelayFallback: Boolean(result.hasRelayFallback),
           hostName: result.state.share.hostName,
           pairingUrl: result.pairingUrl,
           pairingCode: result.pairingCode,
@@ -358,7 +359,12 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
         }),
       );
     } else {
-      out(`Subspace pairing ready (${relay ? "Subspace Relay" : "Direct Network"})`);
+      const modeText = relay
+        ? "Subspace Relay"
+        : result.hasRelayFallback
+          ? "Direct Network + Subspace Relay fallback"
+          : "Direct Network";
+      out(`Subspace pairing ready (${modeText})`);
       out(`Host: ${result.state.share.hostName}`);
       if (!relay && result.state.share.listeningPort !== null) {
         out(`Listening on port ${result.state.share.listeningPort}`);

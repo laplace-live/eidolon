@@ -13,7 +13,13 @@ import {
   SubspaceConnectError,
   type SubspaceConnectionState,
 } from "./client.ts";
-import { SubspaceHost, type SubspaceHostEvent } from "./host.ts";
+import {
+  grantSupportsRelay,
+  hostTransportNeeds,
+  readRelayAuthSafe,
+  SubspaceHost,
+  type SubspaceHostEvent,
+} from "./host.ts";
 import { listShareableAddresses, type ShareableAddress } from "./network.ts";
 import {
   encodePairingCode,
@@ -62,6 +68,7 @@ export interface SubspaceServerView {
   readonly id: string;
   readonly name: string;
   readonly mode: "direct" | "relay";
+  readonly activeTransport: "direct" | "relay" | null;
   readonly endpoint: {
     readonly host: string;
     readonly port: number;
@@ -79,6 +86,7 @@ export interface SubspaceServerView {
 
 export interface SubspaceOfferSnapshot {
   readonly mode: "direct" | "relay";
+  readonly hasRelayFallback: boolean;
   readonly hostName: string;
   readonly expiresAt: number;
   readonly pairingUrl: string;
@@ -169,14 +177,9 @@ export class SubspaceManager {
   }
 
   #readRelayAuthOrBadRequest() {
-    try {
-      return this.store.readRelayAuth();
-    } catch (error) {
-      throw codedError(
-        "bad-request",
-        error instanceof Error ? error.message : "Corrupted Subspace Relay credentials",
-      );
-    }
+    const { auth, error } = readRelayAuthSafe(this.store);
+    if (error !== null) throw codedError("bad-request", error);
+    return auth;
   }
 
   #hasActiveCallsOnHostKey(hostPublicKeyB64: string): boolean {
@@ -222,19 +225,16 @@ export class SubspaceManager {
   async getState(): Promise<SubspaceStateSnapshot> {
     const identity = await this.store.loadOrCreateIdentity();
     const { activeHostId, servers } = this.store.readServers();
-    let relayAuth: ReturnType<SubspaceStore["readRelayAuth"]> = null;
-    let configRelayError: string | null = null;
-    try {
-      relayAuth = this.store.readRelayAuth();
-    } catch (error) {
-      configRelayError = error instanceof Error ? error.message : String(error);
-    }
+    const { auth: relayAuth, error: relayAuthError } = readRelayAuthSafe(this.store);
+    let configRelayError: string | null = relayAuthError;
     const grants: readonly SubspaceGrantRecord[] = this.store.readGrants();
     const activeOffer =
       identity.shareMode === "off"
         ? null
-        : this.#offerSnapshot(this.host.activeOffer(identity.shareMode));
-    const needsRelay = identity.shareMode === "relay" || grants.some((g) => g.mode === "relay");
+        : this.#offerSnapshot(
+            this.host.activeOffer(identity.shareMode === "relay" ? "relay" : "direct"),
+          );
+    const { needsRelay } = hostTransportNeeds(identity.shareMode, grants);
     let relayUrl = DEFAULT_SUBSPACE_RELAY_URL;
     let authUrl = relayAuth?.authUrl ?? DEFAULT_SUBSPACE_AUTH_URL;
     try {
@@ -270,6 +270,7 @@ export class SubspaceManager {
           id: server.id,
           name: server.name,
           mode: server.mode,
+          activeTransport: client.activeTransport,
           endpoint: server.endpoint ?? null,
           relay: server.relay ?? null,
           addedAt: server.addedAt,
@@ -381,9 +382,9 @@ export class SubspaceManager {
       hostPublicKeyB64: offer.hostPublicKeyB64,
       grantId: handshake.grantId,
       deviceToken: handshake.deviceToken,
-      mode: offer.mode,
+      mode: offer.endpoint !== undefined ? "direct" : "relay",
       ...(offer.endpoint !== undefined ? { endpoint: offer.endpoint } : {}),
-      ...(offer.relay !== undefined ? { relay: offer.relay } : {}),
+      ...(handshake.relay !== undefined ? { relay: handshake.relay } : {}),
       addedAt: Date.now(),
       lastConnectedAt: Date.now(),
       lastVersion: handshake.serverVersion,
@@ -406,7 +407,7 @@ export class SubspaceManager {
   ): Promise<SubspaceStateSnapshot> {
     const nextEndpointFor = (server: SubspaceSavedServer) => {
       const nextEndpoint =
-        server.mode === "direct" && server.endpoint !== undefined
+        server.endpoint !== undefined
           ? {
               host: patch.host?.trim() || server.endpoint.host,
               port: patch.port ?? server.endpoint.port,
@@ -535,15 +536,12 @@ export class SubspaceManager {
     }
 
     const grants = this.store.readGrants();
-    const needsDirect = next.shareMode === "direct" || grants.some((g) => g.mode === "direct");
-    const needsRelay = next.shareMode === "relay" || grants.some((g) => g.mode === "relay");
+    const { needsDirect, needsRelay } = hostTransportNeeds(next.shareMode, grants);
 
-    if (next.shareMode === "direct") {
+    if (needsDirect) {
       await this.host.startDirect(next.directPort);
-    } else if (!needsDirect) {
-      await this.host.stopDirect();
     } else {
-      await this.host.startDirect(next.directPort);
+      await this.host.stopDirect();
     }
 
     if (needsRelay) {
@@ -561,41 +559,46 @@ export class SubspaceManager {
     return await this.getState();
   }
 
-  async createShareOffer(options: {
-    readonly mode: "direct" | "relay";
-    readonly address?: string;
-    readonly port?: number;
-    readonly rotate?: boolean;
-  }): Promise<{
+  async createShareOffer(
+    options: {
+      readonly mode?: "auto" | "direct" | "relay";
+      readonly address?: string;
+      readonly port?: number;
+      readonly rotate?: boolean;
+    } = {},
+  ): Promise<{
     readonly pairingUrl: string;
     readonly pairingCode: string;
     readonly qrSvg: string;
     readonly expiresAt: number;
+    readonly hasRelayFallback: boolean;
     readonly state: SubspaceStateSnapshot;
   }> {
-    if (options.mode === "relay" && this.#readRelayAuthOrBadRequest() === null) {
+    const mode = options.mode ?? "auto";
+    if (mode === "relay" && this.#readRelayAuthOrBadRequest() === null) {
       throw codedError("relay-auth-required", "Sign in to the Subspace Relay first");
     }
     const identity = await this.store.loadOrCreateIdentity();
     const explicitAddress = options.address?.trim() || undefined;
     const chosenAddress =
-      options.mode === "direct"
-        ? explicitAddress ||
+      mode === "relay"
+        ? undefined
+        : explicitAddress ||
           identity.directAddress ||
           listShareableAddresses()[0]?.address ||
-          "127.0.0.1"
-        : undefined;
+          "127.0.0.1";
+    const targetShareMode = mode === "relay" ? "relay" : "direct";
     const addressChanged = chosenAddress !== undefined && identity.directAddress !== chosenAddress;
-    if (identity.shareMode !== options.mode || addressChanged) {
+    if (identity.shareMode !== targetShareMode || addressChanged) {
       this.store.saveIdentity({
         ...identity,
-        shareMode: options.mode,
+        shareMode: targetShareMode,
         ...(chosenAddress !== undefined ? { directAddress: chosenAddress } : {}),
       });
       await this.host.reloadIdentity();
     }
     const offer = await this.host.createPairingOffer({
-      mode: options.mode,
+      mode,
       address: explicitAddress ?? (addressChanged ? chosenAddress : undefined),
       port: options.port,
       rotate: options.rotate,
@@ -606,6 +609,7 @@ export class SubspaceManager {
       pairingCode: snapshot.pairingCode,
       qrSvg: snapshot.qrSvg,
       expiresAt: snapshot.expiresAt,
+      hasRelayFallback: snapshot.hasRelayFallback,
       state: await this.getState(),
     };
   }
@@ -727,6 +731,7 @@ export class SubspaceManager {
     const pairingUrl = encodePairingUrl(offer);
     const snapshot: SubspaceOfferSnapshot = {
       mode: offer.mode,
+      hasRelayFallback: offer.relay !== undefined,
       hostName: offer.hostName,
       expiresAt: offer.expiresAt,
       pairingCode: encodePairingCode(offer),
@@ -762,12 +767,25 @@ export class SubspaceManager {
     const client = new SubspaceClient(
       server,
       {
-        onConnected: (version) => {
+        onConnected: (info) => {
           const current = this.store.readServers();
-          const servers = current.servers.map((s) =>
-            s.id === server.id ? { ...s, lastConnectedAt: Date.now(), lastVersion: version } : s,
-          );
+          let upgradedServer: SubspaceSavedServer | null = null;
+          const servers = current.servers.map((s) => {
+            if (s.id !== server.id) return s;
+            const nextRelay = info.relay ?? s.relay;
+            const next: SubspaceSavedServer = {
+              ...s,
+              ...(nextRelay !== undefined ? { relay: nextRelay } : {}),
+              lastConnectedAt: Date.now(),
+              lastVersion: info.version,
+            };
+            upgradedServer = next;
+            return next;
+          });
           this.store.saveServers({ activeHostId: current.activeHostId, servers });
+          if (upgradedServer !== null) {
+            this.#clients.get(server.id)?.updateServer(upgradedServer);
+          }
         },
       },
       initialTunnel,
@@ -814,8 +832,8 @@ export class SubspaceManager {
     });
     this.#deviceFlow = { ...IDLE_FLOW, status: "approved" };
     if (
-      this.store.readGrants().some((g) => g.mode === "relay") ||
-      (await this.store.loadOrCreateIdentity()).shareMode === "relay"
+      this.store.readGrants().some(grantSupportsRelay) ||
+      (await this.store.loadOrCreateIdentity()).shareMode !== "off"
     ) {
       this.host.startRelay();
     }

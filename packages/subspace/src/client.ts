@@ -10,6 +10,7 @@ import {
   type E2eeSession,
   isPairingExpired,
   MuxEndpoint,
+  type RelayEndpoint,
   type SubspacePairingOffer,
   startClientHandshake,
 } from "./protocol/index.ts";
@@ -29,6 +30,7 @@ import {
 export type SubspaceConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
 const CONNECT_TIMEOUT_MS = 15_000;
+const DIRECT_FALLBACK_OPEN_TIMEOUT_MS = 2_500;
 const PING_INTERVAL_MS = 15_000;
 const STRIPPED_PROXY_HEADERS = new Set([
   "authorization",
@@ -214,6 +216,7 @@ function targetWsUrl(server: Pick<SubspaceSavedServer, "mode" | "endpoint" | "re
 }
 
 interface ActiveTunnel {
+  readonly transport: "direct" | "relay";
   readonly ws: WebSocket;
   readonly session: E2eeSession;
   readonly mux: MuxEndpoint;
@@ -227,6 +230,7 @@ async function dialAuthenticatedTunnel(input: {
     | { readonly kind: "device"; readonly grantId: string; readonly relayToken: string };
   readonly relayUnexpectedErrorCode: SubspaceConnectError["code"];
   readonly buildE2eeAuth: (authBinding: string) => E2eeAuthRequest;
+  readonly openTimeoutMs?: number;
   readonly signal?: AbortSignal;
 }): Promise<{ readonly tunnel: ActiveTunnel; readonly authRes: E2eeAuthResponse }> {
   if (input.signal?.aborted) {
@@ -244,7 +248,12 @@ async function dialAuthenticatedTunnel(input: {
   const onAbort = () => ws.terminate();
   input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    await waitForOpen(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind, mapConnectError);
+    await waitForOpen(
+      ws,
+      input.openTimeoutMs ?? CONNECT_TIMEOUT_MS,
+      input.relayCredential.kind,
+      mapConnectError,
+    );
     if (input.target.mode === "relay") {
       await sendWs(
         ws,
@@ -283,7 +292,7 @@ async function dialAuthenticatedTunnel(input: {
     const mux = new MuxEndpoint({
       sendFrame: (frame) => session.send(frame, (sealed) => sendWs(ws, sealed)),
     });
-    return { tunnel: { ws, session, mux }, authRes };
+    return { tunnel: { transport: input.target.mode, ws, session, mux }, authRes };
   } catch (error) {
     ws.terminate();
     throw error;
@@ -292,14 +301,69 @@ async function dialAuthenticatedTunnel(input: {
   }
 }
 
+async function dialWithFallback(input: {
+  readonly target: Pick<SubspaceSavedServer, "mode" | "endpoint" | "relay">;
+  readonly hostPublicKeyB64: string;
+  readonly relayCredential:
+    | { readonly kind: "invite"; readonly relayTicket: string }
+    | { readonly kind: "device"; readonly grantId: string; readonly relayToken: string };
+  readonly relayUnexpectedErrorCode: SubspaceConnectError["code"];
+  readonly buildE2eeAuth: (authBinding: string) => E2eeAuthRequest;
+  readonly directFallbackTimeoutMs?: number;
+  readonly signal?: AbortSignal;
+}): Promise<{ readonly tunnel: ActiveTunnel; readonly authRes: E2eeAuthResponse }> {
+  const endpoint = input.target.endpoint;
+  const relay = input.target.relay;
+  if (endpoint !== undefined && relay !== undefined) {
+    try {
+      return await dialAuthenticatedTunnel({
+        ...input,
+        target: { mode: "direct", endpoint },
+        openTimeoutMs: input.directFallbackTimeoutMs ?? DIRECT_FALLBACK_OPEN_TIMEOUT_MS,
+      });
+    } catch (directErr) {
+      if (input.signal?.aborted) throw directErr;
+      logger.info(
+        `[subspace] Direct connection to ${endpoint.host}:${endpoint.port} failed (${errorText(directErr)}); falling back to Subspace Relay`,
+      );
+      try {
+        return await dialAuthenticatedTunnel({
+          ...input,
+          target: { mode: "relay", relay },
+          openTimeoutMs: CONNECT_TIMEOUT_MS,
+        });
+      } catch (relayErr) {
+        if (
+          directErr instanceof SubspaceConnectError &&
+          directErr.code === "local-network-blocked" &&
+          relayErr instanceof SubspaceConnectError &&
+          relayErr.code === "subspace-unreachable"
+        ) {
+          throw directErr;
+        }
+        throw relayErr;
+      }
+    }
+  }
+  const singleMode: "direct" | "relay" =
+    endpoint !== undefined ? "direct" : relay !== undefined ? "relay" : input.target.mode;
+  return await dialAuthenticatedTunnel({
+    ...input,
+    target: { mode: singleMode, endpoint, relay },
+    openTimeoutMs: CONNECT_TIMEOUT_MS,
+  });
+}
+
 export async function performPairingHandshake(
   offer: SubspacePairingOffer,
-  options: { readonly clientName?: string } = {},
+  options: { readonly clientName?: string; readonly directFallbackTimeoutMs?: number } = {},
 ): Promise<{
   readonly grantId: string;
   readonly hostName: string;
   readonly serverVersion: string;
   readonly deviceToken: string;
+  readonly transport: "direct" | "relay";
+  readonly relay?: RelayEndpoint;
   readonly tunnel: ActiveTunnel;
 }> {
   if (isPairingExpired(offer)) {
@@ -312,11 +376,12 @@ export async function performPairingHandshake(
   ).slice(0, 120);
   try {
     const relayTicket = await deriveRelayInviteToken(offer.ticket);
-    const { tunnel, authRes } = await dialAuthenticatedTunnel({
+    const { tunnel, authRes } = await dialWithFallback({
       target: { mode: offer.mode, endpoint: offer.endpoint, relay: offer.relay },
       hostPublicKeyB64: offer.hostPublicKeyB64,
       relayCredential: { kind: "invite", relayTicket },
       relayUnexpectedErrorCode: "pairing-failed",
+      directFallbackTimeoutMs: options.directFallbackTimeoutMs,
       buildE2eeAuth: (authBinding) => ({
         type: "e2ee_auth",
         kind: "pair",
@@ -337,6 +402,8 @@ export async function performPairingHandshake(
       hostName: authRes.hostName,
       serverVersion: authRes.serverVersion,
       deviceToken: authRes.deviceToken,
+      transport: tunnel.transport,
+      relay: authRes.relay ?? offer.relay,
       tunnel,
     };
   } catch (error) {
@@ -349,14 +416,21 @@ export async function performPairingHandshake(
   }
 }
 
+export interface SubspaceClientConnectedInfo {
+  readonly version: string;
+  readonly transport: "direct" | "relay";
+  readonly relay?: RelayEndpoint;
+}
+
 export interface SubspaceClientEvents {
-  readonly onConnected?: (version: string) => void;
+  readonly onConnected?: (info: SubspaceClientConnectedInfo) => void;
   readonly onStateChange?: () => void;
 }
 
 export interface SubspaceClientOptions {
   readonly callBridgeIdleMs?: number;
   readonly callProbeIntervalMs?: number;
+  readonly directFallbackTimeoutMs?: number;
 }
 
 /** Persistent E2EE WebSocket + Mux client for a paired remote Eidolon instance. */
@@ -364,6 +438,7 @@ export class SubspaceClient {
   #server: SubspaceSavedServer;
   readonly #events: SubspaceClientEvents;
   readonly #callProbeIntervalMs: number;
+  readonly #directFallbackTimeoutMs: number | undefined;
   readonly #bridges: ClientCallBridgePool;
   readonly #activePcIds = new Set<string>();
 
@@ -394,14 +469,15 @@ export class SubspaceClient {
     this.#server = server;
     this.#events = events;
     this.#callProbeIntervalMs = options.callProbeIntervalMs ?? 5_000;
+    this.#directFallbackTimeoutMs = options.directFallbackTimeoutMs;
     this.#bridges = new ClientCallBridgePool({
       idleTimeoutMs: options.callBridgeIdleMs,
       onCallOpened: (pcId) => {
         this.#activePcIds.add(pcId);
-        if (this.#server.mode === "direct") this.#ensureCallProbeTimer();
+        if (this.activeTransport === "direct") this.#ensureCallProbeTimer();
       },
       onBridgeClosed: (pcId, closedByAlert) => {
-        if (closedByAlert || this.#server.mode === "relay") {
+        if (closedByAlert || this.activeTransport === "relay") {
           this.#activePcIds.delete(pcId);
           if (this.#activePcIds.size === 0) this.#stopCallProbeTimer();
         } else if (this.#activePcIds.has(pcId)) {
@@ -417,6 +493,10 @@ export class SubspaceClient {
 
   get server(): SubspaceSavedServer {
     return this.#server;
+  }
+
+  get activeTransport(): "direct" | "relay" | null {
+    return this.#tunnel?.transport ?? null;
   }
 
   get state(): SubspaceConnectionState {
@@ -448,7 +528,7 @@ export class SubspaceClient {
   }
 
   async refreshActiveCallCount(): Promise<number> {
-    if (this.#activePcIds.size === 0 || this.#server.mode === "relay") {
+    if (this.#activePcIds.size === 0 || this.activeTransport === "relay") {
       return this.activeCallCount;
     }
     if (!this.#wanted || this.#revoked) {
@@ -510,11 +590,17 @@ export class SubspaceClient {
   }
 
   updateServer(server: SubspaceSavedServer): void {
-    const endpointChanged =
-      server.mode !== this.#server.mode ||
+    const directChanged =
       server.endpoint?.host !== this.#server.endpoint?.host ||
-      server.endpoint?.port !== this.#server.endpoint?.port ||
-      server.relay?.url !== this.#server.relay?.url;
+      server.endpoint?.port !== this.#server.endpoint?.port;
+    const relayChanged = server.relay?.url !== this.#server.relay?.url;
+    const activeTransport = this.activeTransport;
+    const endpointChanged =
+      activeTransport === "direct"
+        ? directChanged
+        : activeTransport === "relay"
+          ? relayChanged
+          : server.mode !== this.#server.mode || directChanged || relayChanged;
     this.#server = server;
     if (endpointChanged && this.#wanted) {
       this.#cancelConnecting();
@@ -630,8 +716,8 @@ export class SubspaceClient {
       });
       if (isOfferRequest) {
         const adapted = await this.#bridges.adaptOfferResponse(response, tunnel.mux, {
-          mode: this.#server.mode,
-          directHost: this.#server.endpoint?.host,
+          mode: tunnel.transport,
+          directHost: tunnel.transport === "direct" ? this.#server.endpoint?.host : undefined,
         });
         if (adapted.ok && renegotiatedPcId !== null) {
           try {
@@ -663,7 +749,7 @@ export class SubspaceClient {
     this.#setState("connecting", null);
     try {
       const relayToken = await deriveRelayDeviceToken(this.#server.deviceToken);
-      const { tunnel, authRes } = await dialAuthenticatedTunnel({
+      const { tunnel, authRes } = await dialWithFallback({
         target: this.#server,
         hostPublicKeyB64: this.#server.hostPublicKeyB64,
         relayCredential: {
@@ -672,6 +758,7 @@ export class SubspaceClient {
           relayToken,
         },
         relayUnexpectedErrorCode: "subspace-unreachable",
+        directFallbackTimeoutMs: this.#directFallbackTimeoutMs,
         buildE2eeAuth: (authBinding) => ({
           type: "e2ee_auth",
           kind: "token",
@@ -695,27 +782,28 @@ export class SubspaceClient {
       }
       this.#backoffMs = 500;
       this.#attachTunnel(tunnel);
-      this.#events.onConnected?.(authRes.serverVersion);
+      this.#events.onConnected?.({
+        version: authRes.serverVersion,
+        transport: tunnel.transport,
+        relay: authRes.relay,
+      });
       return tunnel;
     } catch (error) {
       if (signal.aborted || !this.#wanted || epoch !== this.#connectEpoch) throw error;
-      if (error instanceof SubspaceConnectError && error.code === "pairing-failed") {
+      const connectError =
+        error instanceof SubspaceConnectError
+          ? error
+          : new SubspaceConnectError("subspace-unreachable", "Could not connect to remote server");
+      if (connectError.code === "pairing-failed") {
         this.#revoked = true;
       } else if (!(error instanceof SubspaceConnectError)) {
         logger.warning(
           `[subspace] Client connection error for ${this.#server.id}: ${errorText(error)}`,
         );
       }
-      const message =
-        error instanceof SubspaceConnectError
-          ? error.message
-          : "Could not connect to remote server";
-      const errorCode = error instanceof SubspaceConnectError ? error.code : "subspace-unreachable";
-      this.#setState("error", message, errorCode);
+      this.#setState("error", connectError.message, connectError.code);
       if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
-      throw error instanceof SubspaceConnectError
-        ? error
-        : new SubspaceConnectError(errorCode, message);
+      throw connectError;
     }
   }
 
@@ -783,7 +871,7 @@ export class SubspaceClient {
       this.#failActiveTunnel(tunnel, "Socket error", "Could not connect to remote server");
     });
 
-    if (this.#activePcIds.size > 0 && this.#server.mode === "direct") {
+    if (this.#activePcIds.size > 0 && tunnel.transport === "direct") {
       this.#ensureCallProbeTimer();
       void this.refreshActiveCallCount();
     }
@@ -797,9 +885,10 @@ export class SubspaceClient {
     this.#stopCallProbeTimer();
     this.#callProbeTask = null;
     const current = this.#tunnel;
+    const droppedTransport = current?.transport ?? this.#server.mode;
     this.#tunnel = null;
     this.#latencyMs = null;
-    if (this.#server.mode === "relay" || !this.#wanted || this.#revoked) {
+    if (droppedTransport === "relay" || !this.#wanted || this.#revoked) {
       this.#activePcIds.clear();
     }
     this.#bridges.closeAll();

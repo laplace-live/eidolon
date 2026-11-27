@@ -423,6 +423,10 @@ export class RelayHub {
               });
               ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
               return;
+            case "invite_revoke":
+              this.#store.revokeInvite(relayHostId, msg.inviteId);
+              ws.send(JSON.stringify({ type: "invite_revoked", inviteId: msg.inviteId }));
+              return;
             case "device_install":
               this.#store.installDevice({
                 relayHostId,

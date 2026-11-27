@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SubspaceShareableAddress } from "@/lib/api";
 import { formatClockMinute, formatDateTime } from "@/lib/format";
 import { useLang } from "@/locales/i18n";
@@ -50,7 +49,6 @@ export function ShareCard() {
   const { data: state } = useQuery(subspaceQuery);
 
   const hostNameId = useId();
-  const modeLabelId = useId();
   const addrId = useId();
   const customAddrId = useId();
   const linkId = useId();
@@ -115,21 +113,14 @@ export function ShareCard() {
     );
   }
 
-  function changeMode(next: string) {
-    if (next !== "off" && next !== "direct" && next !== "relay") return;
-    if (next === share?.shareMode) return;
+  function saveDirectAddress(value: string, onSaved?: () => void) {
     updateShare.mutate(
+      { directAddress: value },
       {
-        shareMode: next,
-        ...(next === "direct" && resolvedDirectHost ? { directAddress: resolvedDirectHost } : {}),
-      },
-      {
-        onSuccess: () => {
-          if (next === "direct" || next === "relay") {
-            createOffer.mutate({
-              mode: next,
-              ...(next === "direct" && resolvedDirectHost ? { address: resolvedDirectHost } : {}),
-            });
+        onSuccess: (next) => {
+          onSaved?.();
+          if ((next?.share?.shareMode ?? share?.shareMode) !== "off") {
+            createOffer.mutate({ mode: "auto", address: value });
           }
         },
       },
@@ -143,46 +134,40 @@ export function ShareCard() {
     }
     setUseCustomHost(false);
     setCustomHostDirty(false);
-    updateShare.mutate(
-      { directAddress: value },
-      {
-        onSuccess: (next) => {
-          if ((next?.share?.shareMode ?? share?.shareMode) === "direct") {
-            createOffer.mutate({ mode: "direct", address: value });
-          }
-        },
-      },
-    );
+    saveDirectAddress(value);
   }
 
   function applyCustomHost() {
     const value = customHost.trim();
     if (!value) return;
-    updateShare.mutate(
-      { directAddress: value },
-      {
-        onSuccess: (next) => {
-          setCustomHostDirty(false);
-          if ((next?.share?.shareMode ?? share?.shareMode) === "direct") {
-            createOffer.mutate({ mode: "direct", address: value });
-          }
-        },
-      },
-    );
+    saveDirectAddress(value, () => setCustomHostDirty(false));
   }
 
   function generateOffer(rotate: boolean) {
-    if (share?.shareMode !== "direct" && share?.shareMode !== "relay") return;
+    if (!resolvedDirectHost) return;
     createOffer.mutate({
-      mode: share.shareMode,
-      ...(share.shareMode === "direct" && resolvedDirectHost
-        ? { address: resolvedDirectHost }
-        : {}),
+      mode: "auto",
+      address: resolvedDirectHost,
       rotate,
     });
   }
 
   const offer = share.activeOffer;
+  const directStatus =
+    share.shareMode === "off"
+      ? t`Sharing is off. Generating a pairing link starts Direct sharing on your local network.`
+      : share.listening && share.listeningPort !== null
+        ? t`Listening directly on port ${ph({ port: String(share.listeningPort) })}.`
+        : t`Starting direct listener…`;
+  const relayStatus = !signedInToRelay
+    ? t`Sign in to your Subspace Relay account below to add automatic Relay fallback.`
+    : share.shareMode === "off"
+      ? t`Automatic Subspace Relay fallback will activate as soon as you generate a link.`
+      : share.relayConnected
+        ? t`Subspace Relay fallback is active.`
+        : share.relayError
+          ? t`Relay fallback unavailable: ${ph({ error: share.relayError })}`
+          : t`Connecting to Subspace Relay for fallback…`;
 
   return (
     <SectionCard
@@ -216,121 +201,76 @@ export function ShareCard() {
           </FieldDescription>
         </Field>
 
-        <Field>
-          <FieldLabel id={modeLabelId}>{t`Sharing Mode`}</FieldLabel>
-          <div>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              spacing={0}
-              value={share.shareMode}
-              onValueChange={changeMode}
-              disabled={busy}
-              aria-labelledby={modeLabelId}
-            >
-              <ToggleGroupItem value="off" className="h-9 px-3">
-                {t`Off`}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="direct" className="h-9 px-3">
-                {t`Direct Network`}
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="relay"
-                disabled={!signedInToRelay && share.shareMode !== "relay"}
-                className="h-9 px-3"
-              >
-                {t`Subspace Relay`}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-          <FieldDescription>
-            {share.shareMode === "off" &&
-              t`Direct and Relay Subspace access is turned off for new pairings.`}
-            {share.shareMode === "direct" &&
-              (share.listening && share.listeningPort !== null
-                ? t`Listening directly on port ${ph({ port: String(share.listeningPort) })} without a Relay account.`
-                : t`Starting direct listener…`)}
-            {share.shareMode === "relay" &&
-              (share.relayConnected
-                ? t`Connected to Subspace Relay with end-to-end encryption.`
-                : share.relayError
-                  ? t`Relay error: ${ph({ error: share.relayError })}`
-                  : t`Connecting to Subspace Relay…`)}
-          </FieldDescription>
-          {!signedInToRelay && (
-            <FieldDescription>
-              {t`Sign in to your Subspace Relay account below to share outside your LAN or Tailscale.`}
-            </FieldDescription>
-          )}
-        </Field>
-
-        {share.shareMode === "direct" && (
-          <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
+          <Field>
+            <FieldLabel htmlFor={addrId}>{t`Network Address`}</FieldLabel>
+            <Select value={selectedKnownAddress} onValueChange={selectAddress} disabled={busy}>
+              <SelectTrigger id={addrId} className="max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {share.addresses.map((addr) => (
+                  <SelectItem key={addr.address} value={addr.address}>
+                    {`${addr.address} (${t(ADDRESS_KIND_LABELS[addr.kind])} · ${addr.interfaceName})`}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CUSTOM_ADDRESS}>{t`Custom Address`}</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldDescription>{`${directStatus} ${relayStatus}`}</FieldDescription>
+          </Field>
+          {selectedKnownAddress === CUSTOM_ADDRESS && (
             <Field>
-              <FieldLabel htmlFor={addrId}>{t`Network Address`}</FieldLabel>
-              <Select value={selectedKnownAddress} onValueChange={selectAddress} disabled={busy}>
-                <SelectTrigger id={addrId} className="max-w-md">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {share.addresses.map((addr) => (
-                    <SelectItem key={addr.address} value={addr.address}>
-                      {`${addr.address} (${t(ADDRESS_KIND_LABELS[addr.kind])} · ${addr.interfaceName})`}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={CUSTOM_ADDRESS}>{t`Custom Address`}</SelectItem>
-                </SelectContent>
-              </Select>
+              <FieldLabel htmlFor={customAddrId}>{t`Custom Host or IP`}</FieldLabel>
+              <div className="flex max-w-md items-center gap-2">
+                <Input
+                  id={customAddrId}
+                  value={customHost}
+                  onChange={(event) => {
+                    setCustomHostDirty(true);
+                    setCustomHost(event.target.value);
+                  }}
+                  placeholder="100.x.y.z"
+                  className="font-mono text-xs md:text-xs"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!customHost.trim() || busy}
+                  onClick={applyCustomHost}
+                >
+                  {t`Apply`}
+                </Button>
+              </div>
             </Field>
-            {selectedKnownAddress === CUSTOM_ADDRESS && (
-              <Field>
-                <FieldLabel htmlFor={customAddrId}>{t`Custom Host or IP`}</FieldLabel>
-                <div className="flex max-w-md items-center gap-2">
-                  <Input
-                    id={customAddrId}
-                    value={customHost}
-                    onChange={(event) => {
-                      setCustomHostDirty(true);
-                      setCustomHost(event.target.value);
-                    }}
-                    placeholder="100.x.y.z"
-                    className="font-mono text-xs md:text-xs"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!customHost.trim() || busy}
-                    onClick={applyCustomHost}
-                  >
-                    {t`Apply`}
-                  </Button>
-                </div>
-              </Field>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
-        {(share.shareMode === "direct" || share.shareMode === "relay") && (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant={offer ? "outline" : "default"}
+            disabled={busy || !resolvedDirectHost}
+            onClick={() => generateOffer(Boolean(offer))}
+          >
+            {createOffer.isPending ? <Spinner /> : <QrCodeIcon />}
+            {offer ? t`New Pairing Code` : t`Generate Pairing Code`}
+          </Button>
+          {share.shareMode !== "off" && (
             <Button
               type="button"
-              variant={offer ? "outline" : "default"}
-              disabled={
-                busy ||
-                (share.shareMode === "relay" && !signedInToRelay) ||
-                (share.shareMode === "direct" && !resolvedDirectHost)
-              }
-              onClick={() => generateOffer(Boolean(offer))}
+              variant="ghost"
+              disabled={busy}
+              onClick={() => updateShare.mutate({ shareMode: "off" })}
             >
-              {createOffer.isPending ? <Spinner /> : <QrCodeIcon />}
-              {offer ? t`New Pairing Code` : t`Generate Pairing Code`}
+              {t`Stop Sharing`}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {offer !== null && (share.shareMode === "direct" || share.shareMode === "relay") && (
+        {offer !== null && share.shareMode !== "off" && (
           <div className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-start">
             <img
               src={`data:image/svg+xml;utf8,${encodeURIComponent(offer.qrSvg)}`}

@@ -56,6 +56,16 @@ export const InviteCreatedSchema = z.object({
   inviteId: z.string().min(1).max(64),
 });
 
+export const InviteRevokeSchema = z.object({
+  type: z.literal("invite_revoke"),
+  inviteId: z.string().min(1).max(64),
+});
+
+export const InviteRevokedSchema = z.object({
+  type: z.literal("invite_revoked"),
+  inviteId: z.string().min(1).max(64),
+});
+
 export const DeviceInstallSchema = z.object({
   type: z.literal("device_install"),
   grantId: z.string().min(1).max(64),
@@ -88,6 +98,7 @@ export const RelayHostControlInboundSchema = z.discriminatedUnion("type", [
   HostHelloSchema,
   HostChallengeAckSchema,
   InviteCreateSchema,
+  InviteRevokeSchema,
   DeviceInstallSchema,
   DeviceRevokeSchema,
 ]);
@@ -96,6 +107,7 @@ export const RelayHostControlOutboundSchema = z.discriminatedUnion("type", [
   HostChallengeSchema,
   HostHelloAckSchema,
   InviteCreatedSchema,
+  InviteRevokedSchema,
   DeviceInstalledSchema,
   DeviceRevokedSchema,
   ConnectionOpenSchema,

@@ -666,7 +666,7 @@ describe("Subspace web UI regressions", () => {
       body: { directAddress: "100.64.0.99" },
     });
     expect(mockCall).toHaveBeenNthCalledWith(2, "POST /api/local/subspace/share/offer", {
-      body: { mode: "direct", address: "100.64.0.99" },
+      body: { mode: "auto", address: "100.64.0.99" },
     });
 
     mockCall.mockClear();
@@ -679,7 +679,7 @@ describe("Subspace web UI regressions", () => {
       body: { directAddress: "192.168.1.10" },
     });
     expect(mockCall).toHaveBeenNthCalledWith(2, "POST /api/local/subspace/share/offer", {
-      body: { mode: "direct", address: "192.168.1.10" },
+      body: { mode: "auto", address: "192.168.1.10" },
     });
   });
 
@@ -1351,6 +1351,130 @@ describe("Subspace web UI regressions", () => {
       expect(toastErrorSpy).toHaveBeenCalledTimes(1);
     } finally {
       client.clear();
+      history.dispose();
+    }
+  });
+
+  test("ShareCard uses unified mode=auto pairing and Stop Sharing without mode picker, and ServersCard shows live transport", async () => {
+    const client = new QueryClient();
+    const offState = makeState({
+      share: {
+        ...makeState().share,
+        shareMode: "off",
+      },
+    });
+    client.setQueryData(subspaceQuery.queryKey, offState);
+    mockCall.mockResolvedValue(offState);
+
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(QueryClientProvider, { client }, createElement(ShareCard)),
+      ),
+    );
+
+    expect(mounted.container.innerHTML).not.toContain("Sharing Mode");
+    expect(mounted.container.innerHTML).toContain("Generate Pairing Code");
+    expect(mounted.container.innerHTML).not.toContain("Stop Sharing");
+
+    const genBtn = buttonProps.findLast((b) => b.text === "Generate Pairing Code");
+    expect(genBtn?.onClick).toBeDefined();
+    await mounted.act(async () => {
+      genBtn!.onClick!();
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/offer", {
+      body: { mode: "auto", address: "192.0.2.50", rotate: false },
+    });
+
+    const onState = makeState({
+      share: {
+        ...makeState().share,
+        shareMode: "direct",
+        listening: true,
+        listeningPort: 45123,
+        relayConnected: true,
+      },
+      relayAuth: { ...offState.relayAuth, status: "signed-in" },
+    });
+    mockCall.mockClear();
+    mockCall.mockResolvedValue(onState);
+    await mounted.act(async () => {
+      client.setQueryData(subspaceQuery.queryKey, onState);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mounted.container.innerHTML).toContain("Stop Sharing");
+    expect(mounted.container.innerHTML).toContain("Subspace Relay fallback is active.");
+
+    const stopBtn = buttonProps.findLast((b) => b.text === "Stop Sharing");
+    expect(stopBtn?.onClick).toBeDefined();
+    await mounted.act(async () => {
+      stopBtn!.onClick!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCall).toHaveBeenCalledWith("POST /api/local/subspace/share/settings", {
+      body: { shareMode: "off" },
+    });
+    client.clear();
+
+    const history = createBrowserHistory(null);
+    try {
+      const serverClient = new QueryClient();
+      serverClient.setQueryData(
+        subspaceQuery.queryKey,
+        makeState({
+          servers: [
+            {
+              id: "srv-hybrid",
+              name: "Workstation",
+              mode: "direct",
+              activeTransport: "relay",
+              endpoint: { host: "10.0.1.5", port: 63427 },
+              relay: { url: "https://eidolon-relay.vrp.moe", relayHostId: "host_1234" },
+              addedAt: 1,
+              lastConnectedAt: 1,
+              lastVersion: "0.22.0",
+              connectionState: "connected",
+              lastError: null,
+              latencyMs: 25,
+            },
+            {
+              id: "srv-offline-hybrid",
+              name: "Dorm",
+              mode: "direct",
+              activeTransport: null,
+              endpoint: { host: "192.168.1.9", port: 63427 },
+              relay: { url: "https://eidolon-relay.vrp.moe", relayHostId: "host_5678" },
+              addedAt: 1,
+              lastConnectedAt: null,
+              lastVersion: null,
+              connectionState: "connecting",
+              lastError: null,
+              latencyMs: null,
+            },
+          ],
+        }),
+      );
+      const html = renderToStaticMarkup(
+        createElement(
+          I18nProvider,
+          { i18n },
+          createElement(
+            QueryClientProvider,
+            { client: serverClient },
+            createElement(
+              Router as FunctionComponent<RouterOptions>,
+              { hook: history.hook, searchHook: history.searchHook },
+              createElement(ServersCard),
+            ),
+          ),
+        ),
+      );
+      expect(html).toContain(">Relay<");
+      expect(html).toContain("https://eidolon-relay.vrp.moe");
+      expect(html).toContain("Direct · Relay");
+    } finally {
       history.dispose();
     }
   });

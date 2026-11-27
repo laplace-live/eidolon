@@ -29,7 +29,7 @@ const UpdateServerBodySchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
 });
 const ShareOfferBodySchema = z.object({
-  mode: z.enum(["direct", "relay"]),
+  mode: z.enum(["auto", "direct", "relay"]).default("auto"),
   address: DirectHostSchema.optional(),
   port: z.number().int().min(0).max(65535).optional(),
   rotate: z.boolean().optional(),

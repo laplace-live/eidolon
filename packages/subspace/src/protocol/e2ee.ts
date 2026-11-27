@@ -10,6 +10,7 @@ import {
   utf8Decode,
   utf8Encode,
 } from "./encoding.ts";
+import type { RelayEndpoint } from "./pairing.ts";
 
 export interface X25519KeyPair {
   /** Raw 32-byte X25519 public key, base64-encoded. */
@@ -57,6 +58,7 @@ export type E2eeAuthResponse =
       readonly hostName: string;
       readonly serverVersion: string;
       readonly deviceToken?: string;
+      readonly relay?: RelayEndpoint;
     }
   | {
       readonly type: "e2ee_authenticated";

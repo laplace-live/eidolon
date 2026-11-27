@@ -2166,6 +2166,7 @@ export interface SubspaceServerView {
   readonly id: string;
   readonly name: string;
   readonly mode: "direct" | "relay";
+  readonly activeTransport?: "direct" | "relay" | null;
   readonly endpoint: {
     readonly host: string;
     readonly port: number;
@@ -2183,6 +2184,7 @@ export interface SubspaceServerView {
 
 export interface SubspaceOfferSnapshot {
   readonly mode: "direct" | "relay";
+  readonly hasRelayFallback?: boolean;
   readonly hostName: string;
   readonly expiresAt: number;
   readonly pairingUrl: string;
@@ -2260,7 +2262,7 @@ export interface SubspaceServerUpdateRequest {
 }
 
 export interface SubspaceShareOfferRequest {
-  readonly mode: "direct" | "relay";
+  readonly mode?: "auto" | "direct" | "relay";
   readonly address?: string;
   readonly port?: number;
   readonly rotate?: boolean;
@@ -2271,6 +2273,7 @@ export interface SubspaceShareOfferResponse {
   readonly pairingCode: string;
   readonly qrSvg: string;
   readonly expiresAt: number;
+  readonly hasRelayFallback?: boolean;
   readonly state: SubspaceStateResponse;
 }
 

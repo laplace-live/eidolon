@@ -13,18 +13,23 @@ export interface RelayConfig {
 export const DEFAULT_RELAY_AUTH_ISSUER = "https://id.laplace.live";
 export const DEFAULT_RELAY_AUTH_AUDIENCE = "eidolon-relay";
 
-function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: boolean): string {
+function readCleanEnvValue(name: string, raw: string, expectation: string): string {
   const value = raw.trim();
-  // Reject shell line-continuation characters before URL() silently rewrites `\` to `/`.
   if (value === "" || /[\s\\]/.test(value)) {
-    throw new Error(
-      `${name} must be a valid http(s) URL without whitespace or backslashes (got ${JSON.stringify(raw)})`,
-    );
+    throw new Error(`${name} ${expectation} (got ${JSON.stringify(raw)})`);
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
+  return value;
+}
+
+function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: boolean): string {
+  // Reject shell line-continuation characters before URL.parse() silently rewrites `\` to `/`.
+  const value = readCleanEnvValue(
+    name,
+    raw,
+    "must be a valid http(s) URL without whitespace or backslashes",
+  );
+  const parsed = URL.parse(value);
+  if (parsed === null) {
     throw new Error(`${name} must be a valid http(s) URL (got ${JSON.stringify(raw)})`);
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -34,13 +39,7 @@ function readNormalizedUrl(name: string, raw: string, stripTrailingSlashes: bool
 }
 
 function readNormalizedToken(name: string, raw: string): string {
-  const value = raw.trim();
-  if (value === "" || /[\s\\]/.test(value)) {
-    throw new Error(
-      `${name} must not be empty or contain whitespace or backslashes (got ${JSON.stringify(raw)})`,
-    );
-  }
-  return value;
+  return readCleanEnvValue(name, raw, "must not be empty or contain whitespace or backslashes");
 }
 
 export function loadRelayConfig(): RelayConfig {

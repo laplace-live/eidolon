@@ -18,6 +18,7 @@ export {
   isMacLocalNetworkBlocked,
   performPairingHandshake,
   SubspaceClient,
+  type SubspaceClientConnectedInfo,
   type SubspaceClientEvents,
   type SubspaceClientOptions,
   SubspaceConnectError,
