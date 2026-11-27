@@ -1,5 +1,11 @@
 # laplace-eidolon
 
+## 0.24.0
+
+### Minor Changes
+
+- 028dbb1: Unify Subspace sharing with automatic Relay fallback
+
 ## 0.23.0
 
 ### Minor Changes

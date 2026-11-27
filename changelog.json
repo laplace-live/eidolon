@@ -2,6 +2,25 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-27T18:53:14.333Z",
+      "versions": {
+        "laplace-eidolon": "0.24.0",
+        "@laplace.live/eidolon": "0.24.0",
+        "laplace-eidolon-desktop": "0.12.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Unify Subspace sharing with automatic Relay fallback"
+        }
+      ]
+    },
+    {
       "date": "2026-11-27T13:47:31.921Z",
       "versions": {
         "laplace-eidolon": "0.23.0",
