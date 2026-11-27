@@ -23,9 +23,12 @@ import {
   isThemeSetting,
   loginItemStateOf,
   pageAt,
+  updateCheckOutcomeOf,
+  updateStateOf,
   type WindowKind,
   windowSizeOf,
 } from "../shared/bridge.ts";
+import { parseReleaseNotes } from "../shared/release-notes.ts";
 
 /** The part of `ipcRenderer` the bridges use. */
 export interface PreloadIpc {
@@ -112,6 +115,16 @@ export function desktopBridge(
         if (typeof shows === "boolean") callback(shows);
       });
     },
+    onUpdateState: (callback) => {
+      callback(updateStateOf(ipc.sendSync(BRIDGE.updateState), parseReleaseNotes));
+      ipc.on(BRIDGE.updateState, (_event, state) => {
+        callback(updateStateOf(state, parseReleaseNotes));
+      });
+    },
+    updateCheck: () => ipc.invoke(BRIDGE.updateCheck).then(updateCheckOutcomeOf),
+    updateDownload: () => ipc.invoke(BRIDGE.updateDownload).then(() => undefined),
+    updateInstall: () => ipc.invoke(BRIDGE.updateInstall).then(() => undefined),
+    updateSkip: () => ipc.invoke(BRIDGE.updateSkip).then(() => undefined),
   };
 }
 

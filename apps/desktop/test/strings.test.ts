@@ -60,12 +60,6 @@ describe("STRINGS", () => {
       en.text.held,
       en.text.hideNoticeTitle,
       en.text.microphoneTitle,
-      en.text.updateAvailableTitle("0.2.0"),
-      en.text.updateDownloadedTitle,
-      en.text.upToDateTitle,
-      en.text.checkFailedTitle,
-      en.text.downloadFailedTitle,
-      en.text.readOnlyTitle,
       en.text.chooseFolder,
       en.text.installCommandPrompt,
       en.text.removeCommandPrompt,
@@ -115,39 +109,11 @@ describe("STRINGS", () => {
     }
   });
 
-  test("the update's labels are Title Case, and the Chinese ones the web app's where it has them", () => {
-    expect([
-      en.label.checkForUpdates,
-      en.label.download,
-      en.label.later,
-      en.label.releaseNotes,
-      en.label.restart,
-    ]).toEqual(["Check for Updates…", "Download", "Later", "Release Notes", "Restart"]);
-    expect(webChinese("Download")).toBe(zh.label.download);
+  test("the menu's Check for Updates… label is Title Case, and matches Chinese", () => {
+    expect(en.label.checkForUpdates).toBe("Check for Updates…");
     expect(zh.label.checkForUpdates).toBe("检查更新…");
-  });
-
-  test("the update's boxes name both versions, in both languages", () => {
-    expect(en.text.updateAvailableTitle("0.2.0")).toBe("LAPLACE Eidolon 0.2.0 is available");
-    expect(en.text.updateAvailable("0.1.0")).toContain("You have 0.1.0.");
-    expect(en.text.updateDownloaded("0.2.0")).toContain("LAPLACE Eidolon 0.2.0 is downloaded.");
-    expect(en.text.updateDownloaded("0.2.0")).toContain(
-      "installs the next time you quit LAPLACE Eidolon",
-    );
-    expect(en.text.upToDate("0.1.0")).toBe("LAPLACE Eidolon 0.1.0 is the latest version.");
-    expect(en.text.updateFailed).toContain(`${en.label.showLogs} has the details`);
-    expect(zh.text.updateAvailableTitle("0.2.0")).toBe("LAPLACE Eidolon 0.2.0 已发布");
-    expect(zh.text.updateAvailable("0.1.0")).toContain("当前版本为 0.1.0");
-    expect(zh.text.updateDownloaded("0.2.0")).toContain("0.2.0");
-    expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 LAPLACE Eidolon 时安装");
-    expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
-  });
-
-  test("counts the notes past the box's list as not listed here, naming no page that has them", () => {
-    // Release Notes opens the offered version's Release alone, and they can be earlier versions'.
-    expect(en.text.notes.more(1)).toBe("1 more change isn't listed here.");
-    expect(en.text.notes.more(3)).toBe("3 more changes aren't listed here.");
-    expect(zh.text.notes.more(3)).toBe("另有 3 项改动未在此列出。");
+    expect(en.label.restart).toBe("Restart");
+    expect(webChinese("Restart")).toBe(zh.label.restart);
   });
 
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {

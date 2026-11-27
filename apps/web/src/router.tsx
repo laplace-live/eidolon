@@ -17,6 +17,7 @@ import { AppShell, FrameLayout, PageLayout } from "@/components/app-shell";
 import { LockedScreen } from "@/components/locked-screen";
 import { RouteBoundary, RouteError } from "@/components/route-error";
 import { Spinner } from "@/components/ui/spinner";
+import { UpdateDialogHost } from "@/components/update-dialog";
 import { WindowDragStrip } from "@/components/window-drag-strip";
 import { CompanionError, Nothing } from "@/features/companion/quiet";
 import { firstRunRedirect } from "@/features/setup/first-run";
@@ -280,9 +281,12 @@ function RouterView({ store }: { readonly store: SessionStore }) {
       </Route>
       <Route>
         {() => (
-          <SessionGate store={store}>
-            <AppRoutes />
-          </SessionGate>
+          <>
+            <SessionGate store={store}>
+              <AppRoutes />
+            </SessionGate>
+            <UpdateDialogHost />
+          </>
         )}
       </Route>
     </Switch>

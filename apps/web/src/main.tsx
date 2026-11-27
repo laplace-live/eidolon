@@ -9,6 +9,7 @@ import { connectDesktop, subscribeWindowShows, windowShows } from "@/lib/desktop
 import { createQueryClient } from "@/lib/query";
 import { exchangeLinkCode, takeLinkCode } from "@/lib/session";
 import { initTheme } from "@/lib/theme";
+import { checkForUpdates } from "@/lib/update-check";
 import { dynamicActivate, initialLang } from "@/locales/i18n";
 import { createRouter } from "@/router";
 import "@/index.css";
@@ -23,7 +24,7 @@ let router: ReturnType<typeof createRouter> | undefined;
 const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
 
-connectDesktop((to) => void router?.navigate(to));
+connectDesktop((to) => void router?.navigate(to), checkForUpdates);
 // Hidden while it feeds the desktop companion, the desktop app's window still runs this page, and
 // an animation running would keep it drawing: index.css pauses them under the mark.
 const markWindowShows = () => {

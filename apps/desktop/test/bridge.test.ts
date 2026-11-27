@@ -38,6 +38,8 @@ import {
   openTaskCommand,
   type PageChannel,
   pageAt,
+  updateCheckOutcomeOf,
+  updateStateOf,
   versionsOf,
   windowKindOf,
   windowSizeOf,
@@ -116,6 +118,11 @@ describe("accepts", () => {
     BRIDGE.setTerminalCommand,
     BRIDGE.unsaved,
     BRIDGE.revealModel,
+    BRIDGE.updateState,
+    BRIDGE.updateCheck,
+    BRIDGE.updateDownload,
+    BRIDGE.updateInstall,
+    BRIDGE.updateSkip,
   ];
   const SHELL_CHANNELS: PageChannel[] = [BRIDGE.retry, BRIDGE.showLogs, BRIDGE.quit];
   /** The app page's channels for the desktop companion. */
@@ -832,6 +839,58 @@ describe("the preload's bridges", () => {
       read.push(value),
     );
     expect(read).toEqual([true]);
+  });
+
+  test("the app's bridge reads updater state synchronously, follows updates, and invokes update actions", async () => {
+    const notes = [
+      {
+        date: "2026-11-26T00:00:00Z",
+        versions: { "laplace-eidolon-desktop": "0.2.0" },
+        items: [{ kind: "feature", packages: ["laplace-eidolon-desktop"], text: "In-app dialog" }],
+      },
+    ];
+    const { ipc, sent, invoked, deliver } = fakeIpc([
+      { phase: "available", version: "0.2.0", notes, extra: 1 },
+      { outcome: "available", version: "0.2.0", extra: 1 },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const states: unknown[] = [];
+    const bridge = desktopBridge(ipc, "darwin", { version: "0.1.0", serverVersion: "0.18.0" });
+    bridge.onUpdateState((state) => states.push(state));
+    expect(sent).toEqual([[BRIDGE.updateState]]);
+    deliver(BRIDGE.updateState, { phase: "downloading", version: "0.2.0", percent: 42.4 });
+    deliver(BRIDGE.updateState, { phase: "downloading", version: "0.2.0", percent: "bad" });
+    deliver(BRIDGE.updateState, { phase: "error", version: "0.2.0", message: "network drop" });
+    deliver(BRIDGE.updateState, { phase: "read-only" });
+    expect(states).toEqual([
+      { phase: "available", version: "0.2.0", notes },
+      { phase: "downloading", version: "0.2.0", percent: 42 },
+      { phase: "unsupported" },
+      { phase: "error", version: "0.2.0", message: "network drop" },
+      { phase: "read-only" },
+    ]);
+    expect(await bridge.updateCheck()).toEqual({ outcome: "available", version: "0.2.0" });
+    await bridge.updateDownload();
+    await bridge.updateInstall();
+    await bridge.updateSkip();
+    expect(invoked).toEqual([
+      [BRIDGE.updateCheck],
+      [BRIDGE.updateDownload],
+      [BRIDGE.updateInstall],
+      [BRIDGE.updateSkip],
+    ]);
+    expect(updateStateOf(null)).toEqual({ phase: "unsupported" });
+    expect(updateStateOf({ phase: "available", version: "" })).toEqual({ phase: "unsupported" });
+    expect(updateCheckOutcomeOf({ outcome: "error", message: "timeout" })).toEqual({
+      outcome: "error",
+      message: "timeout",
+    });
+    expect(updateCheckOutcomeOf({ outcome: "available", version: "" })).toEqual({
+      outcome: "none",
+    });
+    expect(updateCheckOutcomeOf(null)).toEqual({ outcome: "none" });
   });
 
   test("a pick from her menu reaches the app's page as a call pick alone, never with the IPC event", () => {

@@ -11,8 +11,12 @@ import {
   offersPopOut,
   onCompanionPort,
   runCommand,
+  setUpdateState,
   subscribeCompanionPick,
+  subscribeUpdateState,
   subscribeWindowShows,
+  type UpdateState,
+  updateState,
   windowShows,
 } from "./desktop";
 import { setTheme } from "./theme";
@@ -45,6 +49,7 @@ function fakeBridge(): FakeBridge {
 afterEach(() => {
   globalThis.eidolonDesktop = undefined;
   globalThis.eidolonCompanion = undefined;
+  setUpdateState({ phase: "unsupported" });
   vi.unstubAllGlobals();
 });
 
@@ -350,4 +355,34 @@ test("the theme setting and the language reach the app at once and on each chang
 
   bridge.menu.send?.("settings");
   expect(navigate.mock.calls).toEqual([["/settings"]]);
+});
+
+test("updater state syncs on connectDesktop, notifies subscribers, and routes check-updates", () => {
+  let push: ((state: UpdateState) => void) | undefined;
+  const bridge = {
+    ...fakeBridge(),
+    onUpdateState: (callback: (state: UpdateState) => void) => {
+      push = callback;
+      callback({ phase: "idle" });
+    },
+  };
+  globalThis.eidolonDesktop = bridge;
+  const seenStates: UpdateState[] = [];
+  const stopState = subscribeUpdateState(() => seenStates.push(updateState()));
+  const onCheck = vi.fn();
+
+  connectDesktop(vi.fn(), onCheck);
+  expect(updateState()).toEqual({ phase: "idle" });
+  push?.({ phase: "idle" });
+  push?.({ phase: "available", version: "0.7.0", notes: [] });
+  push?.({ phase: "available", version: "0.7.0", notes: [] });
+  expect(seenStates).toEqual([
+    { phase: "idle" },
+    { phase: "available", version: "0.7.0", notes: [] },
+  ]);
+
+  bridge.menu.send?.("check-updates");
+  expect(onCheck).toHaveBeenCalledOnce();
+
+  stopState();
 });

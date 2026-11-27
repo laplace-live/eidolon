@@ -83,13 +83,26 @@ function invokes() {
       calls.push(["revealModel", model]);
       return model.model === "tml";
     },
+    updateCheck: async (...args: unknown[]) => {
+      calls.push(["updateCheck", ...args]);
+      return { outcome: "none" };
+    },
+    updateDownload: (...args: unknown[]) => {
+      calls.push(["updateDownload", ...args]);
+    },
+    updateInstall: (...args: unknown[]) => {
+      calls.push(["updateInstall", ...args]);
+    },
+    updateSkip: (...args: unknown[]) => {
+      calls.push(["updateSkip", ...args]);
+    },
   };
   const list = appInvokes(actions);
   return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
 }
 
 describe("appInvokes", () => {
-  test("answers the folder dialog, the system options and the desktop companion, one invoke each", () => {
+  test("answers the folder dialog, the system options, the desktop companion, and the updater, one invoke each", () => {
     expect(invokes().list.map(([channel]) => channel)).toEqual([
       BRIDGE.chooseFolder,
       BRIDGE.loginItem,
@@ -101,6 +114,10 @@ describe("appInvokes", () => {
       BRIDGE.popOut,
       BRIDGE.resetCompanionPlace,
       BRIDGE.revealModel,
+      BRIDGE.updateCheck,
+      BRIDGE.updateDownload,
+      BRIDGE.updateInstall,
+      BRIDGE.updateSkip,
     ]);
   });
 
@@ -126,6 +143,10 @@ describe("appInvokes", () => {
     expect(answer(BRIDGE.companion)(app, { on: false })).toEqual(STATE);
     expect(answer(BRIDGE.popOut)(app, "x")).toEqual(STATE);
     expect(answer(BRIDGE.resetCompanionPlace)(app, { feet: 1 })).toEqual(STATE);
+    expect(await answer(BRIDGE.updateCheck)(app, true)).toEqual({ outcome: "none" });
+    answer(BRIDGE.updateDownload)(app, "x");
+    answer(BRIDGE.updateInstall)(app, "x");
+    answer(BRIDGE.updateSkip)(app, "x");
     expect(calls).toEqual([
       ["chooseFolder"],
       ["loginItem"],
@@ -133,6 +154,10 @@ describe("appInvokes", () => {
       ["companion"],
       ["popOut"],
       ["resetCompanionPlace"],
+      ["updateCheck"],
+      ["updateDownload"],
+      ["updateInstall"],
+      ["updateSkip"],
     ]);
   });
 

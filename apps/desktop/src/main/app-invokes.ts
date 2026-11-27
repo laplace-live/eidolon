@@ -22,6 +22,7 @@ import {
   type LoginItemState,
   type ModelRef,
   type PageChannel,
+  type UpdateCheckOutcome,
   type WindowSize,
 } from "../shared/bridge.ts";
 
@@ -38,6 +39,10 @@ export interface AppInvokes {
   readonly resetCompanionPlace: () => CompanionState;
   /** Whether the model's file was there to show. */
   readonly revealModel: (model: ModelRef) => boolean;
+  readonly updateCheck: () => Promise<UpdateCheckOutcome>;
+  readonly updateDownload: () => void;
+  readonly updateInstall: () => void;
+  readonly updateSkip: () => void;
 }
 
 /** An invoke's answer to who sent it and its argument; throws for another sender or argument. */
@@ -83,6 +88,10 @@ export function appInvokes(actions: AppInvokes): readonly (readonly [PageChannel
       if (!isModelRef(model)) throw new Error("a model is a persona's id and a model's id");
       return actions.revealModel({ persona: model.persona, model: model.model });
     }),
+    guarded(BRIDGE.updateCheck, () => actions.updateCheck()),
+    guarded(BRIDGE.updateDownload, () => actions.updateDownload()),
+    guarded(BRIDGE.updateInstall, () => actions.updateInstall()),
+    guarded(BRIDGE.updateSkip, () => actions.updateSkip()),
   ];
 }
 

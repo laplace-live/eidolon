@@ -1,6 +1,6 @@
 // Release notes as the root changelog.json records them, which an update's manifest carries as
-// `eidolonNotes`: their check, and what an update's box shows of them. scripts/changelog.ts writes
-// them with these types too, so the module imports nothing.
+// `eidolonNotes`: their parsing and filtering between versions for the in-app update dialog.
+// scripts/changelog.ts writes them with these types too, so the module imports nothing.
 
 /** Features read first and `other` last. */
 export const CHANGE_KIND_ORDER = ["feature", "performance", "improvement", "fix", "other"] as const;
@@ -23,11 +23,6 @@ export interface ReleaseNoteEntry {
 }
 
 export const DESKTOP_PACKAGE = "laplace-eidolon-desktop";
-
-/** The most items an update's box lists, since a native box grows to fit its text. */
-export const MAX_NOTE_ITEMS = 8;
-/** The most characters of a line it shows, a version heading's too, the last "…" when cut. */
-export const MAX_NOTE_LINE = 200;
 
 /**
  * Compares `x.y.z` versions: below 0, 0 or above 0. A prerelease sorts below its release, and
@@ -110,57 +105,13 @@ export function notesBetween(
     .sort((a, b) => compareVersions(released(b), released(a)));
 }
 
-/** The words notesText puts around the notes, in the box's language. */
-export interface NotesLabels {
-  /** Each kind's label, such as "New" or "Fixed", before an item's text. */
-  readonly kinds: Readonly<Record<ChangeKind, string>>;
-  /** The line under a list that leaves `count` items out. */
-  readonly more: (count: number) => string;
-}
-
-/** `line` at most MAX_NOTE_LINE long, cut to end in "…" between two characters, never inside one. */
-function clip(line: string): string {
-  if (line.length <= MAX_NOTE_LINE) return line;
-  const cut = line.slice(0, MAX_NOTE_LINE - 1);
-  const last = cut.charCodeAt(cut.length - 1);
-  return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
-}
-
 /**
- * The notes as a native box's plain text: a line per item, under its release's version when there
- * are several, and at most MAX_NOTE_ITEMS of them, with a line that counts the rest. Each line is
- * cut at MAX_NOTE_LINE characters.
- */
-export function notesText(entries: readonly ReleaseNoteEntry[], labels: NotesLabels): string {
-  const blocks: string[] = [];
-  let room = MAX_NOTE_ITEMS;
-  let left = 0;
-  for (const entry of entries) {
-    const shown = entry.items.slice(0, room);
-    room -= shown.length;
-    left += entry.items.length - shown.length;
-    if (shown.length === 0) continue;
-    const version = entries.length > 1 ? entry.versions[DESKTOP_PACKAGE] : undefined;
-    const lines = shown.map((item) =>
-      clip(`${labels.kinds[item.kind]}: ${item.text.trim().split("\n", 1)[0]}`),
-    );
-    blocks.push([...(version === undefined ? [] : [clip(version)]), ...lines].join("\n"));
-  }
-  if (left > 0) blocks.push(labels.more(left));
-  return blocks.join("\n\n");
-}
-
-/**
- * The notes for the box offering an update: `eidolonNotes` in its manifest, which electron-updater
- * passes through on the update's info, from what runs to what it offers.
+ * The notes for the update dialog: `eidolonNotes` in its manifest, which electron-updater passes
+ * through on the update's info, from what runs to what it offers.
  */
 export function manifestNotes(
   info: { readonly version: string; readonly eidolonNotes?: unknown },
   running: string,
-  labels: NotesLabels,
-): string {
-  return notesText(
-    notesBetween(parseReleaseNotes(info.eidolonNotes), running, info.version),
-    labels,
-  );
+): ReleaseNoteEntry[] {
+  return notesBetween(parseReleaseNotes(info.eidolonNotes), running, info.version);
 }

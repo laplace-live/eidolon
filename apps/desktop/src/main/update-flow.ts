@@ -1,38 +1,14 @@
-// Updates, decided without Electron, as laplace-persona's updater runs them but in native boxes:
-// whether this run updates itself and from what, the flow from a check to the restart that
-// installs, its boxes, and EIDOLON_DESKTOP_MOCK_UPDATE's fakes. updater.ts runs it on
-// electron-updater.
-import { posix } from "node:path";
-import type { MessageBoxOptions } from "electron";
+// Updates, decided without Electron, as laplace-persona's updater runs them: whether this run
+// updates itself and from what, the flow from a quiet or manual check to download, skip, and the
+// restart that installs, persisted skipped versions, and EIDOLON_DESKTOP_MOCK_UPDATE's fakes.
+// updater.ts runs it on electron-updater and pushes each state change to the app page.
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, posix } from "node:path";
 import type { UpdateInfo } from "electron-updater";
+import type { UpdateCheckOutcome, UpdateState } from "../shared/bridge.ts";
+import { DESKTOP_PACKAGE, type ReleaseNoteEntry } from "../shared/release-notes.ts";
 import { launchFlag } from "./environment.ts";
 import { loggedText } from "./policy.ts";
-import type { Strings } from "./strings.ts";
-
-/** Where the flow is. A check's failure is its outcome's, never a state. */
-export type UpdateState =
-  | { readonly phase: "unsupported" }
-  /** macOS, on a read-only volume: nothing is checked, and Check for Updates… says to move it. */
-  | { readonly phase: "read-only" }
-  | { readonly phase: "idle" }
-  | { readonly phase: "checking" }
-  | { readonly phase: "available"; readonly version: string }
-  | { readonly phase: "downloading"; readonly version: string; readonly percent: number }
-  | { readonly phase: "downloaded"; readonly version: string }
-  /**
-   * Restart chosen: the hop that makes a second Restart a no-op, since quitAndInstall twice asks
-   * Squirrel to relaunch twice, which leaves two copies running. A Cancel in the quit check hands
-   * it back to downloaded.
-   */
-  | { readonly phase: "installing"; readonly version: string }
-  /** The download failed, or the update it gave can't install. */
-  | { readonly phase: "error"; readonly version: string; readonly message: string };
-
-/** One check's result. */
-export type UpdateCheckOutcome =
-  | { readonly outcome: "available"; readonly version: string }
-  | { readonly outcome: "none" }
-  | { readonly outcome: "error"; readonly message: string };
 
 /** How long after the backend is first ready the quiet check runs, clear of startup. */
 export const LAUNCH_CHECK_DELAY_MS = 10_000;
@@ -43,9 +19,42 @@ export const LAUNCH_CHECK_DELAY_MS = 10_000;
  */
 export const INSTALL_FOLDER = "eidolon";
 
+/** In userData, beside companion.json and window-bounds.json. */
+export const UPDATES_FILE = "updates.json";
+
 const MOCK_UPDATE = "EIDOLON_DESKTOP_MOCK_UPDATE";
 const DEV_UPDATE = "EIDOLON_DESKTOP_DEV_UPDATE";
 const UPDATE_TEST = "EIDOLON_DESKTOP_UPDATE_TEST";
+
+export interface UpdateSettings {
+  readonly skippedVersion: string | null;
+}
+
+/** Reads persisted updater settings from `file`, returning defaults when missing or malformed. */
+export function readUpdateSettings(file: string): UpdateSettings {
+  let saved: unknown;
+  try {
+    saved = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { skippedVersion: null };
+  }
+  if (typeof saved !== "object" || saved === null || Array.isArray(saved)) {
+    return { skippedVersion: null };
+  }
+  const { skippedVersion } = saved as { readonly skippedVersion?: unknown };
+  return {
+    skippedVersion:
+      typeof skippedVersion === "string" && skippedVersion.length > 0 ? skippedVersion : null,
+  };
+}
+
+/** Persists updater settings atomically through a temporary file. */
+export function writeUpdateSettings(file: string, settings: UpdateSettings): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const temporary = `${file}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({ skippedVersion: settings.skippedVersion })}\n`);
+  renameSync(temporary, file);
+}
 
 /**
  * Whether electron-updater can update this install where it is on Windows: only NSIS's per-user
@@ -157,82 +166,6 @@ export function updaterMode({
   };
 }
 
-/** The GitHub Release that changesets makes for the desktop's tag. */
-export function releaseNotesUrl(version: string): string {
-  return `https://github.com/laplace-live/eidolon/releases/tag/laplace-eidolon-desktop@${encodeURIComponent(version)}`;
-}
-
-/** A box the flow shows. */
-export type UpdateBox =
-  | {
-      readonly kind: "available";
-      readonly version: string;
-      readonly current: string;
-      /** The release's notes, under the box's text; none when empty. */
-      readonly notes?: string;
-    }
-  | { readonly kind: "downloaded"; readonly version: string }
-  | { readonly kind: "up-to-date"; readonly current: string }
-  | { readonly kind: "check-failed" }
-  | { readonly kind: "download-failed" }
-  | { readonly kind: "read-only" };
-
-/** Each box's first button, its default: Download, Restart, Try Again or OK. */
-const GO = 0;
-const LATER = 1;
-const RELEASE_NOTES = 2;
-
-/**
- * One of the flow's native boxes, with no owner window, as the quit box is. Windows' task dialog
- * takes the app's icon, which the caller can add; macOS draws its own.
- */
-export function updateBox(
-  box: UpdateBox,
-  { label, text }: Strings,
-  platform: NodeJS.Platform,
-): MessageBoxOptions {
-  const ask = (
-    icon: "info" | "warning",
-    message: string,
-    detail: string,
-    buttons: readonly string[],
-  ): MessageBoxOptions => ({
-    type: platform === "win32" ? "none" : icon,
-    title: "LAPLACE Eidolon",
-    message,
-    detail,
-    buttons: [...buttons],
-    defaultId: GO,
-    ...(buttons.length > 1 ? { cancelId: LATER } : {}),
-    noLink: true,
-  });
-  switch (box.kind) {
-    case "available":
-      return ask(
-        "info",
-        text.updateAvailableTitle(box.version),
-        [text.updateAvailable(box.current), box.notes].filter(Boolean).join("\n\n"),
-        [label.download, label.later, label.releaseNotes],
-      );
-    case "downloaded":
-      return ask("info", text.updateDownloadedTitle, text.updateDownloaded(box.version), [
-        label.restart,
-        label.later,
-      ]);
-    case "up-to-date":
-      return ask("info", text.upToDateTitle, text.upToDate(box.current), [label.ok]);
-    case "check-failed":
-      return ask("warning", text.checkFailedTitle, text.updateFailed, [label.ok]);
-    case "download-failed":
-      return ask("warning", text.downloadFailedTitle, text.updateFailed, [
-        label.tryAgain,
-        label.later,
-      ]);
-    case "read-only":
-      return ask("info", text.readOnlyTitle, text.readOnly, [label.ok]);
-  }
-}
-
 /** What the flow runs on: electron-updater's autoUpdater, or the mock. */
 export interface UpdateDriver {
   /**
@@ -249,34 +182,35 @@ export interface UpdateDriver {
 export interface UpdateFlowOptions {
   /** Null when this run doesn't update itself: the flow stays unsupported, or read-only. */
   readonly driver: UpdateDriver | null;
-  /** With no driver: updaterMode's read-only, whose Check for Updates… says to move the app. */
+  /** With no driver: updaterMode's read-only, whose Check for Updates… opens the move dialog. */
   readonly readOnly?: boolean;
+  /**
+   * Automatically download and install as soon as an update is available/downloaded (headless CI
+   * update test under EIDOLON_DESKTOP_UPDATE_TEST).
+   */
+  readonly autoProceed?: boolean;
+  /** Previously skipped version, kept silent on quiet launch checks. */
+  readonly skippedVersion?: () => string | null;
+  /** Persists a newly skipped version. */
+  readonly saveSkippedVersion?: (version: string) => void;
   /**
    * The restart that installs: the quit check and its box, `installable` once it's answered, the
    * latch and the backend's stop, then `install`. False when it didn't go ahead, which hands the
-   * state back to downloaded, or, when no longer installable, shows the failure's box.
+   * state back to downloaded.
    */
   readonly restart: (install: () => void, installable: () => boolean) => Promise<boolean>;
   /** Starts the app again as it is, for an update that failed once the restart had stopped it. */
   readonly relaunch: () => void;
-  /** native.ts's box, which background mode answers with its default button. */
-  readonly show: (box: MessageBoxOptions) => Promise<{ readonly response: number }>;
-  /** The quit flow's: once a quit is under way, the app hidden and exiting, no box shows. */
-  readonly quitting?: () => boolean;
-  /** Opens a release's page in the default browser. */
-  readonly open: (url: string) => void;
   /** The download's share on the Dock or the taskbar; null clears it. */
   readonly progress: (fraction: number | null) => void;
-  readonly strings: () => Strings;
   /** The version that runs. */
   readonly version: string;
-  readonly platform?: NodeJS.Platform;
   /** main.log, a line for each step, for a test to follow. */
   readonly log: { info(message: string): void; warn(message: string): void };
-  /** Each new state: the menus follow it. */
+  /** Each new state: the app page and the menus follow it. */
   readonly changed?: (state: UpdateState) => void;
-  /** The release's notes for the box that offers it, from its manifest; none unless given. */
-  readonly notes?: (info: UpdateInfo, current: string) => string;
+  /** The release's notes for the dialog, from its manifest; none unless given. */
+  readonly notes?: (info: UpdateInfo, current: string) => readonly ReleaseNoteEntry[];
 }
 
 /** An error's first line for main.log and the state, its URLs without their queries. */
@@ -286,21 +220,18 @@ function reason(error: unknown): string {
 }
 
 /**
- * A quiet check 10 s after the backend is first ready, which says only that an update was found,
- * and Check for Updates…, which also says it's up to date or failed; native boxes from there.
+ * A quiet check 10 s after the backend is first ready, and manual checks from the app menu or
+ * tray; state changes push to the renderer's title-bar badge and in-app update dialog.
  */
 export class UpdateFlow {
   readonly #options: UpdateFlowOptions;
   readonly #driver: UpdateDriver | null;
   #state: UpdateState;
-  /** The manifest of the update the last check found. */
-  #found: UpdateInfo | null = null;
+  #notes: readonly ReleaseNoteEntry[] = [];
   #checking: Promise<UpdateCheckOutcome> | null = null;
-  /** Whether the running check reports "up to date" and failures: Check for Updates… asked too. */
+  /** Whether the running check reports skipped versions too: Check for Updates… asked too. */
   #manual = false;
   #scheduled = false;
-  /** An update box is open; another would stack on it. */
-  #asking = false;
   /** quitAndInstall was called: the app is meant to be quitting. */
   #committed = false;
   #relaunched = false;
@@ -327,35 +258,7 @@ export class UpdateFlow {
     setTimeout(() => void this.check(false), LAUNCH_CHECK_DELAY_MS);
   }
 
-  /**
-   * Check for Updates…: a check, or the box of the update already found, downloaded or failed, or
-   * the one that says to move a read-only copy.
-   */
-  checkByHand(): void {
-    switch (this.#state.phase) {
-      case "idle":
-      case "checking":
-        void this.check(true);
-        return;
-      case "read-only":
-        void this.#ask({ kind: "read-only" });
-        return;
-      case "available":
-        void this.#offer();
-        return;
-      case "downloaded":
-        void this.#offerRestart();
-        return;
-      case "error":
-        void this.#offerRetry();
-        return;
-      default:
-        // Unsupported, downloading or installing: the item is hidden or disabled.
-        return;
-    }
-  }
-
-  /** One check of the feed; one asked while another runs joins it, a manual one making it report. */
+  /** One check of the feed; one asked while another runs joins it, a manual one surfacing skipped versions. */
   check(manual: boolean): Promise<UpdateCheckOutcome> {
     if (this.#checking !== null) {
       if (manual) this.#manual = true;
@@ -365,8 +268,9 @@ export class UpdateFlow {
     if (state.phase === "available") {
       return Promise.resolve({ outcome: "available", version: state.version });
     }
-    if (state.phase !== "idle" || this.#driver === null)
+    if (state.phase !== "idle" || this.#driver === null) {
       return Promise.resolve({ outcome: "none" });
+    }
     this.#manual = manual;
     const checking = this.#check(this.#driver).finally(() => {
       this.#checking = null;
@@ -396,9 +300,9 @@ export class UpdateFlow {
         () => {
           if (this.#state.phase !== "downloading") return;
           this.#options.progress(null);
-          this.#set({ phase: "downloaded", version });
+          this.#set({ phase: "downloaded", version, notes: this.#notes });
           this.#options.log.info(`Eidolon: update downloaded: ${version}`);
-          void this.#offerRestart();
+          if (this.#options.autoProceed) this.install();
         },
         (error: unknown) => {
           if (this.#state.phase !== "downloading") return;
@@ -406,7 +310,6 @@ export class UpdateFlow {
           const message = reason(error);
           this.#set({ phase: "error", version, message });
           this.#options.log.warn(`Eidolon: the download of ${version} failed: ${message}`);
-          void this.#offerRetry();
         },
       );
   }
@@ -414,13 +317,9 @@ export class UpdateFlow {
   /** Restart, once: the hop to installing comes first, so a second Restart does nothing. */
   install(): void {
     const state = this.#state;
-    if (state.phase === "error") {
-      void this.#offerRetry();
-      return;
-    }
     if (state.phase !== "downloaded") return;
-    const { version } = state;
-    this.#set({ phase: "installing", version });
+    const { version, notes } = state;
+    this.#set({ phase: "installing", version, notes });
     this.#options.log.info(`Eidolon: restarting to install ${version}`);
     let calledOff = false;
     const installable = () => {
@@ -430,12 +329,8 @@ export class UpdateFlow {
       return false;
     };
     const notRestarted = () => {
-      if (calledOff) {
-        void this.#offerRetry();
-        return;
-      }
-      if (this.#state.phase !== "installing") return;
-      this.#set({ phase: "downloaded", version });
+      if (calledOff || this.#state.phase !== "installing") return;
+      this.#set({ phase: "downloaded", version, notes: this.#notes });
       this.#options.log.info(
         `Eidolon: ${version} stays downloaded, to install at the next restart or quit`,
       );
@@ -451,6 +346,16 @@ export class UpdateFlow {
           notRestarted();
         },
       );
+  }
+
+  /** Persist the offered version as skipped and clear the badge. */
+  skip(): void {
+    const state = this.#state;
+    if (state.phase !== "available") return;
+    const { version } = state;
+    this.#options.saveSkippedVersion?.(version);
+    this.#options.log.info(`Eidolon: skipped update ${version}`);
+    this.#set({ phase: "idle" });
   }
 
   /**
@@ -470,82 +375,37 @@ export class UpdateFlow {
   async #check(driver: UpdateDriver): Promise<UpdateCheckOutcome> {
     this.#set({ phase: "checking" });
     this.#options.log.info("Eidolon: checking for updates");
-    let outcome: UpdateCheckOutcome;
+    let found: UpdateInfo | null = null;
+    let failedMessage: string | null = null;
     try {
-      const found = await driver.check();
-      if (found !== null) this.#found = found;
-      outcome =
-        found === null ? { outcome: "none" } : { outcome: "available", version: found.version };
+      found = await driver.check();
     } catch (error) {
-      outcome = { outcome: "error", message: reason(error) };
+      failedMessage = reason(error);
     }
     const manual = this.#manual;
     this.#manual = false;
     const { log, version: current } = this.#options;
-    if (outcome.outcome === "available") {
-      this.#set({ phase: "available", version: outcome.version });
-      log.info(`Eidolon: update available: ${outcome.version}`);
-      void this.#offer();
-    } else if (outcome.outcome === "none") {
+    if (failedMessage !== null) {
+      this.#set({ phase: "idle" });
+      log.warn(`Eidolon: the update check failed: ${failedMessage}`);
+      return { outcome: "error", message: failedMessage };
+    }
+    if (found === null) {
       this.#set({ phase: "idle" });
       log.info(`Eidolon: up to date: ${current} is the latest`);
-      if (manual) void this.#ask({ kind: "up-to-date", current });
-    } else {
+      return { outcome: "none" };
+    }
+    const skipped = this.#options.skippedVersion?.() ?? null;
+    if (!this.#options.autoProceed && !manual && found.version === skipped) {
       this.#set({ phase: "idle" });
-      log.warn(`Eidolon: the update check failed: ${outcome.message}`);
-      if (manual) void this.#ask({ kind: "check-failed" });
+      log.info(`Eidolon: update available: ${found.version} (skipped)`);
+      return { outcome: "none" };
     }
-    return outcome;
-  }
-
-  /** Download, the default; Later; or Release Notes, which leaves it for Check for Updates…. */
-  async #offer(): Promise<void> {
-    const state = this.#state;
-    if (state.phase !== "available") return;
-    const { version } = state;
-    const { version: current, notes } = this.#options;
-    const found = this.#found;
-    const response = await this.#ask({
-      kind: "available",
-      version,
-      current,
-      notes: found === null ? "" : (notes?.(found, current) ?? ""),
-    });
-    if (response === GO) this.download();
-    else if (response === RELEASE_NOTES) this.#options.open(releaseNotesUrl(version));
-  }
-
-  /** Restart, the default; or Later, which leaves it to install at the next quit. */
-  async #offerRestart(): Promise<void> {
-    const state = this.#state;
-    if (state.phase !== "downloaded") return;
-    if ((await this.#ask({ kind: "downloaded", version: state.version })) === GO) this.install();
-  }
-
-  /** Try Again, the default, downloads again. */
-  async #offerRetry(): Promise<void> {
-    if (this.#state.phase !== "error") return;
-    if ((await this.#ask({ kind: "download-failed" })) === GO) this.download();
-  }
-
-  /** The box's answer, or null when one is already open, the app is quitting, or it didn't show. */
-  async #ask(box: UpdateBox): Promise<number | null> {
-    if (this.#asking) return null;
-    if (this.#options.quitting?.()) {
-      const which = "version" in box ? `${box.kind} ${box.version}` : box.kind;
-      this.#options.log.info(`Eidolon: no update box while quitting (${which})`);
-      return null;
-    }
-    this.#asking = true;
-    const { show, strings, platform = process.platform } = this.#options;
-    try {
-      return (await show(updateBox(box, strings(), platform))).response;
-    } catch (error) {
-      this.#options.log.warn(`Eidolon: an update box didn't show: ${reason(error)}`);
-      return null;
-    } finally {
-      this.#asking = false;
-    }
+    this.#notes = this.#options.notes?.(found, current) ?? [];
+    this.#set({ phase: "available", version: found.version, notes: this.#notes });
+    log.info(`Eidolon: update available: ${found.version}`);
+    if (this.#options.autoProceed) this.download();
+    return { outcome: "available", version: found.version };
   }
 
   /** The restart has stopped everything: quitAndInstall, or the app back without the update. */
@@ -569,10 +429,36 @@ export class UpdateFlow {
   }
 
   #set(next: UpdateState): void {
-    if (JSON.stringify(next) === JSON.stringify(this.#state)) return;
+    if (sameUpdateState(this.#state, next)) return;
     this.#state = next;
     this.#options.changed?.(next);
   }
+}
+
+function sameUpdateState(a: UpdateState, b: UpdateState): boolean {
+  if (a === b) return true;
+  if (a.phase !== b.phase) return false;
+  if (
+    a.phase === "unsupported" ||
+    a.phase === "read-only" ||
+    a.phase === "idle" ||
+    a.phase === "checking"
+  ) {
+    return true;
+  }
+  if (a.phase === "downloading" && b.phase === "downloading") {
+    return a.version === b.version && a.percent === b.percent;
+  }
+  if (a.phase === "error" && b.phase === "error") {
+    return a.version === b.version && a.message === b.message;
+  }
+  if (
+    (a.phase === "available" || a.phase === "downloaded" || a.phase === "installing") &&
+    (b.phase === "available" || b.phase === "downloaded" || b.phase === "installing")
+  ) {
+    return a.version === b.version && a.notes === b.notes;
+  }
+  return false;
 }
 
 /** The mock's update, beyond any real one. */
@@ -581,12 +467,83 @@ const MOCK_CHECK_MS = 600;
 const MOCK_TICK_MS = 150;
 const MOCK_RESTART_MS = 1_500;
 
+export const MOCK_NOTES: readonly ReleaseNoteEntry[] = [
+  {
+    date: "2026-11-26T10:22:31Z",
+    versions: { [DESKTOP_PACKAGE]: MOCK_VERSION },
+    items: [
+      {
+        kind: "feature",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: check and install desktop updates inside the window",
+      },
+      {
+        kind: "performance",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: faster startup when attaching to a running server",
+      },
+      {
+        kind: "improvement",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: polished title-bar badge and scrollable release notes",
+      },
+      {
+        kind: "fix",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: keep downloaded updates ready across quit cancellation",
+      },
+      {
+        kind: "other",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: an uncategorized item on the Other fallback",
+      },
+      {
+        kind: "feature",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: persist skipped update versions in the profile",
+      },
+      {
+        kind: "performance",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: reduce renderer work while the window is hidden",
+      },
+      {
+        kind: "improvement",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: show download percentage in the update dialog and Dock",
+      },
+      {
+        kind: "fix",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: handle offline update checks cleanly in a toast",
+      },
+      {
+        kind: "other",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: additional release note entry to exercise scrolling",
+      },
+    ],
+  },
+  {
+    date: "2026-11-20T09:00:00Z",
+    versions: { [DESKTOP_PACKAGE]: "9.9.8" },
+    items: [
+      {
+        kind: "fix",
+        packages: [DESKTOP_PACKAGE],
+        text: "Mock: an older release, to exercise grouping",
+      },
+    ],
+  },
+];
+
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
 /**
- * EIDOLON_DESKTOP_MOCK_UPDATE's fakes, as persona's PERSONA_MOCK_UPDATE: the check finds 9.9.9, the
- * first download fails at 60 % and a retry completes, 5 % a tick. Restart only logs, then hands the
- * update back to downloaded after 1.5 s, so the run repeats: nothing is checked, stopped or quit.
+ * EIDOLON_DESKTOP_MOCK_UPDATE's fakes, as persona's PERSONA_MOCK_UPDATE: the check finds 9.9.9
+ * with mock release notes covering every kind, the first download fails at 60 % and a retry
+ * completes, 5 % a tick. Relaunch only logs, then hands the update back to downloaded after 1.5 s,
+ * so the run repeats: nothing is checked, stopped or quit.
  */
 export function mockUpdates(log: { info(message: string): void }): {
   readonly driver: UpdateDriver;
@@ -597,7 +554,14 @@ export function mockUpdates(log: { info(message: string): void }): {
     driver: {
       check: async () => {
         await sleep(MOCK_CHECK_MS);
-        return { version: MOCK_VERSION, files: [], path: "", sha512: "", releaseDate: "" };
+        return {
+          version: MOCK_VERSION,
+          files: [],
+          path: "",
+          sha512: "",
+          releaseDate: "2026-11-26T10:22:31Z",
+          eidolonNotes: MOCK_NOTES,
+        } as UpdateInfo;
       },
       download: (progress) => {
         const fails = ++downloads === 1;

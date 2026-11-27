@@ -118,12 +118,11 @@ describe("macOS's menu bar", () => {
     expect(calls).toEqual(["settings", "checkForUpdates"]);
   });
 
-  test("Check for Updates… is disabled while a check, a download or the restart runs, and absent when this run can't update", () => {
+  test("Check for Updates… is present in every supported phase and absent when unsupported", () => {
     const { actions } = recordingActions();
-    const app = (updates: "enabled" | "disabled" | "hidden") =>
+    const app = (updates: "enabled" | "hidden") =>
       itemsOf(macMenu(en, actions, { ...MAC, updates })[0]);
-    expect(app("enabled")[1]).toMatchObject({ label: "Check for Updates…", enabled: true });
-    expect(app("disabled")[1]).toMatchObject({ label: "Check for Updates…", enabled: false });
+    expect(app("enabled")[1]).toMatchObject({ label: "Check for Updates…" });
     expect(outline(app("hidden")).slice(0, 3)).toEqual(["about", "-", "Settings…"]);
     expect(JSON.stringify(app("hidden"))).not.toMatch(/Update/i);
   });
@@ -260,7 +259,6 @@ test("the tray's menu: Open, Desktop Companion, Settings…, Check for Updates�
   expect(outline(trayMenu(zh, actions, "enabled", false))).toEqual(
     expect.arrayContaining(["桌面形象", "检查更新…", "退出 LAPLACE Eidolon"]),
   );
-  expect(trayMenu(en, actions, "disabled", false)[3]).toMatchObject({ enabled: false });
   expect(outline(trayMenu(en, actions, "hidden", false))).not.toContain("Check for Updates…");
 });
 
@@ -456,13 +454,18 @@ describe("her menu", () => {
   });
 });
 
-test("updatesItem: hidden while unsupported, disabled while a check, a download or the restart runs", () => {
+test("updatesItem: hidden while unsupported, enabled in every other phase", () => {
   expect(updatesItem("unsupported")).toBe("hidden");
-  for (const phase of ["checking", "downloading", "installing"] as const) {
-    expect([phase, updatesItem(phase)]).toEqual([phase, "disabled"]);
-  }
-  // Read-only: its box says to move the app.
-  for (const phase of ["idle", "available", "downloaded", "error", "read-only"] as const) {
+  for (const phase of [
+    "checking",
+    "downloading",
+    "installing",
+    "idle",
+    "available",
+    "downloaded",
+    "error",
+    "read-only",
+  ] as const) {
     expect([phase, updatesItem(phase)]).toEqual([phase, "enabled"]);
   }
 });

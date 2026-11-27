@@ -7,6 +7,7 @@ import { type ReactElement, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UpdateVersion } from "@/components/update-version";
 
 /**
  * The Navigation API's, whose entries are this origin's alone: history.back() on the app's first
@@ -77,6 +78,7 @@ export function TitleStrip() {
       <Labelled label={t`Toggle Sidebar`}>
         <SidebarTrigger />
       </Labelled>
+      <UpdateVersion className="ml-auto" />
     </div>
   );
 }

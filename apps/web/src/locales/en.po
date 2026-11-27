@@ -1581,6 +1581,10 @@ msgstr "Check your microphone, then call again."
 msgid "Check your microphone, then try again."
 msgstr "Check your microphone, then try again."
 
+#: src/lib/update-check.ts
+msgid "Checking for updates…"
+msgstr "Checking for updates…"
+
 #: src/features/chats/labels.ts
 msgid "Checking on the task…"
 msgstr "Checking on the task…"
@@ -2001,6 +2005,14 @@ msgstr "Done"
 #: src/features/studio/videos-section.tsx
 msgid "Download"
 msgstr "Download"
+
+#: src/components/update-dialog.tsx
+msgid "Download Failed"
+msgstr "Download Failed"
+
+#: src/components/update-dialog.tsx
+msgid "Downloading v{version}…"
+msgstr "Downloading v{version}…"
 
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
@@ -2488,6 +2500,10 @@ msgstr "Fish has this voice"
 msgid "Fix the highlighted values first."
 msgstr "Fix the highlighted values first."
 
+#: src/components/update-dialog.tsx
+msgid "Fixed"
+msgstr "Fixed"
+
 #: src/features/chats/labels.ts
 msgctxt "chat display"
 msgid "Focus"
@@ -2942,6 +2958,10 @@ msgstr "Import a .p2lrt from PSD2Live, or the folder or zip of its web export. Y
 msgid "Import a Model"
 msgstr "Import a Model"
 
+#: src/components/update-dialog.tsx
+msgid "Improved"
+msgstr "Improved"
+
 #: src/features/chats/composer.tsx
 msgid "In a call"
 msgstr "In a call"
@@ -3387,6 +3407,10 @@ msgstr "LAPLACE Eidolon {version} · server {server}"
 msgid "LAPLACE Eidolon {version} · server {server} · {host}"
 msgstr "LAPLACE Eidolon {version} · server {server} · {host}"
 
+#: src/components/update-dialog.tsx
+msgid "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again."
+msgstr "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again."
+
 #: src/components/settings-form/labels.ts
 msgid "LAPLACE Workers URL"
 msgstr "LAPLACE Workers URL"
@@ -3398,6 +3422,10 @@ msgstr "Last Call"
 #: src/features/subspace/share-card.tsx
 msgid "Last connected {time}"
 msgstr "Last connected {time}"
+
+#: src/components/update-dialog.tsx
+msgid "Later"
+msgstr "Later"
 
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
@@ -3782,6 +3810,10 @@ msgstr "Move Left"
 msgid "Move Right"
 msgstr "Move Right"
 
+#: src/components/update-dialog.tsx
+msgid "Move to Applications"
+msgstr "Move to Applications"
+
 #: src/features/studio/model-controls.tsx
 msgid "Move Up"
 msgstr "Move Up"
@@ -3850,6 +3882,10 @@ msgstr "Needs prepaid credit."
 #: src/features/subspace/share-card.tsx
 msgid "Network Address"
 msgstr "Network Address"
+
+#: src/components/update-dialog.tsx
+msgid "New"
+msgstr "New"
 
 #: src/components/app-sidebar.tsx
 #: src/features/chats/route.tsx
@@ -4037,6 +4073,10 @@ msgstr "No tasks yet"
 msgid "No trigger words: the model goes by the name."
 msgstr "No trigger words: the model goes by the name."
 
+#: src/components/update-dialog.tsx
+msgid "No Update in Progress"
+msgstr "No Update in Progress"
+
 #: src/features/studio/video-table.tsx
 msgid "No upload date"
 msgstr "No upload date"
@@ -4195,6 +4235,10 @@ msgstr "Off: Three Models"
 #: src/features/subspace/servers-card.tsx
 msgid "Offline"
 msgstr "Offline"
+
+#: src/components/update-dialog.tsx
+msgid "OK"
+msgstr "OK"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4373,6 +4417,7 @@ msgid "Or Use a Voice by Its ID"
 msgstr "Or Use a Voice by Its ID"
 
 #: src/components/settings-form/labels.ts
+#: src/components/update-dialog.tsx
 #: src/features/usage/route.tsx
 #: src/features/usage/spend-chart.tsx
 msgid "Other"
@@ -4512,6 +4557,10 @@ msgstr "pauses at {amount}"
 #: src/features/studio/references-section.tsx
 msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "People she can take a selfie with: one picture each, named after them."
+
+#: src/components/update-dialog.tsx
+msgid "Perf"
+msgstr "Perf"
 
 #: src/components/settings-form/labels.ts
 #: src/features/chats/why-answered.tsx
@@ -4772,6 +4821,10 @@ msgstr "Reads a playlist, channel or series link and lists the videos in it."
 msgid "Ready for calls"
 msgstr "Ready for calls"
 
+#: src/components/update-dialog.tsx
+msgid "Ready to Install"
+msgstr "Ready to Install"
+
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 msgid "Realtime Model"
@@ -4860,6 +4913,14 @@ msgstr "Refresh"
 #: src/components/settings-form/labels.ts
 msgid "Relative to her folder. Default prompt.md."
 msgstr "Relative to her folder. Default prompt.md."
+
+#: src/components/update-dialog.tsx
+msgid "Relaunch Now"
+msgstr "Relaunch Now"
+
+#: src/components/update-dialog.tsx
+msgid "Relaunching…"
+msgstr "Relaunching…"
 
 #: src/features/subspace/servers-card.tsx
 #: src/features/subspace/share-card.tsx
@@ -5118,6 +5179,7 @@ msgstr "Retrieval Gate Model"
 msgid "Retrieval Gate Provider"
 msgstr "Retrieval Gate Provider"
 
+#: src/components/update-dialog.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -5662,6 +5724,10 @@ msgstr "Show Task"
 msgid "Show Transcript"
 msgstr "Show Transcript"
 
+#: src/components/update-version.tsx
+msgid "Show Update Status"
+msgstr "Show Update Status"
+
 #: src/features/subspace/share-card.tsx
 msgid "Shown in the Subspace switcher on paired devices."
 msgstr "Shown in the Subspace switcher on paired devices."
@@ -5719,6 +5785,10 @@ msgstr "Skills"
 #: src/features/setup/memory-step.tsx
 msgid "Skip"
 msgstr "Skip"
+
+#: src/components/update-dialog.tsx
+msgid "Skip This Version"
+msgstr "Skip This Version"
 
 #: src/components/app-shell.tsx
 msgid "Skip to content"
@@ -6364,6 +6434,10 @@ msgstr "The account tasks search the web with. Default OpenRouter."
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
 msgstr "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
+
+#: src/components/update-dialog.tsx
+msgid "The app stays usable; closing this dialog won't stop the download."
+msgstr "The app stays usable; closing this dialog won't stop the download."
 
 #: src/components/ui/sidebar.tsx
 msgid "The app's navigation."
@@ -7121,6 +7195,18 @@ msgstr "Until you choose, this chat follows Settings: {level}."
 msgid "Until you choose, this chat follows Settings."
 msgstr "Until you choose, this chat follows Settings."
 
+#: src/components/update-dialog.tsx
+msgid "Update"
+msgstr "Update"
+
+#: src/components/update-dialog.tsx
+msgid "Update Available"
+msgstr "Update Available"
+
+#: src/lib/update-check.ts
+msgid "Update check failed: {message}"
+msgstr "Update check failed: {message}"
+
 #: src/features/subspace/servers-card.tsx
 msgid "Update the display name for this Relay server."
 msgstr "Update the display name for this Relay server."
@@ -7217,6 +7303,14 @@ msgstr "Used for: {roles}."
 #: src/features/chats/labels.ts
 msgid "Using a tool…"
 msgstr "Using a tool…"
+
+#: src/components/update-dialog.tsx
+msgid "v{version} has been downloaded. Relaunch to apply it now, or it installs when you quit."
+msgstr "v{version} has been downloaded. Relaunch to apply it now, or it installs when you quit."
+
+#: src/components/update-dialog.tsx
+msgid "v{version} is ready to download. You're on v{appVersion}."
+msgstr "v{version} is ready to download. You're on v{appVersion}."
 
 #: src/features/chats/labels.ts
 msgctxt "chat display"
@@ -7685,6 +7779,14 @@ msgstr "You're already in a call. Hang up first."
 #: src/features/call/call-page.tsx
 msgid "You're in a call"
 msgstr "You're in a call"
+
+#: src/components/update-dialog.tsx
+msgid "You're on v{appVersion}."
+msgstr "You're on v{appVersion}."
+
+#: src/lib/update-check.ts
+msgid "You're up to date"
+msgstr "You're up to date"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

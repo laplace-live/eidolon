@@ -33,6 +33,7 @@ import {
   handleAppBridge,
   sendCommand,
   sendCompanionPick,
+  sendUpdateState,
   sendWindowShows,
 } from "./chrome.ts";
 import { COMPANION_FILE, readCompanion } from "./companion.ts";
@@ -144,8 +145,6 @@ function run(): void {
   let tray: AppTray | null = null;
   let hideNotice: HideNotice | null = null;
   let updates: UpdateFlow | null = null;
-  /** Check for Updates… as the menus have it. */
-  let menuUpdates: UpdatesItem = "hidden";
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
   /** A login launch holds the updater's launch check, and the box it may open, until the window shows. */
@@ -384,7 +383,10 @@ function run(): void {
       openWindow();
       commands.send("settings");
     },
-    checkForUpdates: () => updates?.checkByHand(),
+    checkForUpdates: () => {
+      openWindow();
+      commands.send("check-updates");
+    },
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
     licenses: () => open(licensesFile(paths)),
@@ -444,15 +446,18 @@ function run(): void {
     app.setAboutPanelOptions(aboutOptions());
   }
 
+  const menuUpdates = (): UpdatesItem =>
+    updates === null ? "hidden" : updatesItem(updates.state.phase);
+
   /**
    * The application menu and the tray's, in the shell's language, as the updater stands and with
    * the desktop companion's checkbox as she is.
    */
   function setMenus(): void {
-    menuUpdates = updates === null ? "hidden" : updatesItem(updates.state.phase);
+    const updatesMenu = menuUpdates();
     const on = companion?.on ?? false;
-    setApplicationMenu(strings(), actions, menuUpdates, on);
-    tray?.relabel(strings(), menuUpdates, on);
+    setApplicationMenu(strings(), actions, updatesMenu, on);
+    tray?.relabel(strings(), updatesMenu, on);
   }
 
   function languageChanged(next: Language): void {
@@ -552,13 +557,8 @@ function run(): void {
       if (watch === null) mainLog.info("Eidolon: notifications are off in this copy of the app");
       updates = installUpdater({
         quit: flow,
-        strings,
         version,
-        icon,
-        // A download's progress leaves the item as it is.
-        changed: (state) => {
-          if (updatesItem(state.phase) !== menuUpdates) setMenus();
-        },
+        changed: sendUpdateState,
       });
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
@@ -642,6 +642,11 @@ function run(): void {
         linkCompanion: () => link.appAsks(),
         feedingCompanion: (on) => companionFlow.feeding(on),
         windowShows,
+        updateState: () => updates?.state ?? { phase: "unsupported" },
+        updateCheck: () => updates?.check(true) ?? Promise.resolve({ outcome: "none" }),
+        updateDownload: () => updates?.download(),
+        updateInstall: () => updates?.install(),
+        updateSkip: () => updates?.skip(),
       });
       handleCompanionBridge({
         linkApp: () => link.companionAsks(),
@@ -662,7 +667,7 @@ function run(): void {
       setMenus();
       setAbout();
       if (hasTray(process.platform, background)) {
-        tray = new AppTray(strings(), actions, menuUpdates, companionFlow.on, process.platform);
+        tray = new AppTray(strings(), actions, menuUpdates(), companionFlow.on, process.platform);
       }
       if (hasHideNotice(process.platform, background)) {
         hideNotice = new HideNotice({

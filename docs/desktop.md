@@ -58,10 +58,11 @@ apps/desktop/
                          chrome, menu, tray, permissions, navigation, native, quit, updater, log)
   src/preload/           the sandboxed CommonJS preload, in both windows: each page's marks and
                          bridge, and the port main pairs the app page and hers with
-  src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
+  src/shared/bridge.ts   the IPC channels, update state/outcome types, and who may send on each; it
+                         imports only types
   src/shared/release-notes.ts
-                         changelog.json's types, the manifest's eidolonNotes, and what an update's box
-                         shows of them; scripts/changelog.ts writes the notes with them
+                         changelog.json's types, the manifest's eidolonNotes, and selecting structured
+                         entries between versions; scripts/changelog.ts writes the notes with them
   src/shell/             the loading, failure and waiting pages
   test/                  Vitest, for the Electron-free modules
 ```
@@ -357,11 +358,14 @@ app's second, with rules of its own.
   `resetCompanionPlace()`, four more invokes, each answering her `CompanionState`;
   `linkCompanion()`, which says the page listens for a port to her page, and
   `feedingCompanion(feeding)`, whether a call she is on is up there; `onCompanionPick`, which hands
-  the page her menu's call picks (`companion-pick`); and `onWindowShows`, whether the window shows,
+  the page her menu's call picks (`companion-pick`); `onWindowShows`, whether the window shows,
   which the preload reads from main over a synchronous message as the page asks and main sends again
-  at each change (`window-shows`). The preload sends only what main takes (`true` or `false`,
-  `install` or `remove`, a change of `on` or `showAtLogin` alone) and hands the page main's answers
-  only in the shapes `src/shared/bridge.ts` declares. A shell page gets `window.eidolonShell`:
+  at each change (`window-shows`); and the [updater](#updates)'s `onUpdateState`, which reads the
+  current `UpdateState` synchronously (`update-state`) and subscribes to pushes, plus
+  `updateCheck()`, `updateDownload()`, `updateInstall()`, and `updateSkip()`. The preload sends
+  only what main takes (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin`
+  alone) and hands the page main's answers only in the shapes `src/shared/bridge.ts` declares. A
+  shell page gets `window.eidolonShell`:
   `retry`, `showLogs` and `quit`; her page gets `window.eidolonCompanion` alone. Main takes each
   message only from its own window, by the sender's webContents (`ipcSender` in `senders.ts`, which
   knows each window's as main names it, `senderWindow`), from that window's main frame, on the
@@ -374,12 +378,12 @@ app's second, with rules of its own.
 - **The theme** the page reports goes to `nativeTheme.themeSource` as it is, `system` included: a
   resolved theme would pin `prefers-color-scheme` and stop the page's System from following the OS.
   Native menus, dialogs and Windows' caption buttons follow it.
-- **A command** for the app's page, a menu's Settings… (⌘, on macOS, the tray's on Windows), a
-  notification's click (`tasks`, or `open-task:<chat>:<task>`, which `openTaskCommand` builds from
-  two ids alone), or her menu's Call while `/call` can't place the call or her page isn't linked to
-  the app page (`call`, which opens `/call`), goes to it once its script says it listens, so it
-  reaches the page from the loading page or a new window too. A page that doesn't know a command
-  ignores it.
+- **A command** for the app's page, a menu's Settings… (⌘, on macOS, the tray's on Windows) or
+  Check for Updates… (`check-updates`), a notification's click (`tasks`, or
+  `open-task:<chat>:<task>`, which `openTaskCommand` builds from two ids alone), or her menu's Call
+  while `/call` can't place the call or her page isn't linked to the app page (`call`, which opens
+  `/call`), goes to it once its script says it listens, so it reaches the page from the loading page
+  or a new window too. A page that doesn't know a command ignores it.
 - **The folder dialog,** which Settings → Assistant Mode's Choose Folder opens for its folders
   (`folder-dialog.ts`): the native one, for one folder, a sheet on the window on macOS, in the
   shell's language, and opening at the home folder, since Electron opens Downloads otherwise.
@@ -404,9 +408,9 @@ app's second, with rules of its own.
   (`trayTemplate.png`, the logo's petals as a template image the menu bar tints), and its menu holds
   Open LAPLACE Eidolon, Desktop Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open
   Data Folder, Licenses, About LAPLACE Eidolon and Quit LAPLACE Eidolon. On Windows a click on it opens the window;
-  on macOS it opens the menu, as menu bar icons do. Check for Updates… is there only when the app
-  [updates itself](#updates) or runs from a read-only volume, and disabled while a check, a download
-  or the restart runs. Both get a context menu, since Electron has none: cut, copy, paste and select
+  on macOS it opens the menu, as menu bar icons do. Check for Updates… is there whenever the app
+  [updates itself](#updates) or runs from a read-only volume, opening the window and sending
+  `check-updates` to the page. Both get a context menu, since Electron has none: cut, copy, paste and select
   all in a field, copy over selected text. The About panel names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, her menu, dialogs,
   notifications, macOS's password prompt and the shell pages) come in English and Simplified
@@ -625,7 +629,7 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   shows is the owner's to check, on the packaged app on each platform, before her changes merge:
   her transparency and click-through, that a tap, a drag and her menu leave the app in front as it
   was, Spaces and full-screen apps, displays at different scales, her menu at the cursor, Pop Out
-  and a minimized window with another app in front, Show at Login, the quit and update boxes above
+  and a minimized window with another app in front, Show at Login, the quit box above
   her, and her renderer's cost. What it
   finds goes in this section, dated, with any fallback it applies to her window's options.
 
@@ -1290,9 +1294,10 @@ needs a `sign` dispatch from `master` or `electron` that passes both legs, the u
 
 electron-updater checks the release feed, `https://downloads.vrp.moe/eidolon`, which
 electron-builder writes into the packaged app's `app-update.yml` from `publish` in
-`electron-builder.yml`. `src/main/update-flow.ts` makes every decision without Electron, as
-laplace-persona's updater does but in native boxes, and `test/update-flow.test.ts` covers them;
-`src/main/updater.ts` runs it on electron-updater's `autoUpdater`.
+`electron-builder.yml`. `src/main/update-flow.ts` makes every decision without Electron, pushing
+`UpdateState` over IPC to the in-app renderer instead of showing native message boxes (aligned with
+`laplace-persona`'s updater), and `test/update-flow.test.ts` covers them; `src/main/updater.ts`
+runs it on electron-updater's `autoUpdater`.
 
 - **When it runs:** in a packaged install: on macOS anywhere but a read-only volume, and on
   Windows only NSIS's per-user install in `%LOCALAPPDATA%\Programs\eidolon`
@@ -1303,59 +1308,63 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
 - **A read-only copy on macOS:** run from its mounted DMG, or from the randomized read-only mount
   Gatekeeper translocates a quarantined app to, Squirrel.Mac refuses an update, but only once the
   whole zip has downloaded. So when `fs.accessSync` on the bundle's folder fails with `EROFS`
-  (`readOnlyFolder`), nothing is checked, and Check for Updates… stays, to say in a box that Eidolon
-  updates itself only from a folder it can write to: move it to the Applications folder, then open
-  it again. A folder that is only not the user's to write, `/Applications` for a standard account,
-  still updates: Squirrel.Mac asks for an administrator's password there.
-- **Checking:** once, quietly, 10 s after the backend is first ready (after a [launch at
-  login](#open-at-login), once the window has also shown), and from Check for Updates… (in macOS's
-  app menu after About, in Windows' tray menu after Settings…), which is disabled while a check, a
-  download or the restart runs. The quiet check only logs that the app is up to date or that the
-  check failed; Check for Updates… also says so in a box. A check asked while one runs joins it.
-- **Downloading:** nothing downloads unasked (`autoDownload` is off). "LAPLACE Eidolon X.Y.Z is available"
-  offers Download, the default, Later and Release Notes, which opens the GitHub Release of
-  `laplace-eidolon-desktop@X.Y.Z` in the default browser, through the link policy. After Later or
-  Release Notes, Check for Updates… shows the box again without checking. The download's progress
-  shows on the Dock or the taskbar, cleared when it ends or fails; a failure offers Try Again, the
-  default, and Later. On macOS it is done only once Squirrel.Mac has fetched the zip from
+  (`readOnlyFolder`), nothing is checked: `UpdateFlow` starts in `read-only` mode, and Check for
+  Updates… opens the in-app `UpdateDialog`, which explains that Eidolon updates
+  itself only from a folder it can write to (move it to the Applications folder, then open it again).
+  A folder that is only not the user's to write, `/Applications` for a standard account, still updates:
+  Squirrel.Mac asks for an administrator's password there.
+- **Checking, badge, and toast:** once, quietly, 10 s after the backend is first ready (after a
+  [launch at login](#open-at-login), once the window has also shown), and from Check for Updates…
+  (in macOS's app menu after About, in Windows' tray menu after Settings…), which opens the window
+  and sends `check-updates` to the page. A quiet check only logs up-to-date, errors, or skipped
+  versions (`userData/updates.json`), surfacing a compact `v<version>` badge (`UpdateVersion`) in
+  `TitleStrip` and Setup's header whenever `UpdateState` carries a `version` (`available`,
+  `downloading`, `downloaded`, `installing`, or `error`). Selecting Check for Updates… runs
+  `checkForUpdates()`: if an update, download, error, or read-only state is already active it opens
+  `UpdateDialog` directly; otherwise it shows a Sonner toast (`Checking for updates…`) resolving to
+  `You're up to date` or `Update check failed: …`, or dismissing and opening `UpdateDialog` when an
+  update is found (surfacing even a previously skipped version). A check asked while one runs joins it.
+- **Downloading & skip:** nothing downloads unasked (`autoDownload` is off). `UpdateDialog` shows
+  structured release `notes` grouped by version and date with kind badges (`New`, `Perf`, `Improved`,
+  `Fixed`, `Other`), plus **Update**, **Skip This Version** (persisted in `userData/updates.json`),
+  and **Later**. Clicking **Update** triggers `updateDownload()`; live progress renders in the
+  dialog and on the Dock or taskbar, cleared when it ends or fails; a failure moves to `error` with
+  **Retry** and **Later**. On macOS it is done only once Squirrel.Mac has fetched the zip from
   electron-updater's local proxy, after `update-downloaded`.
-- **No box during a quit:** once a quit is under way, the window hidden and the backend stopping,
-  a check that lands or a download that ends shows no box, only main.log's `Eidolon: no update box
-  while quitting (available X.Y.Z)` or the like.
-- **Installing:** "Restart to finish updating" offers Restart, the default, and Later, which leaves
-  the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
-  to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
-  relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
-  the quit check, whose "Restart LAPLACE Eidolon?" box names what a restart stops (on Windows the installer
-  kills any `LAPLACE Eidolon.exe` still running from the install folder, a CLI job's included) and, as the
-  quit's does, asks over the window's unsaved edits too; the latch, after which a close no longer
-  hides the window; the backend's graceful stop; and only then `quitAndInstall(true, true)`, once.
-  A Cancel there hands the state back to downloaded. None of it runs inside `before-quit`: on
-  macOS `quitAndInstall` closes every window before `before-quit` fires, so a latch set there would
-  let the hide-on-close window veto the relaunch, as persona's did from 0.32.0 to 0.63.2.
-- **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
-  the update is in error, and the box offers Try Again. One that comes while the restart's quit
-  check asks calls the restart off once it's answered, before the latch: nothing is hidden or
-  stopped, main.log says `Eidolon: not restarting, since X.Y.Z can't be installed`, and the
-  failure's box offers Try Again. One that comes once the restart has stopped the backend, or from
-  inside `quitAndInstall`, which then never quits, starts the app again as it was
-  (`app.relaunch()`) rather than leave it hidden with its backend stopped.
+- **Installing:** once downloaded, `UpdateDialog` offers **Relaunch Now** (which switches to
+  **Relaunching…** once clicked) and **Later**, leaving the update to `autoInstallOnAppQuit` at the
+  next quit, with no relaunch. `install()` moves the state to `installing` first, so a second call
+  does nothing (`quitAndInstall` twice asks Squirrel to relaunch twice, which leaves two copies
+  running). Then it goes the way a [quit](#the-window) goes: `QuitFlow.restart` runs the quit
+  check (naming what a restart stops — on Windows the installer kills any `LAPLACE Eidolon.exe` still
+  running from the install folder, a CLI job's included — and asking over the window's unsaved edits
+  too), sets the quit latch so closing no longer hides the window, gracefully stops the backend, and
+  only then calls `quitAndInstall(true, true)`, once. A Cancel there hands the state back to
+  `downloaded`. None of it runs inside `before-quit`: on macOS `quitAndInstall` closes every window
+  before `before-quit` fires, so a latch set there would let the hide-on-close window veto the
+  relaunch, as persona's did from 0.32.0 to 0.63.2.
+- **An error after the download,** such as Squirrel.Mac refusing the update, moves to `error` and
+  offers **Retry**. One that comes while the restart's quit check asks calls the restart off once it's
+  answered, before the latch: nothing is hidden or stopped, main.log says `Eidolon: not restarting,
+  since X.Y.Z can't be installed`, and `UpdateDialog` offers **Retry**. One that comes once the
+  restart has stopped the backend, or from inside `quitAndInstall`, which then never quits, starts
+  the app again as it was (`app.relaunch()`) rather than leave it hidden with its backend stopped.
 - **main.log** has a line for each step: `Eidolon: checking for updates`; then `Eidolon: update
-  available: X.Y.Z`, `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the update check
-  failed: <reason>`; `Eidolon: downloading X.Y.Z`; `Eidolon: update downloaded: X.Y.Z` or
-  `Eidolon: the download of X.Y.Z failed: <reason>`; `Eidolon: restarting to install X.Y.Z`,
-  `Eidolon: quitting to install the update` and `Eidolon: installing X.Y.Z`, or `Eidolon: X.Y.Z
-  stays downloaded, to install at the next restart or quit`. A reason is the error's first line.
-  electron-updater's own lines go there too, and every URL in either has no query or fragment
-  (`loggedText()` in `policy.ts`).
+  available: X.Y.Z` (or `(skipped)`), `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the
+  update check failed: <reason>`; `Eidolon: skipped update X.Y.Z`; `Eidolon: downloading X.Y.Z`;
+  `Eidolon: update downloaded: X.Y.Z` or `Eidolon: the download of X.Y.Z failed: <reason>`; `Eidolon:
+  restarting to install X.Y.Z`, `Eidolon: quitting to install the update` and `Eidolon: installing
+  X.Y.Z`, or `Eidolon: X.Y.Z stays downloaded, to install at the next restart or quit`. A reason is
+  the error's first line. electron-updater's own lines go there too, and every URL in either has no
+  query or fragment (`loggedText()` in `policy.ts`).
 
 The QA hooks are read from the environment the app starts with, as `.env.example` lists them:
 
 | Variable | What it does |
 | --- | --- |
-| `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and Restart act on the real release. Not in background mode |
-| `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 after 0.6 s, the first download fails at 60 %, Try Again completes it, and Restart only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
-| `EIDOLON_DESKTOP_UPDATE_TEST=1` | For CI runners only: the one way the real updater runs in background mode, for [CI's update test](#the-update-test). A packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log. Squirrel.Mac or the NSIS installer then starts the updated version outside background mode, on the default profile and the real data home, so a local run would end with a visible Eidolon |
+| `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and install act on the real release. Not in background mode |
+| `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 with bundled sample notes, the first download fails at 60 %, Retry completes it, and Relaunch Now only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
+| `EIDOLON_DESKTOP_UPDATE_TEST=1` | For CI runners only: the one way the real updater runs in background mode, for [CI's update test](#the-update-test). A packaged install checks the feed its `app-update.yml` names, `autoProceed` automatically downloads and calls `install()` without renderer prompts while the quit check takes its default, and the app stops its backend and installs, each step in main.log. Squirrel.Mac or the NSIS installer then starts the updated version outside background mode, on the default profile and the real data home, so a local run would end with a visible Eidolon |
 
 A packaged build reads only its own `resources/app-update.yml`, so a test of an update builds its
 older version with the feed it will serve (`-c.publish.url`, which electron-builder writes there),
@@ -1420,8 +1429,8 @@ that could show something through it.
   `sendInputEvent` instead ([Driving it in background mode](#driving-it-in-background-mode)).
 - **No updates:** no check runs and there is no Check for Updates…, unless
   `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or, on a CI runner only,
-  `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), whose boxes take their
-  defaults, Download and Restart.
+  `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), where `autoProceed`
+  downloads and installs without renderer prompts while `QuitCheck` takes its default.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.
@@ -1874,9 +1883,10 @@ gh workflow run desktop.yml --ref electron -f update_test=true
 
 What it can't see:
 
-- **The boxes.** Background mode answers each with its default button, so how they look and read,
-  the release's notes in the first, Later, Release Notes, Check for Updates…, and the progress on
-  the Dock or the taskbar go unchecked.
+- **The in-app updater UI and quit box.** `autoProceed` downloads and installs without renderer
+  prompts and `QuitCheck` takes its default button, so `UpdateVersion`, `UpdateDialog` (release
+  notes, **Skip This Version**, **Later**, download progress), the **Check for Updates…** toast,
+  and Dock or taskbar progress go unchecked.
 - **The release's own feed.** It serves electron-builder's manifests as built, flat, without the
   upload's `v<version>/` paths or `eidolonNotes` line, and with no R2 or Cloudflare in between.
 - **What a person's machine adds:** the microphone grant kept across the update on macOS, an install

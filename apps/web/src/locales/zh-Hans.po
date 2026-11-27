@@ -1581,6 +1581,10 @@ msgstr "请检查麦克风，然后再次呼叫。"
 msgid "Check your microphone, then try again."
 msgstr "请检查麦克风，然后再试一次。"
 
+#: src/lib/update-check.ts
+msgid "Checking for updates…"
+msgstr "正在检查更新…"
+
 #: src/features/chats/labels.ts
 msgid "Checking on the task…"
 msgstr "正在查看任务…"
@@ -2001,6 +2005,14 @@ msgstr "完成"
 #: src/features/studio/videos-section.tsx
 msgid "Download"
 msgstr "下载"
+
+#: src/components/update-dialog.tsx
+msgid "Download Failed"
+msgstr "下载失败"
+
+#: src/components/update-dialog.tsx
+msgid "Downloading v{version}…"
+msgstr "正在下载 v{version}…"
 
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
@@ -2488,6 +2500,10 @@ msgstr "Fish 上有这个声音"
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
 
+#: src/components/update-dialog.tsx
+msgid "Fixed"
+msgstr "修复"
+
 #: src/features/chats/labels.ts
 msgctxt "chat display"
 msgid "Focus"
@@ -2942,6 +2958,10 @@ msgstr "导入 PSD2Live 导出的 .p2lrt，或者它的网页导出文件夹或 
 msgid "Import a Model"
 msgstr "导入模型"
 
+#: src/components/update-dialog.tsx
+msgid "Improved"
+msgstr "改进"
+
 #: src/features/chats/composer.tsx
 msgid "In a call"
 msgstr "通话中"
@@ -3387,6 +3407,10 @@ msgstr "LAPLACE Eidolon {version} · 服务器 {server}"
 msgid "LAPLACE Eidolon {version} · server {server} · {host}"
 msgstr "LAPLACE Eidolon {version} · 服务器 {server} · {host}"
 
+#: src/components/update-dialog.tsx
+msgid "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again."
+msgstr "LAPLACE Eidolon 只能从可写入的文件夹更新自己。请将它移到「应用程序」文件夹，然后重新打开。"
+
 #: src/components/settings-form/labels.ts
 msgid "LAPLACE Workers URL"
 msgstr "LAPLACE Workers 地址"
@@ -3398,6 +3422,10 @@ msgstr "上一次通话"
 #: src/features/subspace/share-card.tsx
 msgid "Last connected {time}"
 msgstr "上次连接：{time}"
+
+#: src/components/update-dialog.tsx
+msgid "Later"
+msgstr "稍后"
 
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
@@ -3782,6 +3810,10 @@ msgstr "左移"
 msgid "Move Right"
 msgstr "右移"
 
+#: src/components/update-dialog.tsx
+msgid "Move to Applications"
+msgstr "移至应用程序文件夹"
+
 #: src/features/studio/model-controls.tsx
 msgid "Move Up"
 msgstr "上移"
@@ -3850,6 +3882,10 @@ msgstr "需要预付余额。"
 #: src/features/subspace/share-card.tsx
 msgid "Network Address"
 msgstr "网络地址"
+
+#: src/components/update-dialog.tsx
+msgid "New"
+msgstr "新增"
 
 #: src/components/app-sidebar.tsx
 #: src/features/chats/route.tsx
@@ -4037,6 +4073,10 @@ msgstr "还没有任务"
 msgid "No trigger words: the model goes by the name."
 msgstr "没有触发词：模型只看名称。"
 
+#: src/components/update-dialog.tsx
+msgid "No Update in Progress"
+msgstr "当前没有进行中的更新"
+
 #: src/features/studio/video-table.tsx
 msgid "No upload date"
 msgstr "没有上传日期"
@@ -4195,6 +4235,10 @@ msgstr "关闭：使用三个模型"
 #: src/features/subspace/servers-card.tsx
 msgid "Offline"
 msgstr "离线"
+
+#: src/components/update-dialog.tsx
+msgid "OK"
+msgstr "确定"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4373,6 +4417,7 @@ msgid "Or Use a Voice by Its ID"
 msgstr "或按 ID 使用声音"
 
 #: src/components/settings-form/labels.ts
+#: src/components/update-dialog.tsx
 #: src/features/usage/route.tsx
 #: src/features/usage/spend-chart.tsx
 msgid "Other"
@@ -4512,6 +4557,10 @@ msgstr "到 {amount} 时暂停"
 #: src/features/studio/references-section.tsx
 msgid "People she can take a selfie with: one picture each, named after them."
 msgstr "可以和她一起自拍的人：每人一张图片，以名字命名。"
+
+#: src/components/update-dialog.tsx
+msgid "Perf"
+msgstr "性能"
 
 #: src/components/settings-form/labels.ts
 #: src/features/chats/why-answered.tsx
@@ -4772,6 +4821,10 @@ msgstr "读取播放列表、频道或合集链接，列出其中的视频。"
 msgid "Ready for calls"
 msgstr "可以通话"
 
+#: src/components/update-dialog.tsx
+msgid "Ready to Install"
+msgstr "已准备好安装"
+
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 msgid "Realtime Model"
@@ -4860,6 +4913,14 @@ msgstr "刷新"
 #: src/components/settings-form/labels.ts
 msgid "Relative to her folder. Default prompt.md."
 msgstr "相对于她的文件夹。默认 prompt.md。"
+
+#: src/components/update-dialog.tsx
+msgid "Relaunch Now"
+msgstr "立即重启"
+
+#: src/components/update-dialog.tsx
+msgid "Relaunching…"
+msgstr "正在重启…"
 
 #: src/features/subspace/servers-card.tsx
 #: src/features/subspace/share-card.tsx
@@ -5118,6 +5179,7 @@ msgstr "检索门控模型"
 msgid "Retrieval Gate Provider"
 msgstr "检索门控服务商"
 
+#: src/components/update-dialog.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Retry"
 msgstr "重试"
@@ -5662,6 +5724,10 @@ msgstr "查看任务"
 msgid "Show Transcript"
 msgstr "显示文字"
 
+#: src/components/update-version.tsx
+msgid "Show Update Status"
+msgstr "查看更新状态"
+
 #: src/features/subspace/share-card.tsx
 msgid "Shown in the Subspace switcher on paired devices."
 msgstr "会显示在已配对设备的亚空间切换器中。"
@@ -5719,6 +5785,10 @@ msgstr "技能"
 #: src/features/setup/memory-step.tsx
 msgid "Skip"
 msgstr "跳过"
+
+#: src/components/update-dialog.tsx
+msgid "Skip This Version"
+msgstr "跳过此版本"
 
 #: src/components/app-shell.tsx
 msgid "Skip to content"
@@ -6364,6 +6434,10 @@ msgstr "任务搜索网页用的账号。默认 OpenRouter。"
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
 msgstr "Eidolon 调用的账号，每个都有自己的密钥和 API 地址。同一个服务商可以添加多个账号；每个人设在她的工作室里选择用哪个账号做哪件事。"
+
+#: src/components/update-dialog.tsx
+msgid "The app stays usable; closing this dialog won't stop the download."
+msgstr "应用仍可正常使用；关闭此对话框不会中断下载。"
 
 #: src/components/ui/sidebar.tsx
 msgid "The app's navigation."
@@ -7121,6 +7195,18 @@ msgstr "在你选择之前，这个聊天跟随设置：{level}。"
 msgid "Until you choose, this chat follows Settings."
 msgstr "在你选择之前，这个聊天跟随设置。"
 
+#: src/components/update-dialog.tsx
+msgid "Update"
+msgstr "更新"
+
+#: src/components/update-dialog.tsx
+msgid "Update Available"
+msgstr "有可用更新"
+
+#: src/lib/update-check.ts
+msgid "Update check failed: {message}"
+msgstr "检查更新失败：{message}"
+
 #: src/features/subspace/servers-card.tsx
 msgid "Update the display name for this Relay server."
 msgstr "更新此中继服务器的显示名称。"
@@ -7217,6 +7303,14 @@ msgstr "用于：{roles}。"
 #: src/features/chats/labels.ts
 msgid "Using a tool…"
 msgstr "正在使用工具…"
+
+#: src/components/update-dialog.tsx
+msgid "v{version} has been downloaded. Relaunch to apply it now, or it installs when you quit."
+msgstr "v{version} 已下载完成。立即重启以应用更新，或在退出应用时自动安装。"
+
+#: src/components/update-dialog.tsx
+msgid "v{version} is ready to download. You're on v{appVersion}."
+msgstr "v{version} 可供下载。当前版本为 v{appVersion}。"
 
 #: src/features/chats/labels.ts
 msgctxt "chat display"
@@ -7685,6 +7779,14 @@ msgstr "你已经在通话中了，请先挂断。"
 #: src/features/call/call-page.tsx
 msgid "You're in a call"
 msgstr "你正在通话中"
+
+#: src/components/update-dialog.tsx
+msgid "You're on v{appVersion}."
+msgstr "当前版本为 v{appVersion}。"
+
+#: src/lib/update-check.ts
+msgid "You're up to date"
+msgstr "已是最新版本"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

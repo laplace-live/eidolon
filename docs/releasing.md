@@ -66,7 +66,7 @@ leaves it as it is.
 ## changelog.json
 
 `changelog.json`, at the root, is every release of every released package in one file, newest
-first: the website shows it, and the desktop app's update box shows its slice. No `CHANGELOG.md`
+first: the website shows it, and the desktop app's update dialog shows its slice. No `CHANGELOG.md`
 can: each lists only its own package's changes, and without their kind.
 
 ```json
@@ -97,8 +97,8 @@ laplace-persona's, so the website reads both apps' files alike.
 
 - **`pnpm run version` writes it**, in the version PR: `sync` adds the release from the status
   saved before `changeset version` consumed the changesets, dated when the PR was last updated.
-  It records a summary whole, so a second line would reach the website; the update box shows
-  only the first.
+  It records a summary whole, so keep each summary one plain sentence for the website and the
+  desktop update dialog.
 - **`pnpm changelog:backfill` rebuilds it** from the release tags and the `CHANGELOG.md`
   sections they name, so it needs the whole history and every tag (`git fetch --tags`). The tags
   one `changeset publish` left on a commit make one release, dated by that commit. Each item's
@@ -116,9 +116,9 @@ laplace-persona's, so the website reads both apps' files alike.
   request, frozen as they were when the release uploaded it.
   `apps/desktop/src/shared/release-notes.ts` reads them as remote input, keeps the releases of
   the desktop app after the running version and up to the offered one, with only the items whose
-  changesets named `laplace-eidolon-desktop` (`notesBetween`), and writes them as the box's text:
-  a line per item after its kind's label, at most 8, and a line that counts the rest, each line
-  and version heading cut at 200 characters.
+  changesets named `laplace-eidolon-desktop` (`notesBetween`), and passes structured entries to
+  the renderer (`UpdateDialog`), grouped by version and date with kind badges (`New`, `Perf`,
+  `Improved`, `Fixed`, `Other`).
 
 `scripts/changelog.test.ts` covers the script, with `pnpm run version`'s own steps in a fixture
 repository, and `apps/desktop/test/release-notes.test.ts` the desktop's side.

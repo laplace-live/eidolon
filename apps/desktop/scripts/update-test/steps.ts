@@ -44,7 +44,7 @@ export function updateSteps(version: string, platform: NodeJS.Platform): readonl
       ms: 60_000,
     },
     {
-      name: "Download, the box's default, starts the download",
+      name: `it starts downloading ${version}`,
       line: `Eidolon: downloading ${version}`,
       ms: 30_000,
     },
@@ -56,7 +56,7 @@ export function updateSteps(version: string, platform: NodeJS.Platform): readonl
       ms: 600_000,
     },
     {
-      name: "Restart, the box's default, restarts to install it",
+      name: `it restarts to install ${version}`,
       line: `Eidolon: restarting to install ${version}`,
       ms: 30_000,
     },
@@ -78,8 +78,6 @@ const STOPS = [
   /^Eidolon: updates are (?:off|faked)\b/,
   /^Eidolon: up to date: /,
   /^Eidolon: the update check failed: /,
-  /^Eidolon: an update box didn't show: /,
-  // Background mode would answer its Try Again over and over.
   /^Eidolon: the download of \S+ failed: /,
   /^Eidolon: the update's signature doesn't check out: /,
   /^Eidolon: \S+ can't be installed: /,
