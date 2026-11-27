@@ -811,4 +811,58 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       hostEcho.close();
     }
   });
+
+  test("does not fire onBridgeClosed when replacing an existing bridge for the same pc_id", async () => {
+    const hostEcho = createSocket("udp4");
+    await new Promise<void>((resolve) => hostEcho.bind(0, "127.0.0.1", () => resolve()));
+    const hostPort = hostEcho.address().port;
+
+    const { clientMux, hostMux } = await wiredMuxPair(async () => ({
+      status: 404,
+      statusText: "Not Found",
+      headers: [],
+      body: null,
+    }));
+    const events: string[] = [];
+    const pool = new ClientCallBridgePool({
+      onCallOpened: (pcId) => events.push(`open:${pcId}`),
+      onBridgeClosed: (pcId, closedByAlert) => events.push(`close:${pcId}:${closedByAlert}`),
+    });
+
+    try {
+      const sdp = [
+        "v=0",
+        "o=- 1 1 IN IP4 127.0.0.1",
+        "s=-",
+        "t=0 0",
+        "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+        "c=IN IP4 127.0.0.1",
+        `a=candidate:1 1 udp 2122260223 127.0.0.1 ${hostPort} typ host generation 0`,
+        "a=end-of-candidates",
+        "",
+      ].join("\r\n");
+
+      const first = await pool.adaptOfferResponse(
+        new Response(JSON.stringify({ pc_id: "pc-replace", sdp }), { status: 200 }),
+        clientMux,
+        { mode: "direct" },
+      );
+      expect(first.status).toBe(200);
+      const second = await pool.adaptOfferResponse(
+        new Response(JSON.stringify({ pc_id: "pc-replace", sdp }), { status: 200 }),
+        clientMux,
+        { mode: "direct" },
+      );
+      expect(second.status).toBe(200);
+      expect(events).toEqual(["open:pc-replace", "open:pc-replace"]);
+
+      pool.closeAll();
+      expect(events).toEqual(["open:pc-replace", "open:pc-replace", "close:pc-replace:false"]);
+    } finally {
+      pool.closeAll();
+      hostEcho.close();
+      clientMux.close();
+      hostMux.close();
+    }
+  });
 });

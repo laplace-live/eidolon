@@ -60,7 +60,7 @@ interface ActiveInvite {
 
 interface HostSessionHandle {
   grantId: string | null;
-  close(): void;
+  close(code?: number, reason?: string): void;
 }
 
 export interface SubspaceHostDeps {
@@ -582,7 +582,9 @@ export class SubspaceHost {
   revokeGrant(grantId: string): boolean {
     const removed = this.#deps.store.removeGrant(grantId);
     for (const session of [...this.#sessions]) {
-      if (session.grantId === grantId) session.close();
+      if (session.grantId === grantId) {
+        session.close(RELAY_CLOSE_CODE.UNAUTHORIZED, "Device revoked");
+      }
     }
     if (
       this.#relayWs !== null &&
@@ -613,7 +615,7 @@ export class SubspaceHost {
     for (const resolve of this.#inviteAckWaiters.values()) resolve();
     this.#inviteAckWaiters.clear();
     this.stopRelay();
-    for (const session of [...this.#sessions]) session.close();
+    for (const session of [...this.#sessions]) session.close(1000, "Host stopped");
     this.#sessions.clear();
     await this.stopDirect();
   }
@@ -1011,7 +1013,7 @@ export class SubspaceHost {
     };
     const sessionHandle: HostSessionHandle = {
       grantId: null,
-      close: () => closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Device revoked"),
+      close: (code = 1000, reason = "Closed") => closeSocket(code, reason),
     };
 
     const closeSocket = (code = 1000, reason = "Closed") => {

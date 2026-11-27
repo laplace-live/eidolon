@@ -1887,4 +1887,235 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(switched.activeHostId).toBeNull();
     expect(mgr.activeCallCount).toBe(0);
   });
+
+  test("Direct call remains counted across transient tunnel disconnect and reconnect until host reports pc_id gone", async () => {
+    const hostDir = tempDir("subspace-direct-reconnect-host-");
+    const clientDir = tempDir("subspace-direct-reconnect-client-");
+
+    const udpSock = createSocket("udp4");
+    cleanups.push(() => {
+      udpSock.close();
+    });
+    await new Promise<void>((resolve) => udpSock.bind(0, "127.0.0.1", () => resolve()));
+    const udpPort = udpSock.address().port;
+    const sdp = [
+      "v=0",
+      "o=- 1 1 IN IP4 127.0.0.1",
+      "s=-",
+      "t=0 0",
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+      "c=IN IP4 127.0.0.1",
+      `a=candidate:1 1 udp 2122260223 127.0.0.1 ${udpPort} typ host generation 0`,
+      "a=end-of-candidates",
+      "",
+    ].join("\r\n");
+
+    let callLive = true;
+    const reconnectProbes: unknown[] = [];
+    const dispatch = async (req: Request, probes?: unknown[]) => {
+      const pathname = new URL(req.url).pathname;
+      if (pathname === "/api/offer" && req.method === "POST") {
+        return Response.json({ pc_id: "pc-direct-reconnect", sdp });
+      }
+      if (pathname === "/api/offer" && req.method === "PATCH") {
+        const body = (await req.json()) as { pc_id?: unknown; candidates?: unknown };
+        probes?.push(body);
+        if (callLive && body.pc_id === "pc-direct-reconnect") {
+          return Response.json({ status: "success" });
+        }
+        return Response.json({ detail: "Peer connection not found" }, { status: 404 });
+      }
+      return Response.json({ ok: true });
+    };
+
+    const host1 = new SubspaceHost({
+      store: new SubspaceStore(hostDir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: (req) => dispatch(req),
+    });
+    const host1Stopped = { done: false };
+    cleanups.push(async () => {
+      if (!host1Stopped.done) await host1.stop();
+    });
+
+    const directPort = await host1.startDirect(0);
+    const offer = await host1.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: directPort,
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: clientDir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      callBridgeIdleMs: 30_000,
+      dispatchLocal: async () => new Response("local"),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const paired = await mgr.pairServer({ code: encodePairingUrl(offer), activate: true });
+    const offerRes = await mgr.proxyToActive(
+      new Request("http://127.0.0.1/api/offer", { method: "POST", body: "{}" }),
+      "/api/offer",
+    );
+    expect(offerRes.status).toBe(200);
+    expect(mgr.activeCallCount).toBe(1);
+
+    // Drop the direct WebSocket tunnel transiently; direct LAN ICE call stays alive.
+    await host1.stop();
+    host1Stopped.done = true;
+    await vi.waitFor(
+      async () => {
+        const state = await mgr.getState();
+        const server = state.servers.find((s) => s.id === paired.pairedServerId);
+        expect(server?.connectionState).not.toBe("connected");
+      },
+      { timeout: 3_000 },
+    );
+    expect(mgr.activeCallCount).toBe(1);
+    await expect(mgr.setActiveHostId(null)).rejects.toMatchObject({ code: "call-active" });
+    await expect(mgr.updateServer(paired.pairedServerId, { port: 65001 })).rejects.toMatchObject({
+      code: "call-active",
+    });
+
+    // Rebind the host on the same port and verify reconnect probes and preserves pc_id while live.
+    const host2 = new SubspaceHost({
+      store: new SubspaceStore(hostDir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: (req) => dispatch(req, reconnectProbes),
+    });
+    cleanups.push(() => host2.stop());
+    await host2.startDirect(directPort);
+
+    await vi.waitFor(
+      async () => {
+        const state = await mgr.getState();
+        const server = state.servers.find((s) => s.id === paired.pairedServerId);
+        expect(server?.connectionState).toBe("connected");
+        expect(reconnectProbes.length).toBeGreaterThanOrEqual(1);
+      },
+      { timeout: 6_000 },
+    );
+    expect(mgr.activeCallCount).toBe(1);
+    await expect(mgr.setActiveHostId(null)).rejects.toMatchObject({ code: "call-active" });
+
+    callLive = false;
+    const switched = await mgr.setActiveHostId(null);
+    expect(switched.activeHostId).toBeNull();
+    expect(mgr.activeCallCount).toBe(0);
+  });
+
+  test("updateServer preserves concurrent store mutations made while active-call probe is in flight", async () => {
+    const host1Dir = tempDir("subspace-update-race-host1-");
+    const host2Dir = tempDir("subspace-update-race-host2-");
+    const clientDir = tempDir("subspace-update-race-client-");
+
+    const udpSock = createSocket("udp4");
+    cleanups.push(() => {
+      udpSock.close();
+    });
+    await new Promise<void>((resolve) => udpSock.bind(0, "127.0.0.1", () => resolve()));
+    const udpPort = udpSock.address().port;
+    const sdp = [
+      "v=0",
+      "o=- 1 1 IN IP4 127.0.0.1",
+      "s=-",
+      "t=0 0",
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+      "c=IN IP4 127.0.0.1",
+      `a=candidate:1 1 udp 2122260223 127.0.0.1 ${udpPort} typ host generation 0`,
+      "a=end-of-candidates",
+      "",
+    ].join("\r\n");
+
+    let resolveProbeGate = () => {};
+    const probeGate = new Promise<void>((resolve) => {
+      resolveProbeGate = resolve;
+    });
+    let notifyProbeEntered = () => {};
+    const probeEntered = new Promise<void>((resolve) => {
+      notifyProbeEntered = resolve;
+    });
+
+    const host1 = new SubspaceHost({
+      store: new SubspaceStore(host1Dir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: async (req) => {
+        const pathname = new URL(req.url).pathname;
+        if (pathname === "/api/offer" && req.method === "POST") {
+          return Response.json({ pc_id: "pc-race", sdp });
+        }
+        if (pathname === "/api/offer" && req.method === "PATCH") {
+          notifyProbeEntered();
+          await probeGate;
+          return Response.json({ detail: "Peer connection not found" }, { status: 404 });
+        }
+        return Response.json({ ok: true });
+      },
+    });
+    cleanups.push(() => host1.stop());
+    const direct1Port = await host1.startDirect(0);
+    const offer1 = await host1.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: direct1Port,
+    });
+
+    const host2 = new SubspaceHost({
+      store: new SubspaceStore(host2Dir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => host2.stop());
+    const direct2Port = await host2.startDirect(0);
+    const offer2 = await host2.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: direct2Port,
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: clientDir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      callBridgeIdleMs: 30_000,
+      dispatchLocal: async () => new Response("local"),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const paired1 = await mgr.pairServer({ code: encodePairingUrl(offer1), activate: true });
+    const paired2 = await mgr.pairServer({ code: encodePairingUrl(offer2), activate: false });
+    await mgr.proxyToActive(
+      new Request("http://127.0.0.1/api/offer", { method: "POST", body: "{}" }),
+      "/api/offer",
+    );
+    expect(mgr.activeCallCount).toBe(1);
+
+    const updatePromise = mgr.updateServer(paired1.pairedServerId, {
+      name: "Renamed Direct",
+      port: 65123,
+    });
+    await probeEntered;
+
+    // Update paired2 concurrently while paired1's active-call probe awaits.
+    await mgr.updateServer(paired2.pairedServerId, { name: "Host 2 Updated" });
+    resolveProbeGate();
+
+    const updatedState = await updatePromise;
+    expect(updatedState.servers.map((s) => s.id)).toEqual([
+      paired1.pairedServerId,
+      paired2.pairedServerId,
+    ]);
+    const saved1 = updatedState.servers.find((s) => s.id === paired1.pairedServerId);
+    expect(saved1?.name).toBe("Renamed Direct");
+    expect(saved1?.endpoint?.port).toBe(65123);
+    expect(updatedState.servers.find((s) => s.id === paired2.pairedServerId)?.name).toBe(
+      "Host 2 Updated",
+    );
+  });
 });

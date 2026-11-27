@@ -377,9 +377,15 @@ export class SubspaceClient {
     if (this.#activePcIds.size === 0 || this.#server.mode === "relay") {
       return this.activeCallCount;
     }
-    if (this.#tunnel === null || this.#tunnel.mux.closed) {
+    if (!this.#wanted || this.#revoked) {
       this.#activePcIds.clear();
+      this.#bridges.closeAll();
       this.#stopCallProbeTimer();
+      return this.activeCallCount;
+    }
+    if (this.#tunnel === null || this.#tunnel.mux.closed) {
+      // Direct LAN WebRTC calls outlive temporary tunnel drops; wait until reconnect
+      // can probe PATCH /api/offer rather than clearing active calls while offline.
       return this.activeCallCount;
     }
     if (this.#callProbeTask !== null) {
@@ -389,8 +395,12 @@ export class SubspaceClient {
     const tunnel = this.#tunnel;
     const task = (async () => {
       for (const pcId of [...this.#activePcIds]) {
-        if (this.#tunnel !== tunnel || tunnel.mux.closed) {
+        if (!this.#wanted || this.#revoked) {
           this.#activePcIds.clear();
+          this.#bridges.closeAll();
+          break;
+        }
+        if (this.#tunnel !== tunnel || tunnel.mux.closed) {
           break;
         }
         try {
@@ -403,10 +413,15 @@ export class SubspaceClient {
           if (res.body !== null && !res.body.locked) void res.body.cancel().catch(() => {});
           if (res.status === 404 || res.status === 400 || res.status === 410) {
             this.#activePcIds.delete(pcId);
+            this.#bridges.closeBridge(pcId);
           }
         } catch {
-          if (this.#tunnel !== tunnel || tunnel.mux.closed) {
+          if (!this.#wanted || this.#revoked) {
             this.#activePcIds.clear();
+            this.#bridges.closeAll();
+            break;
+          }
+          if (this.#tunnel !== tunnel || tunnel.mux.closed) {
             break;
           }
         }
@@ -549,6 +564,7 @@ export class SubspaceClient {
             const parsedRes = (await adapted.clone().json()) as { pc_id?: unknown } | null;
             if (typeof parsedRes?.pc_id === "string" && parsedRes.pc_id !== renegotiatedPcId) {
               this.#activePcIds.delete(renegotiatedPcId);
+              this.#bridges.closeBridge(renegotiatedPcId);
             }
           } catch {
             // Ignore non-JSON /api/offer answers.
@@ -679,6 +695,11 @@ export class SubspaceClient {
       logger.warning(`[subspace] Client socket error for ${this.#server.id}: ${errorText(err)}`);
       this.#failActiveTunnel(tunnel, "Socket error", "Could not connect to remote server");
     });
+
+    if (this.#activePcIds.size > 0 && this.#server.mode === "direct") {
+      this.#ensureCallProbeTimer();
+      void this.refreshActiveCallCount();
+    }
   }
 
   #dropTunnel(reason: string): void {
@@ -687,11 +708,14 @@ export class SubspaceClient {
       this.#pingTimer = null;
     }
     this.#stopCallProbeTimer();
-    this.#activePcIds.clear();
-    this.#bridges.closeAll();
+    this.#callProbeTask = null;
     const current = this.#tunnel;
     this.#tunnel = null;
     this.#latencyMs = null;
+    if (this.#server.mode === "relay" || !this.#wanted || this.#revoked) {
+      this.#activePcIds.clear();
+    }
+    this.#bridges.closeAll();
     if (current !== null) {
       current.mux.close(reason);
       safeCloseWs(current.ws, 1000, reason);

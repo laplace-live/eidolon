@@ -401,18 +401,23 @@ export class SubspaceManager {
     id: string,
     patch: { readonly name?: string; readonly host?: string; readonly port?: number },
   ): Promise<SubspaceStateSnapshot> {
-    const { file, server: target } = this.#requireServer(id);
-    const nextEndpoint =
-      target.mode === "direct" && target.endpoint !== undefined
-        ? {
-            host: patch.host?.trim() || target.endpoint.host,
-            port: patch.port ?? target.endpoint.port,
-            ...(target.endpoint.tls ? { tls: true } : {}),
-          }
-        : target.endpoint;
-    const endpointChanged =
-      nextEndpoint?.host !== target.endpoint?.host || nextEndpoint?.port !== target.endpoint?.port;
-    if (endpointChanged) {
+    const nextEndpointFor = (server: SubspaceSavedServer) => {
+      const nextEndpoint =
+        server.mode === "direct" && server.endpoint !== undefined
+          ? {
+              host: patch.host?.trim() || server.endpoint.host,
+              port: patch.port ?? server.endpoint.port,
+              ...(server.endpoint.tls ? { tls: true } : {}),
+            }
+          : server.endpoint;
+      const endpointChanged =
+        nextEndpoint?.host !== server.endpoint?.host ||
+        nextEndpoint?.port !== server.endpoint?.port;
+      return { nextEndpoint, endpointChanged };
+    };
+    const initial = this.#requireServer(id);
+    const initialPatch = nextEndpointFor(initial.server);
+    if (initialPatch.endpointChanged) {
       await this.#clients.get(id)?.refreshActiveCallCount();
       if ((this.#clients.get(id)?.activeCallCount ?? 0) > 0) {
         throw codedError(
@@ -420,6 +425,15 @@ export class SubspaceManager {
           "A call is in progress on this server; hang up before changing its address or port",
         );
       }
+    }
+    // Re-read after awaiting so concurrent pairings or activeHostId switches aren't overwritten.
+    const { file, server: target } = this.#requireServer(id);
+    const { nextEndpoint, endpointChanged } = nextEndpointFor(target);
+    if (endpointChanged && (this.#clients.get(id)?.activeCallCount ?? 0) > 0) {
+      throw codedError(
+        "call-active",
+        "A call is in progress on this server; hang up before changing its address or port",
+      );
     }
     const updated: SubspaceSavedServer = {
       ...target,

@@ -35,7 +35,7 @@ function isDtlsAlert(packet: Uint8Array): boolean {
 interface BridgeEntry {
   readonly socket: Socket;
   readonly localPort: number;
-  readonly close: () => void;
+  readonly close: (notify?: boolean) => void;
 }
 
 /** Extracts all UDP host candidates' addresses and ports from a bundled SmallWebRTC SDP answer. */
@@ -300,7 +300,7 @@ export class ClientCallBridgePool {
     if (candidate === null) {
       return new Response(text, response);
     }
-    this.#bridges.get(payload.pc_id)?.close();
+    this.#bridges.get(payload.pc_id)?.close(false);
     const bridge = await this.#openBridge(payload.pc_id, candidate, mux);
     this.#options.onCallOpened?.(payload.pc_id);
     const rewrittenSdp = rewriteSdpAnswer(payload.sdp, {
@@ -315,6 +315,10 @@ export class ClientCallBridgePool {
       statusText: response.statusText,
       headers,
     });
+  }
+
+  closeBridge(pcId: string): void {
+    this.#bridges.get(pcId)?.close(false);
   }
 
   closeAll(): void {
@@ -343,8 +347,9 @@ export class ClientCallBridgePool {
       let browserPeer: { address: string; port: number } | null = null;
       let closed = false;
       let closedByAlert = false;
+      let entry: BridgeEntry | null = null;
 
-      const close = () => {
+      const close = (notify = true) => {
         if (closed) return;
         closed = true;
         if (alertTimer !== null) {
@@ -352,17 +357,19 @@ export class ClientCallBridgePool {
           alertTimer = null;
         }
         idle.stop();
-        this.#bridges.delete(pcId);
-        this.#options.onBridgeClosed?.(pcId, closedByAlert);
+        if (entry !== null && this.#bridges.get(pcId) === entry) {
+          this.#bridges.delete(pcId);
+        }
+        if (notify) this.#options.onBridgeClosed?.(pcId, closedByAlert);
         channel.close();
       };
       const scheduleAlertClose = () => {
         if (closed || alertTimer !== null) return;
         closedByAlert = true;
-        alertTimer = setTimeout(close, DTLS_ALERT_CLOSE_DELAY_MS);
+        alertTimer = setTimeout(() => close(), DTLS_ALERT_CLOSE_DELAY_MS);
         alertTimer.unref?.();
       };
-      const idle = attachIdleUdpSocket(socket, close, this.#options.idleTimeoutMs);
+      const idle = attachIdleUdpSocket(socket, () => close(), this.#options.idleTimeoutMs);
 
       socket.on("message", (msg, rinfo) => {
         if (closed) return;
@@ -379,7 +386,8 @@ export class ClientCallBridgePool {
       });
       channel.onClose(() => close());
 
-      const entry: BridgeEntry = { socket, localPort, close };
+      entry = { socket, localPort, close };
+      this.#bridges.get(pcId)?.close(false);
       this.#bridges.set(pcId, entry);
       return entry;
     } catch (error) {
