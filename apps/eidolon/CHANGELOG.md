@@ -1,5 +1,15 @@
 # @laplace.live/eidolon
 
+## 0.23.0
+
+### Minor Changes
+
+- 7c5cb52: Add desktop Permissions settings and macOS Local Network Subspace support
+
+### Patch Changes
+
+- c0d6b4d: Vary each persona's 2D model motion pace and timing on group calls
+
 ## 0.22.0
 
 ### Minor Changes
