@@ -2,6 +2,25 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-28T09:01:07.833Z",
+      "versions": {
+        "laplace-eidolon": "0.24.1",
+        "@laplace.live/eidolon": "0.24.1",
+        "laplace-eidolon-desktop": "0.13.1"
+      },
+      "items": [
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Remove the left accent bar from highlighted list rows"
+        }
+      ]
+    },
+    {
       "date": "2026-11-28T07:25:31.184Z",
       "versions": {
         "laplace-eidolon-desktop": "0.13.0"

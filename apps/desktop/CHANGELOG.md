@@ -1,5 +1,11 @@
 # laplace-eidolon-desktop
 
+## 0.13.1
+
+### Patch Changes
+
+- 4f0a376: Remove the left accent bar from highlighted list rows
+
 ## 0.13.0
 
 ### Minor Changes
