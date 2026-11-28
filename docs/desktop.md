@@ -35,8 +35,9 @@ apps/desktop/
   electron-builder.release.ts
                          the release overlay: notarization, the requirement, macOS signIgnore,
                          Windows' Azure signing
-  resources/             build resources: entitlements, installer.nsh, the icon, and the designated
-                         requirement release builds carry (designated-requirement.mac)
+  resources/             build resources: entitlements, installer.nsh, the icons (AppIcon.icon and
+                         icon.png), and the designated requirement release builds carry
+                         (designated-requirement.mac)
   assets/                what main loads at run time through process.resourcesPath: the tray's icons
   launchers/             the eidolon command's, shipped to the app's resources/bin
   node-shim/             the node shim's launchers, which the stage copies into the payload
@@ -1025,8 +1026,9 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 
 `pnpm package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
-signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
-no stage. On macOS it writes `.out/mac-arm64/LAPLACE Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
+signs with an identity from the keychain or asks for one. It needs `dist/` (and Xcode 26+ on macOS,
+for `actool`; CI's `macos-latest` ships it) and warns when there is no
+stage. On macOS it writes `.out/mac-arm64/LAPLACE Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
 and `.out/win-unpacked`. Its builds are unsigned: ad hoc on macOS, where that signs every Mach-O,
 the payload's natives included, with the hardened runtime. The flags stay on the command line,
 never in `electron-builder.yml`, which the release overlay extends: an identity there would replace
@@ -1058,7 +1060,9 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   the browser-process V8 snapshot off, their defaults. `wasmTrapHandlers` keeps its default, on, as
   electron-builder has no key for it. `resetAdHocDarwinSignature`, beside them, re-signs an
   unsigned build ad hoc after the fuses change, so it launches on Apple silicon.
-- **macOS:** arm64 DMG and zip, the hardened runtime, the unentitled entitlements
+- **macOS:** arm64 DMG and zip, `resources/AppIcon.icon` (an Icon Composer bundle that Xcode 26+'s
+  `actool` compiles into `Assets.car` with dark, clear and tinted styles plus a legacy `icon.icns`),
+  the hardened runtime, the unentitled entitlements
   (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc
   signing with the hardened runtime needs, and `audio-input`; no camera), `NSUserActivityTypes`
   (`INSendMessageIntent`), `dist/native/mac_notify.node` shipped in `Contents/Resources/native`,
@@ -1066,7 +1070,9 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   rewriting each `MH_EXECUTE` (`LAPLACE Eidolon` and helpers) `LC_UUID` before signing so macOS
   Local Network Privacy does not collide with other apps on the same Electron build. The DMG writes
   no update info: updates will take the zip.
-- **Windows:** a per-user, one-click NSIS setup for x64, whose shortcut's AppUserModelID is the
+- **Windows:** a per-user, one-click NSIS setup for x64, with `resources/icon.png` (the matching
+  rounded-square icon; `assets/tray-icon.ico` carries the 16–192 px DPI frames for the tray,
+  dialogs and About panel) and whose shortcut's AppUserModelID is the
   `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
   removes the install folder alone. Installing, updating and uninstalling never touch the data home.
 - **`publish`** names the update feed, which electron-builder writes into the app's

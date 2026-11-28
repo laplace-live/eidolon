@@ -439,10 +439,15 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           for (const rel of listed) {
             expect([rel, skipped(join(contents, rel))]).toEqual([rel, false]);
           }
-          expect(skipped(join(contents, "Resources/app.asar"))).toBe(true);
-          expect(skipped(join(contents, "Resources/eidolon/data/models/silero_vad.onnx"))).toBe(
-            true,
-          );
+          for (const ignored of [
+            "Resources/app.asar",
+            "Resources/Assets.car",
+            "Resources/eidolon/data/models/silero_vad.onnx",
+          ]) {
+            expect([ignored, skipped(join(contents, ignored))]).toEqual([ignored, true]);
+          }
+          expect(existsSync(join(PACKAGED[target], "Assets.car"))).toBe(true);
+          expect(existsSync(join(PACKAGED[target], "icon.icns"))).toBe(true);
           const appLocales = readdirSync(PACKAGED[target])
             .filter((name) => name.endsWith(".lproj"))
             .sort();
