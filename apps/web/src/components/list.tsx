@@ -58,8 +58,7 @@ export function ListRow({
       className={cn(
         "relative flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6",
         href !== undefined && "transition-colors hover:bg-muted/40",
-        current &&
-          "bg-muted/50 hover:bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary",
+        current && "bg-muted/50 hover:bg-muted/50",
         className,
       )}
     >
