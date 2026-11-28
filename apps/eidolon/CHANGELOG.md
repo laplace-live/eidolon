@@ -1,5 +1,11 @@
 # @laplace.live/eidolon
 
+## 0.24.1
+
+### Patch Changes
+
+- 4f0a376: Remove the left accent bar from highlighted list rows
+
 ## 0.24.0
 
 ### Minor Changes
