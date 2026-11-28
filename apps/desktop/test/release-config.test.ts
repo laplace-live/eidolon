@@ -83,6 +83,7 @@ describe("the release overlay", () => {
     }
     for (const ignored of [
       "Resources/app.asar",
+      "Resources/Assets.car",
       "embedded.provisionprofile",
       "Frameworks/Electron Framework.framework/Resources/en.lproj/locale.pak",
       "Frameworks/Electron Framework.framework/Versions/Current/Electron Framework",
