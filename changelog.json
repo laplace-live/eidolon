@@ -2,6 +2,35 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-28T07:25:31.184Z",
+      "versions": {
+        "laplace-eidolon-desktop": "0.13.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "New macOS Liquid Glass app icon and matching square Windows icons"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Check for updates in the background every hour"
+        },
+        {
+          "kind": "improvement",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Trim unused browser locale packs from the desktop app"
+        }
+      ]
+    },
+    {
       "date": "2026-11-27T18:53:14.333Z",
       "versions": {
         "laplace-eidolon": "0.24.0",
