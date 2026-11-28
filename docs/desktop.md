@@ -1026,8 +1026,9 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 
 `pnpm package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
-signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
-no stage. On macOS it writes `.out/mac-arm64/LAPLACE Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
+signs with an identity from the keychain or asks for one. It needs `dist/` (and Xcode 26+ on macOS,
+for `actool`; CI's `macos-latest` ships it) and warns when there is no
+stage. On macOS it writes `.out/mac-arm64/LAPLACE Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
 and `.out/win-unpacked`. Its builds are unsigned: ad hoc on macOS, where that signs every Mach-O,
 the payload's natives included, with the hardened runtime. The flags stay on the command line,
 never in `electron-builder.yml`, which the release overlay extends: an identity there would replace

@@ -1,116 +1,111 @@
 {
-  "fill-specializations" : [
+  "fill-specializations": [
     {
-      "value" : {
-        "linear-gradient" : [
+      "value": {
+        "linear-gradient": [
           "display-p3:0.01056,0.02516,0.16650,1.00000",
           "display-p3:0.00000,0.00000,0.00000,1.00000"
         ]
       }
     },
     {
-      "appearance" : "dark",
-      "value" : {
-        "linear-gradient" : [
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
           "display-p3:0.00922,0.02196,0.14533,1.00000",
           "display-p3:0.00000,0.00000,0.00000,1.00000"
         ]
       }
     }
   ],
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "blend-mode-specializations" : [
+          "blend-mode-specializations": [
             {
-              "value" : "darken"
+              "value": "darken"
             },
             {
-              "appearance" : "tinted",
-              "value" : "plus-darker"
+              "appearance": "tinted",
+              "value": "plus-darker"
             }
           ],
-          "fill-specializations" : [
+          "fill-specializations": [
             {
-              "value" : {
-                "solid" : "display-p3:0.04948,0.13862,0.96030,1.00000"
+              "value": {
+                "solid": "display-p3:0.04948,0.13862,0.96030,1.00000"
               }
             },
             {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "display-p3:0.00000,0.00000,0.00000,1.00000"
+              "appearance": "tinted",
+              "value": {
+                "solid": "display-p3:0.00000,0.00000,0.00000,1.00000"
               }
             }
           ],
-          "glass" : false,
-          "image-name" : "logo-v2-apple-solid-3.png",
-          "name" : "logo-v2-apple-solid-3"
+          "glass": false,
+          "image-name": "logo-v2-apple-solid-3.png",
+          "name": "logo-v2-apple-solid-3"
         },
         {
-          "hidden" : false,
-          "image-name" : "logo-v2-apple-solid-4.png",
-          "name" : "logo-v2-apple-solid-4"
+          "hidden": false,
+          "image-name": "logo-v2-apple-solid-4.png",
+          "name": "logo-v2-apple-solid-4"
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
       }
     },
     {
-      "layers" : [
+      "layers": [
         {
-          "fill-specializations" : [
+          "fill-specializations": [
             {
-              "value" : {
-                "automatic-gradient" : "display-p3:0.38103,0.41755,0.86848,1.00000"
+              "value": {
+                "automatic-gradient": "display-p3:0.38103,0.41755,0.86848,1.00000"
               }
             },
             {
-              "appearance" : "dark",
-              "value" : {
-                "automatic-gradient" : "display-p3:0.52469,0.61975,0.93440,1.00000"
+              "appearance": "dark",
+              "value": {
+                "automatic-gradient": "display-p3:0.52469,0.61975,0.93440,1.00000"
               }
             },
             {
-              "appearance" : "tinted",
-              "value" : {
-                "automatic-gradient" : "display-p3:0.52276,0.49061,0.59383,1.00000"
+              "appearance": "tinted",
+              "value": {
+                "automatic-gradient": "display-p3:0.52276,0.49061,0.59383,1.00000"
               }
             }
           ],
-          "hidden" : false,
-          "image-name" : "logo-v2-apple-solid-2.png",
-          "name" : "logo-v2-apple-solid-2",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
+          "hidden": false,
+          "image-name": "logo-v2-apple-solid-2.png",
+          "name": "logo-v2-apple-solid-2",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [0, 0]
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
-    "squares" : "shared"
+  "supported-platforms": {
+    "circles": ["watchOS"],
+    "squares": "shared"
   }
 }

@@ -16,7 +16,6 @@
       "!apps/desktop/dist",
       "!apps/desktop/.stage",
       "!apps/desktop/.out",
-      "!apps/desktop/resources/AppIcon.icon",
       "!apps/eidolon/pack",
       "!packages/sdk/pack"
     ]
